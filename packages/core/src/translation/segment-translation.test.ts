@@ -206,3 +206,17 @@ describe('反向翻译编排（translateFinalizedSegment）', () => {
     expect(requests[0]).toMatchObject({ source: 'zh', targetLang: 'yue', targetCode: 'zh' });
   });
 });
+
+it('normalizes partial translations and ignores late partial callbacks after completion', async () => {
+  const events: import('../types').TranslationPayload[] = [];
+  let publish: ((text: string) => void) | undefined;
+  await translateFinalizedSegment({
+    spec: M2M100_SPEC, segment: { id: 77, text: 'こんにちは。', lang: 'ja' },
+    enabled: true, nativeLang: 'zh',
+    translate: async req => { publish = req.onPartial; publish?.('這是'); return '這是完整翻譯'; },
+    emitTranslation: event => events.push(event),
+  });
+  expect(events.some(e => e.partial && e.text === '这是')).toBe(true);
+  expect(events[events.length - 1]?.text).toBe('这是完整翻译');
+  const count = events.length; publish?.('過期'); expect(events).toHaveLength(count);
+});

@@ -7,7 +7,7 @@ import { useI18n } from 'vue-i18n';
 import { getAsrModel, getTranslationModel } from '@rt/core';
 import { settings, saveSettings } from '../composables/useSettings';
 import {
-  lines,
+  lines, archiveSnapshot,
   partial,
   stablePartial,
   draftLine,
@@ -79,7 +79,7 @@ async function openArchiveModal(): Promise<void> {
 }
 
 async function confirmArchive(): Promise<void> {
-  const snapshot = lines.map((l) => ({ time: l.time, text: l.text, translation: l.translation }));
+  const snapshot = archiveSnapshot();
   await bridge().saveArchive(archiveName.value.trim() || defaultArchiveName(), snapshot);
   clearTranscript();
   archiveModalOpen.value = false;

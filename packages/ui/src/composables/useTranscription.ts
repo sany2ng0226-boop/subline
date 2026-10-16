@@ -13,6 +13,7 @@ export interface TranscriptLine {
   translation: string;
   /** 译文进行中：已派发翻译、结果未到，UI 在译文区显示等待动画。同语言/未开启翻译时恒 false */
   translating: boolean;
+  translationPartial?: boolean;
   /** 该行翻译失败：在译文区显示失败标记（failedDetail 为宿主原始错误，供悬停提示） */
   failed: boolean;
   failedDetail?: string;
@@ -81,18 +82,26 @@ export function registerTranscriptionListeners(): void {
   bridge().onTranslation((tr) => {
     const line = lines.find((l) => l.id === tr.id);
     if (!line) return;
-    if (tr.pending) {
+    if (tr.partial) {
+      line.translation = tr.text;
+      line.translationPartial = true;
+      line.translating = true;
+      line.failed = false;
+    } else if (tr.pending) {
       // 翻译已开始、结果未到：显示等待动画
       line.translating = true;
       line.failed = false;
     } else if (tr.failed) {
       // 该行翻译失败：结束等待动画、行内显示失败标记（不进全局引擎状态）
       line.translating = false;
+      if (line.translationPartial) line.translation = '';
+      line.translationPartial = false;
       line.failed = true;
       line.failedDetail = tr.error;
     } else {
       // 最终结果（空串表示无需翻译，仅结束等待、不展示）
       line.translation = tr.text;
+      line.translationPartial = false;
       line.translating = false;
       line.failed = false;
     }
@@ -131,7 +140,10 @@ export function registerTranscriptionListeners(): void {
       translationLoading.value = false;
       translationError.value = true;
       // 翻译失败（含子进程崩溃）：结束所有仍在等待的译文动画，避免永久转圈
-      for (const l of lines) l.translating = false;
+      for (const l of lines) {
+        l.translating = false;
+        if (l.translationPartial) { l.translation = ''; l.translationPartial = false; l.failed = true; }
+      }
     } else if (s.state === 'ready') {
       translationLoading.value = false;
       translationError.value = false; // 引擎恢复就绪，清除全局失败提示
@@ -179,4 +191,10 @@ export function clearTranscript(): void {
   partial.value = '';
   stablePartial.value = undefined;
   draftLine.value = null;
+}
+
+/** A provisional stream must never be persisted as a completed translation. */
+export function archiveSnapshot() {
+  return lines.map(line => ({ time: line.time, text: line.text,
+    translation: line.translationPartial ? '' : line.translation }));
 }

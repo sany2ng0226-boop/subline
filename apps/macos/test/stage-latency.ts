@@ -16,6 +16,7 @@ type Manifest = { schemaVersion: number; caseId: string; audioSha256: string; sa
 type Row = SegmentPayload & ReturnType<typeof sentenceTiming> & {
   finalizedMs: number; reason: string; enqueuedMs: number; startedMs?: number; completedMs?: number;
   translation?: string; error?: string; dispatchMs?: number; queueWaitMs?: number; translationMs?: number; endToEndMs?: number;
+  firstTranslationMs?: number; translationFirstContentMs?: number; firstVisibleEndToEndMs?: number;
 };
 async function worker(wav: string, models: string) {
   const boot = clockMs();
@@ -69,7 +70,12 @@ async function main() {
     row.startedMs = clockMs() - start;
     active++; maxActive = Math.max(maxActive, active);
     events.push({ kind: 'translation-start', atMs: row.startedMs, payload: { id: row.id } });
-    try { return await translator.translate(row.text, { source: 'ja', target: 'zh', context: previous }); }
+    try { return await translator.translate(row.text, { source: 'ja', target: 'zh', context: previous,
+      ...(process.env.RT_TRANSLATION_STREAM === '0' ? {} : { onPartial: (text: string) => {
+        row.firstTranslationMs ??= clockMs() - start;
+        events.push({ kind: 'translation-partial', atMs: clockMs() - start, payload: { id: row.id, text } });
+      } }),
+    }); }
     finally { active--; }
   });
   const child = fork(__filename, ['--worker', wav, models], { stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
@@ -104,6 +110,9 @@ async function main() {
           const previous = context.take('ja', 'zh', row.text);
           jobs.push(queue.submit({ row, context: previous }).then(text => {
             row.translation = text; row.completedMs = clockMs() - start;
+            row.firstTranslationMs ??= row.completedMs;
+            row.translationFirstContentMs = row.firstTranslationMs - row.startedMs!;
+            row.firstVisibleEndToEndMs = row.firstTranslationMs - row.audioEndMs;
             Object.assign(row, translationTiming(row.finalizedMs, row.enqueuedMs, row.startedMs!, row.completedMs, row.audioEndMs));
             events.push({ kind: 'translation-end', atMs: row.completedMs, payload: { id: row.id } });
           }).catch(error => {
@@ -119,10 +128,10 @@ async function main() {
   const goldenMatch = rows.length === expected.length && rows.every((row, i) => sha(row.text) === expected[i].textSha256 &&
     row.lang === expected[i].lang && Math.abs(row.start - expected[i].start) < 0.005 && Math.abs(row.duration - expected[i].duration) < 0.005);
   const additiveMatch = rows.every(row => row.error || Math.abs(row.recognitionCommitMs + row.assemblyWaitMs + row.dispatchMs! + row.queueWaitMs! + row.translationMs! - row.endToEndMs!) < 0.01);
-  const metrics = Object.fromEntries(['recognitionCommitMs', 'assemblyWaitMs', 'assemblyResidenceMs', 'dispatchMs', 'queueWaitMs', 'translationMs', 'endToEndMs'].map(key =>
+  const metrics = Object.fromEntries(['recognitionCommitMs', 'assemblyWaitMs', 'assemblyResidenceMs', 'dispatchMs', 'queueWaitMs', 'translationMs', 'endToEndMs', 'translationFirstContentMs', 'firstVisibleEndToEndMs'].map(key =>
     [key, distribution(rows.map(row => row[key as keyof Row]).filter((value): value is number => typeof value === 'number'))]));
   const appRoot = path.resolve(__dirname, '../..');
-  const codeHashes = Object.fromEntries(['src/main/pipeline.ts', 'src/main/translation/request-queue.ts', '../../packages/core/src/asr/sentence-assembler.ts', '../../packages/core/src/asr/transcription-pipeline.ts', '../../packages/core/src/translation/cloud-translator.ts'].map(file => [file, sha(fs.readFileSync(path.resolve(appRoot, file)))]));
+  const codeHashes = Object.fromEntries(['src/main/pipeline.ts', 'src/main/translation/request-queue.ts', '../../packages/core/src/asr/sentence-assembler.ts', '../../packages/core/src/asr/transcription-pipeline.ts', '../../packages/core/src/translation/cloud-translator.ts', '../../packages/core/src/translation/translation-stream.ts'].map(file => [file, sha(fs.readFileSync(path.resolve(appRoot, file)))]));
   const report = { schemaVersion: 1, caseId: manifest.caseId, audioSha256: audioHash, audioSeconds: wave.samples.length / wave.sampleRate,
     createdAt: new Date().toISOString(), models: { asr: manifest.asrModel, language: 'ja', translation: manifest.translationModel, baseURL }, codeHashes,
     warmup: { asrBootMs: bootMs, translationMs: translationWarmupMs },
@@ -134,6 +143,8 @@ async function main() {
       assemblyResidenceMs: 'Sentence emitted minus FIRST contributing fragment; contextual residence, not an additive stage.',
       queueWaitMs: 'Translation execution starts minus queue submission.',
       translationMs: 'Full local HTTP request, including server scheduling and generation; not isolated GPU compute.',
+      translationFirstContentMs: 'First nonempty cumulative translation returned to caller minus execution start. RT_TRANSLATION_STREAM=0 measures non-streaming.',
+      firstVisibleEndToEndMs: 'First translation callback minus logical audio end; excludes UI rendering.',
       endToEndMs: 'Complete translation minus logical sentence audio end; excludes microphone capture, device buffers and UI rendering.',
       percentiles: 'Nearest-rank; 12 sentences are insufficient to establish production p95.' },
     metrics, decodeMs: distribution(events.filter(e => e.kind === 'diagnostic' && e.payload.kind === 'decode' && !e.payload.warmup).map(e => e.payload.ms)),

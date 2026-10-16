@@ -17,6 +17,8 @@ export interface SegmentPayload {
 /** 某条转写段的译文，按 id 对应回原文行 */
 export interface TranslationPayload {
   id: number;
+  /** Cumulative provisional translation; the queue remains occupied until the final result. */
+  partial?: boolean;
   /** 译文文本；pending / failed 阶段为占位空串 */
   text: string;
   /**

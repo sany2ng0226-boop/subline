@@ -53,6 +53,7 @@ export function guardAsrLang(text: string, lang: string): string {
 
 /** 注入给平台引擎的一次翻译请求。 */
 export interface SegmentTranslateRequest {
+  onPartial?: (text: string) => void;
   context?: string[];
   /** 行 id，译文异步回填对应 */
   id: number;
@@ -142,17 +143,24 @@ export async function translateFinalizedSegment(
   }
 
   opts.emitTranslation({ id: segment.id, text: '', pending: true });
+  let settled = false;
   try {
     const text = await opts.translate({
       id: segment.id,
       text: segment.text,
+      onPartial: (partial) => {
+        if (!settled && partial.trim()) opts.emitTranslation({ id: segment.id,
+          text: plan.toScript ? plan.toScript(partial) : partial, partial: true });
+      },
       source: sourceLang,
       targetLang: plan.targetLang,
       targetCode: plan.targetCode,
       ...(opts.context ? { context: opts.context.take(sourceLang, plan.targetLang, segment.text) } : {}),
     });
+    settled = true;
     opts.emitTranslation({ id: segment.id, text: plan.toScript ? plan.toScript(text) : text });
   } catch (e) {
+    settled = true;
     opts.emitTranslation({
       id: segment.id,
       text: '',

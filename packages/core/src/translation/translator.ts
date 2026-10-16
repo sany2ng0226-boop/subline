@@ -21,5 +21,5 @@ export interface Translator {
    * 把 text 翻成 target 语言。source 缺省时由实现决定如何处理。
    * 语言码用 SenseVoice 风格的短码：zh / en / ja / ko / yue。
    */
-  translate(text: string, opts: { source?: string; target: string; context?: string[] }): Promise<string>;
+  translate(text: string, opts: { source?: string; target: string; context?: string[]; onPartial?: (text: string) => void }): Promise<string>;
 }

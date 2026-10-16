@@ -95,7 +95,7 @@ interface TranslateChild {
   proc: ChildProcess;
   // 在途翻译请求：行 id → Promise 句柄。子进程 result/error 消息按 id 关联回 Promise，
   // 把消息协议封装成 async 引擎调用供 core 编排使用；进程退出时只 reject 发往它的请求，防悬挂。
-  pending: Map<number, { resolve: (text: string) => void; reject: (e: Error) => void }>;
+  pending: Map<number, { resolve: (text: string) => void; reject: (e: Error) => void; onPartial?: (text: string) => void }>;
 }
 let translateChild: TranslateChild | null = null;
 
@@ -203,7 +203,7 @@ function requestTranslate(req: SegmentTranslateRequest): Promise<string> {
 function dispatchTranslate(req: SegmentTranslateRequest): Promise<string> {
   const child = ensureTranslateChild();
   return new Promise<string>((resolve, reject) => {
-    child.pending.set(req.id, { resolve, reject });
+    child.pending.set(req.id, { resolve, reject, onPartial: req.onPartial });
     child.proc.send({
       type: 'translate',
       id: req.id,
@@ -239,6 +239,8 @@ function startTranslateChild(): TranslateChild {
   proc.on('message', (m: TranslateToMain) => {
     if (m.type === 'status') {
       sendToRenderer('translation:status', m.payload);
+    } else if (m.type === 'partial') {
+      pending.get(m.id)?.onPartial?.(m.text);
     } else if (m.type === 'result') {
       pending.get(m.id)?.resolve(m.text);
       pending.delete(m.id);

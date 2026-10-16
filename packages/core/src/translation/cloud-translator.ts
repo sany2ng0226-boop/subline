@@ -1,6 +1,7 @@
 // 云端翻译实现：调用任意 OpenAI 兼容的 chat completions 端点。
 // 注意：启用云翻译意味着文本会发往第三方，与“本地不出机器”相悖，应作为可选项。
 // 纯 fetch 实现，平台无关。
+import { readTranslationStream } from './translation-stream';
 import type { Translator } from './translator';
 import type { CloudTranslationConfig } from '../types';
 
@@ -44,12 +45,14 @@ export class CloudTranslator implements Translator {
     }
   }
 
-  async translate(text: string, opts: { source?: string; target: string; context?: string[] }): Promise<string> {
+  async translate(text: string, opts: { source?: string; target: string; context?: string[]; onPartial?: (text: string) => void }): Promise<string> {
     if (!text.trim() || opts.source === opts.target) {
       return text;
     }
     await this.init();
     const targetName = LANG_NAMES[opts.target] ?? opts.target;
+    // Only the verified local Hy-MT2 7B path opts in; all prompts and generation settings stay identical.
+    const streaming = !!opts.onPartial && isLoopbackEndpoint(this.baseURL) && /(?:^|\/)hy-mt2-7b$/i.test(this.model);
 
     let res: Response;
     try {
@@ -68,6 +71,7 @@ export class CloudTranslator implements Translator {
         body: JSON.stringify({
           model: this.model,
           temperature: 0,
+          ...(streaming ? { stream: true } : {}),
           messages: [
             {
               role: 'user',
@@ -92,6 +96,15 @@ export class CloudTranslator implements Translator {
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       throw new Error(`云翻译请求失败: ${res.status} ${detail.slice(0, 200)}`);
+    }
+    if (streaming && res.headers.get('content-type')?.includes('text/event-stream')) {
+      try { return await readTranslationStream(res, opts.onPartial!); }
+      catch (error) {
+        if (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name)) {
+          throw new Error('云翻译请求超时，请检查网络或端点是否可用');
+        }
+        throw error;
+      }
     }
     const data = (await res.json()) as {
       choices?: Array<{ message?: { content?: string } }>;

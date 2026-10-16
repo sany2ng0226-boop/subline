@@ -41,7 +41,7 @@ Realtime Translator 是 pnpm workspace 单仓库。`@rt/core` 提供平台无关
 2. 共享编排根据母语、识别语言和会话内最近外语决定跳过、字形归一化或发起翻译。
 3. macOS API 翻译通过 `packages/core/src/translation/context.ts` 管理同语言对的有限原文上下文；会话与配置变化由主进程重置。宿主执行具体引擎：macOS 将 M2M-100/云端请求放在纯 Node 子进程，Web 用 Transformers.js Worker 或直接调云端，iOS 调 Apple Translation 或直接调云端。
 4. macOS 主进程在发送翻译 IPC 前通过 `apps/macos/src/main/translation/request-queue.ts` 调度请求，负责并发、等待容量、排队过期及配置变更时的等待取消；具体限制与行级降级见[翻译规则](product/experience.md#翻译规则)。翻译子进程仍负责具体推理，ASR 定稿路径不等待翻译队列完成。
-5. pending、成功或失败事件按段 ID 回到 UI 的原文行；翻译不阻塞后续识别。
+5. pending、部分译文、成功或失败事件按段 ID 回到 UI 的原文行；共享编排负责部分译文的目标字形归一化，并忽略请求结束后的迟到更新。macOS 通过翻译子进程 IPC 回传本机 Hy-MT2 7B 的流式结果；`packages/core/src/translation/translation-stream.ts` 负责读取 OpenAI 兼容 SSE，部分结果不结束队列请求。Web 与 iOS 未订阅部分回填，保持完整结果路径。流式显示与失败契约见[翻译规则](product/experience.md#翻译规则)。
 
 ### 设置、模型与归档
 
@@ -55,6 +55,7 @@ Realtime Translator 是 pnpm workspace 单仓库。`@rt/core` 提供平台无关
 - `apps/macos/test` 包含无 GUI 管线、CER 评测和翻译脚本；入口命令由 `apps/macos/package.json` 的 `test-pipeline`、`eval-cer` 和 `test-translate` 定义。`eval-cer` 同时报告产品管线 CER、整段离线 CER 和“实时最长结果到定稿”的 Final 漂移，并可用 `--max-cer`、`--max-drift` 将任一模型的加权结果设为失败门槛。日语快捷命令 `eval-cer-ja` 评测固定语言的完整语料，`eval-cer-ja:gate` 则以 SenseVoice 的产品管线 CER 不超过 20%、Final 漂移不超过 5% 为回归门禁。
 - `apps/macos/scripts/fetch-fleurs-eval.mjs` 通过 `fetch-eval-fleurs` 从固定 revision 的 FLEURS `ja_jp` test split 确定性抽取 100 条 CC-BY-4.0 语料，生成 16 kHz 单声道 PCM WAV、参考文本、语言元数据和带署名及音频哈希的 manifest。源 Parquet 缓存在 `apps/macos/test-audio/cache`，用例写入 `apps/macos/test-audio/eval/fleurs-ja-test`；两处均被 Git 忽略，需要评测的环境自行生成。
 - `apps/macos/test/stage-latency.ts` 使用固定课堂音频、SenseVoice、默认合句规则、Hy-MT2 7B 与产品翻译队列作静音实时回放，分开记录识别提交、合句、排队与翻译延迟；入口为 `test-stage-latency`，指标边界、命令和私有素材要求见[macOS 无 GUI 评测](../apps/macos/test/README.md)。
+- `apps/macos/test/translation-transport-replay.ts` 在固定课堂样本校验通过的原文与相同上下文上，以 ABBA 顺序对比完整响应与流式响应的首批、完整返回延迟，并严格检查最终译文一致性及部分输出前缀；命令和边界见[macOS 无 GUI 评测](../apps/macos/test/README.md)。
 - `apps/macos/test/classroom-replay.ts` 使用同一音频与识别模型，对照未合句和合句的原文段，并可将两组结果送至同一 OpenAI 兼容翻译端点；用于课堂音频回放验收。
 - `apps/macos/test/semantic-boundary-replay.ts` 在相同 ASR 事件时序上对照规则合句与语义判断，固定 Hy-MT2 翻译及原文上下文。`local-boundary-judge.ts` 通过本机 LM Studio 的 `sentence-judge` 别名请求 `END` / `WAIT`，判断超时按规则回退。结果记录提示词、分组、配置及带时刻和触发原因的 `flushEvents`。
 - 回放脚本末尾的 `original|small|compare` 参数选择原英文提示词、中文指令加日语示例提示词，或将两者与规则合句分组对照，默认是 `original`。`limit-audit` 在同一 ASR 时序、优化提示词和 Hy-MT2 配置下，对照原规则、保留 8 秒等待/10 秒音频硬上限的模型辅助、仅将规则上限延至 12 秒/14 秒，以及允许模型复核 8 秒/10 秒阈值的四组配置。

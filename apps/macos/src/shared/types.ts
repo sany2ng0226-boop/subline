@@ -89,6 +89,7 @@ export type MainToTranslate =
   | { type: 'translate'; id: number; text: string; source?: string; target: string; context?: string[] };
 
 export type TranslateToMain =
+  | { type: 'partial'; id: number; text: string }
   | { type: 'status'; payload: TranslationStatusPayload }
   | { type: 'result'; id: number; text: string }
   /** 单次翻译失败，按 id 关联回主进程的在途请求；引擎级失败（模型加载等）仍走 status */

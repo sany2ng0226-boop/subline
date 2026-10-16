@@ -76,7 +76,8 @@ process.on('message', (msg: MainToTranslate) => {
       break;
     case 'translate':
       ensure()
-        .then((t) => t.translate(msg.text, { source: msg.source, target: msg.target, context: msg.context }))
+        .then((t) => t.translate(msg.text, { source: msg.source, target: msg.target, context: msg.context,
+          onPartial: (text) => post({ type: 'partial', id: msg.id, text }) }))
         .then((text) => post({ type: 'result', id: msg.id, text }))
         // 带 id 上报失败，让主进程 reject 对应的在途请求（引擎级失败已由 ensure 内部走 status）
         .catch((err) => post({ type: 'error', id: msg.id, message: (err as Error).message }));

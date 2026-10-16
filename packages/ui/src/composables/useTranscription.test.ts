@@ -50,3 +50,17 @@ it('does not archive provisional rows and can accept a segment without partial e
   expect(state.lines[0].text).toBe('確定だけ。');
   expect(state.lines[0].displayId).toBeGreaterThan(0);
 });
+
+it('keeps cumulative translation provisional until completion and clears it on stream failure', () => {
+  callbacks.onSegment({ id: 20, text: '本文。', start: 0, duration: 2, lang: 'ja' });
+  const row = state.lines[0];
+  callbacks.onTranslation({ id: 20, text: '', pending: true });
+  callbacks.onTranslation({ id: 20, text: '正在翻', partial: true });
+  expect(row.translation).toBe('正在翻'); expect(row.translating).toBe(true);
+  expect(state.archiveSnapshot()[0].translation).toBe('');
+  callbacks.onTranslation({ id: 20, text: '', failed: true, error: 'stream interrupted' });
+  expect(row.translation).toBe(''); expect(row.failed).toBe(true); expect(row.translating).toBe(false);
+  callbacks.onTranslation({ id: 20, text: '完整译文' });
+  expect(row.translation).toBe('完整译文'); expect(row.translationPartial).toBe(false); expect(row.failed).toBe(false);
+  expect(state.archiveSnapshot()[0].translation).toBe('完整译文');
+});
