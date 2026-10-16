@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "caseId": "classroom-ja-104",
+  "audioSha256": "dae21734fceaec01f438375c4ae40a2ba924a84b47d2f5f4c99f4d4ab28eeaef",
+  "sampleRate": 16000,
+  "asrModel": "sense-voice",
+  "language": "ja",
+  "translationModel": "hy-mt2-7b",
+  "expectedSegments": [
+    {
+      "textSha256": "95695c318bb93a4007bd520bab3afb6d775472c65fe9ef8a9939be88f388903c",
+      "start": 0,
+      "duration": 3.8,
+      "lang": "ja"
+    },
+    {
+      "textSha256": "5a66a5af99e69514f02e042f40a1f40c82cbfd0b3e3db55d4e60c37877cc143d",
+      "start": 4.6,
+      "duration": 5.5,
+      "lang": "ja"
+    },
+    {
+      "textSha256": "fb71b17ba7b6277556e9bbfced5346fa3ed802e8739331e2f265ca6fe09ea589",
+      "start": 10.1,
+      "duration": 9.4,
+      "lang": "ja"
+    },
+    {
+      "textSha256": "d8cd1a31d77d49e2c063942669fee2f5762c650b306669d88389d7e0c4227ca6",
+      "start": 35.4,
+      "duration": 11.199999999999996,
+      "lang": "ja"
+    },
+    {
+      "textSha256": "da45fc8b141680d964d9a3fc4463655e1c44d1b1dfbef71b5ec613fd44a68ca9",
+      "start": 46.6,
+      "duration": 8.199999999999996,
+      "lang": "ja"
+    },
+    {
+      "textSha256": "22c7515a5e5f72d1e859c1e906ecb65abe6fe065984f7ee6f5d965f42d250083",
+      "start": 55.8,
+      "duration": 5.9,
+      "lang": "ja"
+    },
+    {
+      "textSha256": "28388d18564570a06516f7a4a7356faf67c030e80b2925cf1b1aaf1de967d8f9",
+      "start": 61.8,
+      "duration": 9.599999999999994,
+      "lang": "ja"
+    },
+    {
+      "textSha256": "8a1aa9e9db7bcfe43902740d36d5a8ae25013437687b4480ea34a110d3b6591a",
+      "start": 71.4,
+      "duration": 6.7,
+      "lang": "ja"
+    },
+    {
+      "textSha256": "2b0ada59ed1f2bbede7eb457cb9894f43d882a00637ed1ef3a4118144c6ec7c2",
+      "start": 79.5,
+      "duration": 6.799999999999997,
+      "lang": "ja"
+    },
+    {
+      "textSha256": "2d7dfe11386f2395de979c9a92974d271fd3b2c866c4621fda93c2248059c07f",
+      "start": 86.4,
+      "duration": 8.900000000000006,
+      "lang": "ja"
+    },
+    {
+      "textSha256": "fb0d1f69674d4390ad25384b41a68c806e2a58c52b40cce2790804d2a89b9df3",
+      "start": 95.4,
+      "duration": 7.599999999999994,
+      "lang": "ja"
+    },
+    {
+      "textSha256": "c3d7f30304ae9dfbdbeaf6b3c8cf3dbe9aff22c77caa559c8d0fda6d20f89fe5",
+      "start": 103,
+      "duration": 1.0143125,
+      "lang": "ja"
+    }
+  ],
+  "notes": "Private audio supplied separately. Golden source hashes from the previously verified unchanged pipeline; no human accuracy reference is asserted."
+}

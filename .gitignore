@@ -29,3 +29,6 @@ apps/macos/build/icon.icns
 *.m4a
 *.mp4
 *.mov
+
+# Private diagnostic traces and transcripts
+apps/macos/test-results/

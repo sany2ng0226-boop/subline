@@ -101,6 +101,11 @@ export function buildModelConfig(
   }
 }
 
+export type PipelineDiagnostic =
+  | { kind: 'decode'; ms: number; audioSeconds: number; warmup: boolean }
+  | { kind: 'asr-fragment'; segment: import('@rt/core').SegmentPayload }
+  | { kind: 'sentence'; segment: import('@rt/core').SegmentPayload };
+
 export class TranscriptionPipeline {
   private readonly core: CorePipeline;
   private readonly sentences: SentenceAssembler;
@@ -113,12 +118,16 @@ export class TranscriptionPipeline {
   private readonly fixedLang: string | null;
 
   constructor(modelsDir: string, modelId: string, language: AsrLang, callbacks: PipelineCallbacks,
-    options: { sentenceAssembly?: boolean; sentenceOptions?: import('@rt/core').SentenceAssemblyOptions } = {}) {
+    options: { sentenceAssembly?: boolean; sentenceOptions?: import('@rt/core').SentenceAssemblyOptions;
+      onDiagnostic?: (event: PipelineDiagnostic) => void } = {}) {
+    const diagnose = options.onDiagnostic;
+    let warming = true;
     const publishPartial = () => callbacks.onPartial?.({
       text: this.sentences.text + this.partial,
       stableText: this.sentences.text + this.stablePartial,
     });
     this.sentences = new SentenceAssembler((segment) => {
+      diagnose?.({ kind: 'sentence', segment: { ...segment } });
       callbacks.onSegment(segment);
       publishPartial();
     }, options.sentenceOptions);
@@ -147,10 +156,12 @@ export class TranscriptionPipeline {
       },
       flushVad: () => this.vad.flush(),
       transcribe: (samples) => {
+        const started = diagnose ? performance.now() : 0;
         const stream = this.recognizer.createStream();
         stream.acceptWaveform({ samples, sampleRate: SAMPLE_RATE });
         this.recognizer.decode(stream);
         const result = this.recognizer.getResult(stream);
+        diagnose?.({ kind: 'decode', ms: performance.now() - started, audioSeconds: samples.length / SAMPLE_RATE, warmup: warming });
         // tokens/timestamps 透传给 core 供窗口滑动定位提交边界（缺失时 core 走 fallback）。
         return {
           text: result.text || '',
@@ -171,9 +182,11 @@ export class TranscriptionPipeline {
       // 预热失败忽略，不影响正常使用
     }
 
+    warming = false;
     // 提交策略随模型注入：非自回归模型走一致前缀提交，自回归 transducer 走定长分块提交。
     this.core = new CorePipeline(engine, options.sentenceAssembly === false ? callbacks : {
       onSegment: (segment) => {
+        diagnose?.({ kind: 'asr-fragment', segment: { ...segment } });
         this.partial = '';
         this.stablePartial = '';
         this.sentences.push(segment);

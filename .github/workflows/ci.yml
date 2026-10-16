@@ -45,8 +45,8 @@ jobs:
       - name: Unit tests (@rt/core)
         run: pnpm --filter @rt/core test
 
-      - name: Caption and translation queue regressions
-        run: pnpm exec vitest run packages/ui/src/composables/useTranscription.test.ts apps/macos/src/main/translation/request-queue.test.ts
+      - name: Caption, queue and latency accounting regressions
+        run: pnpm exec vitest run packages/ui/src/composables/useTranscription.test.ts apps/macos/src/main/translation/request-queue.test.ts apps/macos/test/stage-metrics.test.ts
 
       - name: Type-check (@rt/macos)
         run: pnpm --filter @rt/macos type-check
