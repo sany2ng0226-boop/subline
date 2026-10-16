@@ -5,7 +5,7 @@ import {
   SAMPLE_RATE,
   type AsrInferenceEngine,
 } from './transcription-pipeline';
-import type { SegmentPayload, AsrCommitStrategy } from '../types';
+import type { SegmentPayload, AsrCommitStrategy, PartialPayload } from '../types';
 
 // ============================================================================
 // 简单假引擎：VAD 探测由测试逐步设置，识别结果固定返回（不带 tokens/timestamps
@@ -29,6 +29,7 @@ class FakeEngine implements AsrInferenceEngine {
 const CHUNK = SAMPLE_RATE / 10; // 0.1s，模拟真实的流式喂入粒度
 
 interface Harness {
+  partialPayloads: PartialPayload[];
   engine: FakeEngine;
   pipeline: TranscriptionPipeline;
   segments: SegmentPayload[];
@@ -39,14 +40,16 @@ interface Harness {
 
 function makeHarness(): Harness {
   const engine = new FakeEngine();
+  const partialPayloads: PartialPayload[] = [];
   const segments: SegmentPayload[] = [];
   const partials: string[] = [];
   const pipeline = new TranscriptionPipeline(engine, {
     onSegment: (seg) => segments.push(seg),
-    onPartial: (p) => partials.push(p.text),
+    onPartial: (p) => { partials.push(p.text); partialPayloads.push(p); },
   });
   return {
     engine,
+    partialPayloads,
     pipeline,
     segments,
     partials,
@@ -644,4 +647,19 @@ describe('最短解码时长（过短输入补零，防原生层崩溃）', () =
       expect(n).toBeGreaterThanOrEqual(0.5 * SAMPLE_RATE);
     }
   });
+});
+
+it('exposes the agreed display prefix without hiding a new tentative suffix', () => {
+  const h = makeHarness();
+  h.feed(0.7, true);
+  expect(h.partialPayloads.some((p) => p.text === '你好世界' && p.stableText === '')).toBe(true);
+  h.feed(0.6, true);
+  expect(h.partialPayloads.at(-1)).toMatchObject({ text: '你好世界', stableText: '你好世界' });
+  h.engine.result.text = '你好世界还有后文';
+  h.feed(0.6, true);
+  expect(h.partialPayloads.at(-1)).toMatchObject({ text: '你好世界还有后文', stableText: '你好世界' });
+  expect(h.segments).toHaveLength(0);
+  h.pipeline.flush();
+  expect(h.segments.map((s) => s.text).join('')).toBe('你好世界还有后文');
+  expect(h.partialPayloads.at(-1)?.text).toBe('');
 });

@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { NSelect, NInput, NAutoComplete, NFormItem, NAlert, NButton, type SelectOption } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { translationModelsFor } from '@rt/core';
+import { translationModelsFor, isLoopbackEndpoint } from '@rt/core';
 import { bridge } from '../../bridge';
 import { humanBytes } from '../../utils/bytes';
 import type { SettingsFormData } from './form';
@@ -31,12 +31,18 @@ const canTestCloud = typeof bridge().testCloud === 'function';
 type CloudTestState = 'idle' | 'testing' | 'ok' | 'error';
 const cloudTest = ref<CloudTestState>('idle');
 const cloudTestError = ref('');
+const loopback = computed(() => isLoopbackEndpoint(props.form.cloud.baseURL));
 
-// 云端三项必填齐全才允许测试。
+function useLocalHy(): void {
+  props.form.cloud = { baseURL: 'http://127.0.0.1:1234/v1', model: 'hy-mt2-1.8b', apiKey: '' };
+  props.form.translationMode = 'cloud';
+}
+
+// Remote services need a key; loopback services can run without authentication.
 const cloudFilled = computed(
   () =>
     props.form.cloud.baseURL.trim() !== '' &&
-    props.form.cloud.apiKey.trim() !== '' &&
+    (loopback.value || props.form.cloud.apiKey.trim() !== '') &&
     props.form.cloud.model.trim() !== '',
 );
 const canTest = computed(() => cloudFilled.value && cloudTest.value !== 'testing');
@@ -80,6 +86,7 @@ interface ProviderPreset {
   models: string[];
 }
 const providerPresets: ProviderPreset[] = [
+  { name: 'LM Studio · Hy-MT2', baseURL: 'http://127.0.0.1:1234/v1', models: ['hy-mt2-1.8b'] },
   {
     name: 'OpenAI',
     baseURL: 'https://api.openai.com/v1',
@@ -162,13 +169,17 @@ const modelOptions = computed(() => {
       <n-select v-model:value="form.translationMode" :options="modeOptions" />
     </n-form-item>
 
+    <n-button v-if="bridge().platform === 'macos'" size="small" class="mb-4" @click="useLocalHy">
+      {{ t('settings.useLocalHy') }}
+    </n-button>
+
     <!-- 本地方式且本平台有可选权重模型时，显示「翻译模型」下拉；iOS 走系统翻译时不渲染 -->
     <n-form-item v-if="form.translationMode === 'local' && localModelOptions.length" :label="t('settings.translationModel')">
       <n-select v-model:value="form.translationModel" :options="localModelOptions" />
     </n-form-item>
 
     <template v-if="form.translationMode === 'cloud'">
-      <n-alert type="warning" :show-icon="true" class="mb-3.5">{{ t('settings.cloudWarn') }}</n-alert>
+      <n-alert :type="loopback ? 'info' : 'warning'" :show-icon="true" class="mb-3.5">{{ t(loopback ? 'settings.localApiInfo' : 'settings.cloudWarn') }}</n-alert>
       <n-form-item :label="t('settings.baseUrl')">
         <n-auto-complete
           v-model:value="form.cloud.baseURL"
@@ -188,7 +199,7 @@ const modelOptions = computed(() => {
           placeholder="gpt-4o-mini"
         />
       </n-form-item>
-      <n-form-item :label="t('settings.apiKey')">
+      <n-form-item :label="t(loopback ? 'settings.localApiKeyOptional' : 'settings.apiKey')">
         <n-input v-model:value="form.cloud.apiKey" type="password" show-password-on="click" placeholder="sk-..." />
       </n-form-item>
       <!-- 云端提示 + 连接测试为表单的收尾区块：用 pb-6 垫出与 n-form-item 反馈区（24px）

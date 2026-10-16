@@ -13,6 +13,7 @@ import {
   VAD_WINDOW_SIZE,
   MIN_SILENCE_SECONDS,
   TranscriptionPipeline as CorePipeline,
+  SentenceAssembler,
   type AsrInferenceEngine,
   type PipelineCallbacks,
   type AsrLang,
@@ -102,13 +103,25 @@ export function buildModelConfig(
 
 export class TranscriptionPipeline {
   private readonly core: CorePipeline;
+  private readonly sentences: SentenceAssembler;
+  private partial = '';
+  private stablePartial = '';
   private readonly vad: Vad;
   private readonly recognizer: OfflineRecognizer;
   // 非 senseVoice 引擎不产语言标记，用注册表首个语言固定填充（供翻译链路当源语言）；
   // senseVoice 为 null，改用引擎返回的 <|zh|> 标记（由 core 剥离尖括号）。
   private readonly fixedLang: string | null;
 
-  constructor(modelsDir: string, modelId: string, language: AsrLang, callbacks: PipelineCallbacks) {
+  constructor(modelsDir: string, modelId: string, language: AsrLang, callbacks: PipelineCallbacks,
+    options: { sentenceAssembly?: boolean; sentenceOptions?: import('@rt/core').SentenceAssemblyOptions } = {}) {
+    const publishPartial = () => callbacks.onPartial?.({
+      text: this.sentences.text + this.partial,
+      stableText: this.sentences.text + this.stablePartial,
+    });
+    this.sentences = new SentenceAssembler((segment) => {
+      callbacks.onSegment(segment);
+      publishPartial();
+    }, options.sentenceOptions);
     assertModelsExist(modelsDir, modelId);
     const spec = getAsrModel(modelId);
     if (!spec) throw new Error(`未知的识别模型: ${modelId}`);
@@ -159,7 +172,20 @@ export class TranscriptionPipeline {
     }
 
     // 提交策略随模型注入：非自回归模型走一致前缀提交，自回归 transducer 走定长分块提交。
-    this.core = new CorePipeline(engine, callbacks, spec.commitStrategy);
+    this.core = new CorePipeline(engine, options.sentenceAssembly === false ? callbacks : {
+      onSegment: (segment) => {
+        this.partial = '';
+        this.stablePartial = '';
+        this.sentences.push(segment);
+        publishPartial();
+      },
+      onPartial: ({ text, stableText }) => {
+        this.partial = text;
+        this.stablePartial = stableText ?? '';
+        if (text) this.sentences.touch();
+        publishPartial();
+      },
+    }, spec.commitStrategy);
   }
 
   /** @param samples 16kHz 单声道 */
@@ -170,10 +196,14 @@ export class TranscriptionPipeline {
   /** 录音结束时调用，把未闭合的语音段定稿 */
   flush(): void {
     this.core.flush();
+    this.sentences.flush();
   }
 
   /** 开始新一次录音会话：重置 segment.start 的计时基线 */
   reset(): void {
+    this.sentences.reset();
+    this.partial = '';
+    this.stablePartial = '';
     this.core.reset();
   }
 }

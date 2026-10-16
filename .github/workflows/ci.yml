@@ -1,4 +1,4 @@
-# 质量门禁 + Web 部署（同一工作流的依赖链：check 全绿才部署）。
+# 质量门禁 + 可选 Web 部署。仓库变量 ENABLE_PAGES=true 才启用部署。
 # - check：core 单元测试 + 三端 type-check。不下载 Electron 二进制
 #   （ELECTRON_SKIP_BINARY_DOWNLOAD=1）：类型检查只需要包内的 TS 类型声明。
 # - changes：轻量探测本次改动是否涉及 web（apps/web 及其依赖）。
@@ -45,6 +45,9 @@ jobs:
       - name: Unit tests (@rt/core)
         run: pnpm --filter @rt/core test
 
+      - name: Caption and translation queue regressions
+        run: pnpm exec vitest run packages/ui/src/composables/useTranscription.test.ts apps/macos/src/main/translation/request-queue.test.ts
+
       - name: Type-check (@rt/macos)
         run: pnpm --filter @rt/macos type-check
 
@@ -64,7 +67,7 @@ jobs:
   # 下游 deploy-web 直接跳过，省一次 Pages 部署并缩小其后端竞态的暴露面。
   changes:
     needs: check
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: vars.ENABLE_PAGES == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -93,8 +96,9 @@ jobs:
   deploy-web:
     needs: [check, changes]
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.web == 'true')
+      vars.ENABLE_PAGES == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.web == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

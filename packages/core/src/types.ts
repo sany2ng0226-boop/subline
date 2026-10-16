@@ -37,6 +37,8 @@ export interface TranslationPayload {
 /** 说话过程中实时更新的部分识别结果，text 为空表示清除 */
 export interface PartialPayload {
   text: string;
+  /** Display-only confirmed prefix; may be revised by later recognition. */
+  stableText?: string;
 }
 
 /**

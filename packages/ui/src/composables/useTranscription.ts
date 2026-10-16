@@ -1,9 +1,12 @@
-import { nextTick, reactive, ref } from 'vue';
+import { reactive, ref } from 'vue';
 import type { PipelineErrorCode } from '@rt/core';
 import { fmtClock } from '../utils/datetime';
 import { bridge } from '../bridge';
 
 export interface TranscriptLine {
+  /** Stable view identity survives provisional text becoming a finalized segment. */
+  displayId: number;
+  lang?: string;
   id: number;
   time: string;
   text: string;
@@ -17,6 +20,12 @@ export interface TranscriptLine {
 
 export const lines = reactive<TranscriptLine[]>([]);
 export const partial = ref('');
+export const stablePartial = ref<string>();
+export const draftLine = ref<TranscriptLine | null>(null);
+let nextDisplayId = 0;
+function makeDraft(text: string): TranscriptLine {
+  return { displayId: ++nextDisplayId, id: -1, time: '', text, translation: '', translating: false, failed: false };
+}
 export const recording = ref(false);
 
 // 软件未就绪：加载 ASR 模型中（录音管线就绪前）
@@ -51,25 +60,23 @@ export function registerTranscriptionListeners(): void {
   registered = true;
 
   bridge().onSegment((seg) => {
-    lines.push({
-      id: seg.id,
-      time: fmtTime(seg.start),
-      text: seg.text,
-      translation: '',
-      translating: false,
-      failed: false,
+    const line = draftLine.value ?? makeDraft(seg.text);
+    Object.assign(line, {
+      id: seg.id, time: fmtTime(seg.start), text: seg.text, lang: seg.lang,
+      translation: '', translating: false, failed: false,
     });
-    // 识别区里有实时识别文字时才做交接：把它定格成这条定稿文本、下一 tick 再清空，
-    // 使向下淡出的正是落入确定句区的同一句（而非早期实时猜测）。识别区本就为空（无中间结果）则不动，停留「聆听中」。
-    if (partial.value !== '') {
-      partial.value = seg.text;
-      void nextTick(() => {
-        if (partial.value === seg.text) partial.value = '';
-      });
-    }
+    lines.push(line);
+    draftLine.value = null;
+    partial.value = '';
+    stablePartial.value = undefined;
   });
   bridge().onPartial((p) => {
     partial.value = p.text;
+    stablePartial.value = p.stableText;
+    if (p.text) {
+      if (!draftLine.value) draftLine.value = makeDraft(p.text);
+      else draftLine.value.text = p.text;
+    } else draftLine.value = null;
   });
   bridge().onTranslation((tr) => {
     const line = lines.find((l) => l.id === tr.id);
@@ -152,6 +159,8 @@ export async function stopRecording(): Promise<void> {
   recording.value = false;
   await bridge().stopPipeline();
   partial.value = '';
+  stablePartial.value = undefined;
+  draftLine.value = null;
 }
 
 export function toggleRecording(): void {
@@ -168,4 +177,6 @@ export function toggleRecording(): void {
 export function clearTranscript(): void {
   lines.splice(0, lines.length);
   partial.value = '';
+  stablePartial.value = undefined;
+  draftLine.value = null;
 }

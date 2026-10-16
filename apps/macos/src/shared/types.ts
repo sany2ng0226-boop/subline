@@ -86,7 +86,7 @@ export type AsrToMain =
 export type MainToTranslate =
   | { type: 'configure'; engine: TranslationEngine; cloud: CloudTranslationConfig; cacheDir: string }
   | { type: 'preheat' }
-  | { type: 'translate'; id: number; text: string; source?: string; target: string };
+  | { type: 'translate'; id: number; text: string; source?: string; target: string; context?: string[] };
 
 export type TranslateToMain =
   | { type: 'status'; payload: TranslationStatusPayload }

@@ -1,3 +1,5 @@
+> **课堂定制版**：本仓库基于 [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator)，保留上游历史。新增原位字幕流、日中原生字体与排版、规则合句、翻译上下文和 macOS 翻译队列控制。定制版配置与构建方法见[仓库主页](README.md)，当前行为以[产品规则](docs/product/experience.md)为准。以下下载链接指向上游版本，并非本定制版。课堂录音、个人设置、凭证和额外下载的模型权重不随源码上传。
+
 <p align="center">
   <img src="assets/icon.png" alt="Realtime Translator" width="128" height="128" />
 </p>

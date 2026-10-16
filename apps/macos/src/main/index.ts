@@ -1,3 +1,4 @@
+import { TranslationRequestQueue } from './translation/request-queue';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fork, type ChildProcess } from 'node:child_process';
@@ -19,6 +20,7 @@ import {
   createReverseTranslationContext,
   resetReverseTranslationContext,
   CloudTranslator,
+  TranslationContext,
   ASR_MODELS,
   getAsrModel,
   requiredAsrFiles,
@@ -48,10 +50,20 @@ import type {
   MicPermission,
 } from '../shared/types';
 
+// A development preview must not reuse a running installation's settings or archives.
+const previewProfile = !app.isPackaged ? process.env['RT_PREVIEW_PROFILE'] : undefined;
+if (previewProfile) {
+  fs.mkdirSync(path.resolve(previewProfile), { recursive: true });
+  app.setPath('userData', path.resolve(previewProfile));
+  app.setName('Realtime Translator Preview');
+}
+
 // 模型存放目录：
 // - 打包后 app.getAppPath() 指向只读的 app.asar，必须写到可写的 userData；
 // - 开发时用仓库根目录的 models/，便于复用已下载的模型。
-const MODELS_DIR = app.isPackaged
+const MODELS_DIR = !app.isPackaged && process.env['RT_MODELS_DIR']
+  ? path.resolve(process.env['RT_MODELS_DIR'])
+  : app.isPackaged
   ? path.join(app.getPath('userData'), 'models')
   : path.join(app.getAppPath(), 'models');
 const TRANSLATION_CACHE_DIR = path.join(MODELS_DIR, 'transformers');
@@ -72,6 +84,7 @@ let nextLineId = 0;
 
 // 反向翻译会话状态：识别语言为 auto 时，听到母语的段翻成上一次识别到的外语；每次开始录音清空（见 pipeline:start）。
 const reverseCtx = createReverseTranslationContext();
+const translationContext = new TranslationContext();
 
 // 翻译跑在独立的纯 Node 子进程（child_process.fork + ELECTRON_RUN_AS_NODE）：隔离原生
 // 崩溃与超大内存分配，翻译进程挂掉也不连累主窗口，仅丢一次翻译。必须脱离 utilityProcess
@@ -158,7 +171,7 @@ function createWindow(): void {
   win = new BrowserWindow({
     width: 1100,
     height: 760,
-    title: 'Realtime Translator',
+    title: previewProfile || app.getName() === 'Realtime Translator Preview' ? 'Realtime Translator Preview' : 'Realtime Translator',
     ...(app.isPackaged ? {} : { icon: APP_ICON }),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -179,8 +192,15 @@ function sendToRenderer(channel: string, payload: unknown): void {
   }
 }
 
-/** 经消息协议调用翻译子进程，返回按 id 关联的结果 Promise（注册到当前子进程的在途请求表） */
+// Bound requests before IPC so the worker and local inference server cannot accumulate an unbounded backlog.
+const translationQueue = new TranslationRequestQueue<SegmentTranslateRequest, string>(dispatchTranslate);
+
 function requestTranslate(req: SegmentTranslateRequest): Promise<string> {
+  return translationQueue.submit(req);
+}
+
+/** Only the active queue entry is registered in the child process pending map. */
+function dispatchTranslate(req: SegmentTranslateRequest): Promise<string> {
   const child = ensureTranslateChild();
   return new Promise<string>((resolve, reject) => {
     child.pending.set(req.id, { resolve, reject });
@@ -190,6 +210,11 @@ function requestTranslate(req: SegmentTranslateRequest): Promise<string> {
       text: req.text,
       source: req.source,
       target: req.targetLang,
+      context: req.context,
+    }, (error) => {
+      if (!error) return;
+      child.pending.get(req.id)?.reject(error);
+      child.pending.delete(req.id);
     });
   });
 }
@@ -259,6 +284,8 @@ function ensureTranslateChild(): TranslateChild {
 
 /** 设置变更后让翻译子进程按新配置重建（kill 后下次按需重启） */
 function reconfigureTranslate(): void {
+  translationQueue.cancelWaiting();
+  translationContext.reset();
   // 同步置空引用；旧进程的 exit 只 reject 发往它的在途请求，不影响之后按需 fork 的新进程
   translateChild?.proc.kill();
   translateChild = null;
@@ -281,6 +308,7 @@ function translateSegment(segment: SegmentPayload): void {
     nativeLang: settings.nativeLang,
     asrLanguage: settings.asr.language,
     reverse: reverseCtx,
+    context: settings.translation.engine === 'cloud' ? translationContext : undefined,
     translate: requestTranslate,
     emitTranslation: (p) => sendToRenderer('pipeline:translation', p),
   });
@@ -397,6 +425,7 @@ ipcMain.handle('pipeline:start', async (): Promise<StartResult> => {
   // 子进程跨会话复用：每次开始录音都重置计时基线，segment.start 相对本次会话起点
   asrChild?.postMessage({ type: 'reset' });
   resetReverseTranslationContext(reverseCtx); // 外语历史只在本次会话内有效
+  translationContext.reset();
   sendToRenderer('pipeline:status', { state: 'running' });
   sessionActive = true;
   return { ok: true };

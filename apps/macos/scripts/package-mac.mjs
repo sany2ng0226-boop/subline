@@ -10,8 +10,9 @@ import { fileURLToPath } from 'node:url';
 const appDir = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..'); // apps/macos
 const root = path.resolve(appDir, '..', '..'); // 工作区根
 const deployDir = path.join(root, '.deploy-macos'); // 自包含副本（已 gitignore）
-const releaseDir = path.join(appDir, 'release'); // 最终产物位置
+const releaseDir = path.join(appDir, process.argv.includes('--preview') ? 'release-preview' : 'release');
 const dirOnly = process.argv.includes('--dir');
+const preview = process.argv.includes('--preview');
 
 const run = (cmd, cwd) => execSync(cmd, { cwd, stdio: 'inherit' });
 
@@ -32,7 +33,9 @@ const target = dirOnly ? '--dir' : '';
 // 覆盖（-c.extraMetadata.version），决定 dmg 文件名与 App 的 CFBundleShortVersionString。
 const { version } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 run(
-  `./node_modules/.bin/electron-builder --mac ${target} -c.extraMetadata.version="${version}" -c.directories.output="${releaseDir}"`,
+  `./node_modules/.bin/electron-builder --mac ${target} -c.extraMetadata.version="${version}" ` +
+  (preview ? '-c.appId=io.github.baijunjie.realtimetranslator.classroompreview -c.productName="Realtime Translator Preview" -c.extraMetadata.name=realtime-translator-preview -c.extraMetadata.productName="Realtime Translator Preview" ' : '') +
+  `-c.directories.output="${releaseDir}"`,
   deployDir
 );
 

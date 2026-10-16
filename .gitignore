@@ -10,7 +10,22 @@ dist/
 # macOS app (apps/macos) build artifacts, downloaded models and packaging output
 apps/macos/out/
 apps/macos/release/
+apps/macos/release-preview/
 apps/macos/models/
 apps/macos/dist-test/
 apps/macos/test-audio/
 apps/macos/build/icon.icns
+
+# Local credentials, signing identities and classroom recordings
+.env
+.env.*
+!.env.example
+!.env.sample
+*.p12
+*.p8
+*.mobileprovision
+*.wav
+*.mp3
+*.m4a
+*.mp4
+*.mov

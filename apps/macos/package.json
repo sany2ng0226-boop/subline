@@ -21,7 +21,8 @@
     "test-translate": "node scripts/build-test.mjs test/translate.ts && node dist-test/test/translate.js",
     "icons": "node scripts/gen-icon.mjs",
     "dist": "node scripts/package-mac.mjs",
-    "dist:dir": "node scripts/package-mac.mjs --dir"
+    "dist:dir": "node scripts/package-mac.mjs --dir",
+    "dist:preview": "node scripts/package-mac.mjs --dir --preview"
   },
   "keywords": [],
   "author": "",

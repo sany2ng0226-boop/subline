@@ -9,6 +9,8 @@ import { settings, saveSettings } from '../composables/useSettings';
 import {
   lines,
   partial,
+  stablePartial,
+  draftLine,
   recording,
   modelLoading,
   errorText,
@@ -473,10 +475,14 @@ function openMicSettings(): void {
     <transcript-list
       :lines="lines"
       :partial="partial"
+      :stable-partial="stablePartial"
+      :draft="draftLine"
       :recording="recording"
       :empty-hint="t('main.emptyHint')"
       :listening-hint="t('main.listening')"
       :translate-on="translateOn"
+      :source-lang="settings?.asr.language"
+      :target-lang="settings?.nativeLang"
     />
 
     <!-- 归档命名弹窗 -->

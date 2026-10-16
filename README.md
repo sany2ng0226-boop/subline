@@ -1,3 +1,44 @@
+# Realtime Translator Classroom
+
+A classroom-focused derivative of [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator), maintained by [Jack](https://github.com/sany2ng0226-boop). Upstream Git history is preserved. This repository contains our custom source; upstream release links below refer to upstream builds, not this version.
+
+## Classroom changes
+
+- Continuous caption rows: provisional text is extended, corrected and confirmed in place; translations return to the same row.
+- Stable-prefix / tentative-tail styling, language-specific native Japanese and Simplified Chinese fonts, and a narrower bilingual reading layout.
+- Rule-based Japanese sentence assembly before translation. Local-model sentence judging remains an offline experiment, not the default recording path.
+- Source-only context for OpenAI-compatible translation, including local LM Studio endpoints.
+- macOS translation backpressure: one active request, at most three waiting, and a 15-second waiting deadline. Overloaded or expired translations fail visibly while their transcripts remain available.
+- A separate macOS Preview build and isolated application data.
+
+## Local classroom setup
+
+The tested configuration is SenseVoice with Japanese recognition and a local Hy-MT2 7B model served by LM Studio. These are runtime selections, not bundled weights or repository-wide forced defaults.
+
+1. Install dependencies with the package manager pinned in `package.json` (`pnpm install`).
+2. Run `pnpm dev`, or build the separate Preview app with `pnpm --filter @rt/macos dist:preview`.
+3. In settings, choose Japanese and SenseVoice, with Chinese as the native language.
+4. For local Hy-MT2, run your model in LM Studio under the alias `hy-mt2-7b`, then select the API translation backend with base URL `http://127.0.0.1:1234/v1` and that model name. A key is optional only for loopback endpoints.
+5. Choose system audio on supported macOS versions and grant the app the requested capture permission.
+
+Check source with `pnpm check`. Caption identity and macOS queue regressions can be checked with `pnpm exec vitest run packages/ui/src/composables/useTranscription.test.ts apps/macos/src/main/translation/request-queue.test.ts`.
+
+GitHub Actions runs checks on `main`; Pages deployment is disabled unless the repository variable `ENABLE_PAGES` is explicitly set to `true`.
+
+Private classroom recordings, transcripts, user settings, credentials and downloaded model weights are not included. Upstream's small web VAD asset and runtime files remain part of its original source tree. Build and test outputs are reproducible local artifacts.
+
+## Attribution and distribution status
+
+This is derived work, not an independently authored replacement for upstream. The upstream package metadata declares `ISC`; the checked source tree does not include a standalone license text. That metadata and all upstream history are preserved. This private repository is for maintaining the custom source; clarify upstream licensing before a public release. Model weights and dependencies have their own terms.
+
+Current behavior and implementation navigation: [product rules](docs/product/experience.md) and [project map](docs/project-map.md).
+
+---
+
+## Upstream documentation
+
+The documentation below is retained for upstream platform and build context. Its release links and feature descriptions may differ from this classroom derivative; use the product rules above for custom behavior.
+
 <p align="center">
   <img src="assets/icon.png" alt="Realtime Translator" width="128" height="128" />
 </p>

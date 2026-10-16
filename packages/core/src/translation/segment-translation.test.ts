@@ -9,6 +9,7 @@ import {
   type TranslateFinalizedSegmentOptions,
 } from './segment-translation';
 import type { TranslationPayload } from '../types';
+import { TranslationContext } from './context';
 
 /** 跑一条段：记录引擎收到的翻译请求与派发的译文事件，返回可断言的桩数据。 */
 async function run(
@@ -34,6 +35,15 @@ async function run(
 const seg = (lang: string, text = 'x', id = 1) => ({ id, text, lang });
 
 describe('反向翻译编排（translateFinalizedSegment）', () => {
+  it('forwards source-only context in segment order and clears it across skipped speech', async () => {
+    const context = new TranslationContext();
+    await run({ segment: seg('ja', '神々の世界'), nativeLang: 'zh', context });
+    const second = await run({ segment: seg('ja', '人間の感情'), nativeLang: 'zh', context });
+    expect(second.requests[0].context).toEqual(['神々の世界']);
+    await run({ segment: seg('zh', '你好'), nativeLang: 'zh', context });
+    const next = await run({ segment: seg('ja', '次の話題'), nativeLang: 'zh', context });
+    expect(next.requests[0].context).toEqual([]);
+  });
   it('auto 模式：外语段正向翻成母语，并记录为 lastForeignLang', async () => {
     const reverse = createReverseTranslationContext();
     const { requests } = await run({

@@ -579,7 +579,7 @@ export class TranscriptionPipeline {
       progressed = true;
     }
 
-    // 展示（滑动前，用当前状态）：已提交前缀保持稳定，只让未提交尾巴闪动。
+    // 展示当前确认前缀与临时尾部；后续识别重基仍可修正确认前缀。
     const shown = cur.text.startsWith(this.committedInWindow) ? cur.text : this.committedInWindow;
     if (
       cur.text.startsWith(this.committedInWindow) &&
@@ -587,7 +587,10 @@ export class TranscriptionPipeline {
     ) {
       this.bestWindowHypothesis = cur.text;
     }
-    this.onPartial({ text: cleanAsrText(this.committedDone + shown) });
+    this.onPartial({
+      text: cleanAsrText(this.committedDone + shown),
+      stableText: cleanAsrText(this.committedDone + this.committedInWindow),
+    });
 
     this.prevDecode = cur.text;
 
@@ -601,7 +604,10 @@ export class TranscriptionPipeline {
    * 返回本 tick 是否推进了提交边界（供停滞保护判定）。
    */
   private chunkTick(cur: RawDecode, now: number): boolean {
-    this.onPartial({ text: cleanAsrText(this.committedDone + cur.text) });
+    this.onPartial({
+      text: cleanAsrText(this.committedDone + cur.text),
+      stableText: cleanAsrText(this.committedDone),
+    });
     if (this.engineHasTimestamps !== true) return false; // fallback：无块提交
     const winLen = (now - this.windowStart) / SAMPLE_RATE;
     if (winLen < CHUNK_SECONDS) return false;

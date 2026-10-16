@@ -7,6 +7,7 @@
 // （模型加载失败、进程崩溃等），由各端引擎自身上报。
 import { langIdentity, planTranslation, type LocalModelSpec } from './local-spec';
 import type { TranslationPayload } from '../types';
+import type { TranslationContext } from './context';
 
 /**
  * 反向翻译的会话状态：记录最近一次识别到的「非母语」源语言短码。
@@ -52,6 +53,7 @@ export function guardAsrLang(text: string, lang: string): string {
 
 /** 注入给平台引擎的一次翻译请求。 */
 export interface SegmentTranslateRequest {
+  context?: string[];
   /** 行 id，译文异步回填对应 */
   id: number;
   /** 源文本（定稿段原文） */
@@ -65,6 +67,7 @@ export interface SegmentTranslateRequest {
 }
 
 export interface TranslateFinalizedSegmentOptions {
+  context?: TranslationContext;
   spec: LocalModelSpec;
   segment: { id: number; text: string; lang: string };
   /** 翻译是否开启（关闭时不发任何事件） */
@@ -128,8 +131,12 @@ export async function translateFinalizedSegment(
   // 目标语言解析须在任何 await 之前同步完成（reverse 状态按段序累计）。
   const targetLang = resolveTargetLang(opts, sourceLang);
   const plan = planTranslation(opts.spec, sourceLang, targetLang, segment.text);
-  if (plan.kind === 'skip') return;
+  if (plan.kind === 'skip') {
+    opts.context?.reset();
+    return;
+  }
   if (plan.kind === 'script') {
+    opts.context?.reset();
     opts.emitTranslation({ id: segment.id, text: plan.text });
     return;
   }
@@ -142,6 +149,7 @@ export async function translateFinalizedSegment(
       source: sourceLang,
       targetLang: plan.targetLang,
       targetCode: plan.targetCode,
+      ...(opts.context ? { context: opts.context.take(sourceLang, plan.targetLang, segment.text) } : {}),
     });
     opts.emitTranslation({ id: segment.id, text: plan.toScript ? plan.toScript(text) : text });
   } catch (e) {
