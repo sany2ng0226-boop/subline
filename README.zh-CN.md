@@ -20,11 +20,16 @@
 
 ## 验证与发布边界
 
-本次是**源码预览节点**，没有新发 Subline 安装包。当前 Subline Internal 为 ad-hoc 本机构建，尚未完成 Developer ID 签名和 Apple 公证。现有 `v0.2.0-beta.1` 是旧名 Classroom Translator 的朋友测试包，不含当前界面和归档改动；其签名与公证只适用于那个历史产物。下方上游下载链接也不属于 Subline。
+**[下载 Subline Internal 0.2.0-beta.2](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.2)**，适用于 Apple 芯片 Mac、macOS 14.2 或更新版本。本包包含当前连续字幕和文件夹归档。应用已完成 Developer ID 签名、Apple 公证并附上票据，最终 DMG 内的应用通过签名、stapler 和 Gatekeeper 验证；DMG 容器没有单独公证。
 
-已在 48 GB 内存的 Apple 芯片开发机验收：实际应用内的系统音频采集、日语转写与中文翻译、字幕跟随和回看、归档保存改名移动及重启读回。麦克风目前仅验证启停，真实对话、远距离、多人噪声、整场活动和长时间开发负载尚未验收；其他内存容量也未验收。本次不代表 iOS / Web 的最新改动已通过真机或浏览器验收。
+1. 下载 arm64 `.dmg`，将 **Subline Internal.app** 拖入“应用程序”，正常打开并选择母语，无需移除隔离属性或降低安全设置。
+2. 在主页选择日语，开始录音，确认首次下载 SenseVoice 与 Hy-MT2 模型，合计约 **4.5 GiB**。需联网并预留额外磁盘空间；应用会核验固定文件的大小和 SHA-256。
+3. 下载后在本机识别与翻译，**不需要 LM Studio、API Key 或另启模型服务**。按提示允许麦克风或系统音频录制。首次翻译需等待模型加载。
+4. 停止录音后，等译文完成，点击顶栏橡皮图标 →「归档」→「保存」；停止不会自动保存。
 
-系统音频需要 macOS 14.2 或更新。Hy-MT2 权重约 4.62 GB，首次单独下载，并校验固定版本文件的大小和 SHA-256。
+已用空白用户数据目录完成首次引导和应用内真实模型下载，并在 48 GB 内存的 Apple 芯片开发机测试系统音频转写与本地翻译。麦克风仅验证启停；真人识别、远距离、多人噪声、整场活动、长时开发负载及其他内存容量尚未验收。识别仍可能出错。此次不代表 iOS / Web 已通过运行验收。
+
+旧 `v0.2.0-beta.1` 是 Classroom Translator 历史测试包；下方上游下载也不属于 Subline。Internal 与稳定渠道使用各自的设置、归档和模型目录；替换 Internal 应用会沿用现有 Internal 数据。
 
 ## 从源码运行
 
@@ -85,12 +90,7 @@ npx pnpm@10.33.0 --filter @rt/macos dist:preview
 
 ### macOS
 
-从 [Releases 页面](https://github.com/baijunjie/realtime-translator/releases) 下载最新的 `.dmg`（Apple Silicon），把应用拖入**应用程序**文件夹。
-
-**未签名版本**——该 beta 未签名/未公证。首次打开时：
-
-- 右键点击应用 →「**打开**」，然后确认；或
-- 执行：`xattr -dr com.apple.quarantine "/Applications/Realtime Translator.app"`
+下方上游链接属于 Realtime Translator。本次 Subline Internal 请使用本页上方的下载与安装步骤，复制到“应用程序”后正常打开；标准首次打开和音频权限提示仍可能出现。
 
 macOS 是功能最全的一端：除麦克风外还能采集**系统音频**（Mac 正在播放的声音，需 macOS 14.2+），并额外提供更高质量的 M2M-100 1.2B 翻译模型。
 

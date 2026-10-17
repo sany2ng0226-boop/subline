@@ -20,21 +20,23 @@
 
 ## macOS build and distribution status
 
-**Subline** is the new product name; **Subline Internal** is the internal macOS channel. The Subline Internal build has been installed and checked locally: real system-audio capture, Japanese transcription and Chinese translation, scrolling and archive restart persistence. Microphone start/stop has been checked; real microphone recognition, distant speech, noisy groups and sustained event/development use have not been qualified. It is an ad-hoc local build, not a Developer ID signed or Apple-notarized release. Web and iOS builds have not been validated as part of that check.
+**[Download Subline Internal 0.2.0-beta.2](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.2)** — Apple Silicon Mac, macOS 14.2 or newer. This beta includes the current continuous-caption UI and archive folders. The application is Developer ID signed and Apple notarized, with the ticket attached to the app; the final DMG's contained app passed signature, stapler and Gatekeeper checks. The DMG container is not independently notarized.
 
-The previously distributed **Classroom Translator 0.2.0-beta.1** friends beta remains a historical release under its original name. That specific application was Developer ID signed and Apple notarized, with the ticket stapled to the `.app`; this does not cover Subline builds or separately notarize its DMG. The installation steps below apply to that historical beta. This is a public source preview; upstream downloads below are not our builds. No new Subline binary is published with this source milestone. System audio requires macOS 14.2 or newer. Other memory capacities have not been qualified; local inference has been exercised on a 48 GB development Mac.
+1. Download the arm64 `.dmg` from the release above and drag **Subline Internal.app** into Applications.
+2. Open it normally and accept the standard macOS first-open confirmation if shown. Choose your native language. No quarantine-removal command or security-setting change is required.
+3. Choose Japanese on the home screen for the tested Japanese-to-Chinese configuration, then start recording. Confirm the first model download: approximately **4.5 GiB** for SenseVoice and Hy-MT2 7B Q4_K_M. Allow extra free space and a working internet connection. Downloads validate the pinned files' size and SHA-256.
+4. After download, recognition and translation run locally. **LM Studio, an API key and a separately started model server are not required.** Allow microphone or system-audio capture when requested. The first translation can take longer while the model loads.
+5. Stop recording, wait for pending translations to finish, then choose the toolbar eraser → Archive → Save. Stopping alone does not save it.
 
-1. Obtain this beta's `.dmg` from the maintainer, then drag **Classroom Translator.app** into Applications.
-2. Open the app normally and accept the standard macOS first-open confirmation if shown; no quarantine-removal command or security-setting change is required. Choose your native language. New macOS settings enable the built-in **Hy-MT2 7B Q4_K_M** translator; existing settings are preserved.
-3. Choose Japanese and SenseVoice for the classroom configuration. On first recording, confirm the required model downloads. The Hy-MT2 weights are approximately 4.62 GB and are downloaded from a pinned Tencent source with size and SHA-256 validation.
-4. After the downloads finish, the app runs recognition and translation locally. **LM Studio, an API key and a separately started model server are not required.** The Metal inference runtime is included; model weights are not bundled.
-5. Choose system audio on supported macOS versions and grant the requested capture permission. Transcripts and translations remain in one continuous timeline; archive a session to keep it for later.
+A clean user profile was used to check onboarding and real in-app model downloads. System-audio transcription and local translation were exercised on a 48 GB development Mac. Microphone start/stop has been checked; real microphone recognition, distant speech, noisy groups, sustained event/development use and other memory capacities have not been qualified. Recognition may contain errors. Web and iOS runtime behavior has not been validated for this release.
+
+The older **Classroom Translator 0.2.0-beta.1** remains a historical build under its original name. Upstream downloads below belong to upstream. Internal and stable channels use separate settings, archives and model caches; existing Internal data is preserved when replacing the Internal app.
 
 The optional API translation backend remains available for an existing local server or a user-configured remote service. Local Hy-MT2 keeps the same source-only context, rule-based sentence assembly and translation backpressure. Changing the inference runtime does not guarantee byte-for-byte identical translations.
 
 ## Development and checks
 
-This source milestone includes the Subline branding, continuous-caption UI, following fix and Internal archive folders. The historical Classroom Translator binary remains separate and does not contain these latest changes. The Internal home-screen recognition-language selector and archive folders are enabled by an Internal build.
+This source and the new Internal beta include the Subline branding, continuous-caption UI, following fix and archive folders. The historical Classroom Translator binary remains separate. The Internal home-screen recognition-language selector and archive folders are enabled by an Internal build.
 
 Use Node.js 22 and pnpm **10.33.0**, pinned in `package.json`. For example:
 
@@ -101,7 +103,7 @@ All three platforms share the same core logic and UI; they differ in how they ru
 
 ### macOS
 
-The linked upstream releases belong to Realtime Translator. For this signed and notarized Classroom beta, use the maintainer-provided package and installation steps above; open **Classroom Translator.app** normally after copying it to Applications. The standard first-open confirmation and audio-capture permission prompts still apply.
+The linked upstream releases belong to Realtime Translator. For this signed and notarized Subline Internal beta, use the release and installation steps above; open **Subline Internal.app** normally after copying it to Applications. The standard first-open confirmation and audio-capture permission prompts still apply.
 
 macOS is the most capable target: it can capture **system audio** (what your Mac is playing, macOS 14.2+) as well as the microphone, and it offers the higher-quality M2M-100 1.2B translation model.
 

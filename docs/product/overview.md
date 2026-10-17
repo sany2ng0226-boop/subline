@@ -34,9 +34,9 @@ Subline 是基于上游开源项目 Realtime Translator 定制、面向中文、
 
 ### macOS
 
-macOS 测试版名为 Subline，当前分发目标为 Apple 芯片 Mac，先供少量朋友测试。稳定渠道当前仍为 0.2.0-beta.1 朋友测试版，不代表 GA 正式发布。已发出的稳定渠道产物仍以旧名 Classroom Translator 构建，已完成 Developer ID 签名和 Apple 公证，公证票据已附在 `.app` 上，并通过签名、stapler 和 Gatekeeper 验收；这不等于 DMG 容器另获独立公证，也不代表已公开发布。以 Subline 命名的产物需重新签名、公证并验收，不能沿用这一结论。Hy-MT2 已在 48 GB 内存的开发机运行，其他内存容量的最低要求尚未验收。
+macOS 测试版名为 Subline，当前分发目标为 Apple 芯片 Mac。稳定渠道当前仍为 0.2.0-beta.1 朋友测试版，不代表 GA 正式发布。已发出的稳定渠道产物仍以旧名 Classroom Translator 构建，已完成 Developer ID 签名和 Apple 公证，公证票据已附在 `.app` 上，并通过签名、stapler 和 Gatekeeper 验收。当前 Subline Internal 预览包为 0.2.0-beta.2，也已独立完成 Developer ID 签名和 Apple 公证，导出的 `.app` 通过 stapler 验证及 Gatekeeper 的 Notarized Developer ID 检查。上述结论仅适用于各自验收的应用产物，不等于 DMG 容器另获独立公证。Hy-MT2 已在 48 GB 内存的开发机运行，其他内存容量的最低要求尚未验收。
 
-当前 Subline Internal 安装产物采用 ad-hoc 签名，未完成 Developer ID 签名与 Apple 公证；已在本机验收系统音频采集、日语转写与中文翻译、字幕跟随与回看，以及归档保存后重启读回。真实麦克风识别、多人噪声环境与整场活动的长时间开发负载尚未验收，不能据此承诺线下活动或黑客松中的识别效果与稳定性。
+当前预览包已在本机空白用户数据目录中走通首次引导、日语选择、模型下载确认、由应用下载 SenseVoice 与 Hy-MT2，以及麦克风启停的流程。系统音频的日语转写、中文本地翻译、手动归档、文件夹移动与重启读回也已在该新包中验收。真实麦克风识别、多人噪声环境与整场活动的长时间开发负载尚未验收，不能据此承诺线下活动或黑客松中的识别效果与稳定性。
 
 macOS 版是 Electron 应用。麦克风由渲染进程采集；系统音频通过 CoreAudio Tap 回环采集，因此只在 macOS 14.2 及以上显示音源切换。ASR 与本地翻译分别运行在隔离子进程中，某个推理进程崩溃不会连带关闭主窗口。Hy-MT2 通过随应用提供的 node-llama-cpp Metal 后端执行，用户无需安装编译工具；应用不在运行时编译或下载可执行推理组件。稳定渠道的设置、归档和模型缓存位于 `~/Library/Application Support/Classroom Translator`；内部验证渠道名为 Subline Internal，使用独立的 `~/Library/Application Support/Classroom Translator Internal`。改名后数据目录和应用标识保持旧值，已有设置、归档、模型及系统授予的麦克风/系统音频权限照常沿用。两者可并排安装，不自动迁移或共用配置、归档和模型缓存。两个渠道来自同一代码库，内部验收后再发布稳定渠道；Internal 的签名、公证状态按各自产物验收，不能沿用稳定版的公证结论。
 
