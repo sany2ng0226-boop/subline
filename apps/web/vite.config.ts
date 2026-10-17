@@ -26,12 +26,12 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Realtime Translator',
-        short_name: 'Realtime',
+        name: 'Subline',
+        short_name: 'Subline',
         description: 'Local, real-time speech transcription and translation in your browser',
-        // 浅色应用底色；主题色用品牌粉（与 macOS/iOS 一致）。
+        // 浅色应用底色；主题色与白底图标、浅色界面一致。
         background_color: '#ffffff',
-        theme_color: '#FF5C7E',
+        theme_color: '#FFFFFF',
         display: 'standalone',
         orientation: 'portrait',
         start_url: base,

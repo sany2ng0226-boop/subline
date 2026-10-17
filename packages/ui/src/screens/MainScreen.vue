@@ -4,7 +4,7 @@ import { NButton, NModal, NInput, NDropdown, NTooltip, NProgress, NSelect } from
 import type { DropdownMixedOption } from 'naive-ui/es/dropdown/src/interface';
 import { Settings, Trash2, Archive, Library, Eraser, LoaderCircle, TriangleAlert, MoreHorizontal, Mic, MonitorSpeaker, Square, RefreshCw } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
-import { getAsrModel, getTranslationModel, UI_LANGS, asrModelsFor, DEFAULT_ASR_MODEL_ID, type AsrLang } from '@rt/core';
+import { getAsrModel, getTranslationModel, UI_LANGS, asrModelsFor, DEFAULT_ASR_MODEL_ID, type AsrLang, suggestArchiveTitle, type ArchiveLibrary } from '@rt/core';
 import { LANG_LABELS } from '../components/settings/form';
 import { settings, saveSettings } from '../composables/useSettings';
 import {
@@ -43,8 +43,8 @@ declare const __INTERNAL_BUILD__: boolean;
 const internalBuild = typeof __INTERNAL_BUILD__ !== 'undefined' && __INTERNAL_BUILD__;
 const languageSaving = ref(false);
 const primaryLanguageOptions = computed(() => [
-  { label: `${t('main.primaryLanguage')}: ${t('settings.asrLanguageAuto')}`, value: 'auto' },
-  ...UI_LANGS.map((lang) => ({ label: `${t('main.primaryLanguage')}: ${LANG_LABELS[lang]}`, value: lang })),
+  { label: t('settings.asrLanguageAuto'), value: 'auto' },
+  ...UI_LANGS.map((lang) => ({ label: LANG_LABELS[lang], value: lang })),
 ]);
 async function selectPrimaryLanguage(language: AsrLang): Promise<void> {
   const current = settings.value;
@@ -79,6 +79,12 @@ function onClearSelect(key: string): void {
 
 const archiveModalOpen = ref(false);
 const archiveName = ref('');
+const archiveSaving = ref(false);
+const archiveError = ref('');
+const archiveFolder = ref<string | null>(null);
+const archiveLibrary = ref<ArchiveLibrary>({ folders: [], lastFolderId: null });
+const foldersEnabled = internalBuild && !!bridge().getArchiveLibrary;
+const archiveFolderOptions = computed(() => [{ label: t('archive.unfiled'), value: '' }, ...archiveLibrary.value.folders.map((f) => ({ label: f.name, value: f.id }))]);
 
 function defaultArchiveName(): string {
   return fmtDateTime(Date.now());
@@ -86,7 +92,18 @@ function defaultArchiveName(): string {
 
 async function openArchiveModal(): Promise<void> {
   // 生成不与现有重复的默认名
-  let name = defaultArchiveName();
+  archiveError.value = '';
+  if (foldersEnabled) {
+    try {
+      archiveLibrary.value = await bridge().getArchiveLibrary!();
+      archiveFolder.value = archiveLibrary.value.lastFolderId;
+    } catch (error) {
+      errorText.value = t('archive.operationFailed');
+      console.error('[archive:library]', error);
+      return;
+    }
+  }
+  let name = foldersEnabled ? suggestArchiveTitle(archiveSnapshot(), defaultArchiveName()) : defaultArchiveName();
   try {
     const names = new Set((await bridge().listArchives()).map((a) => a.name));
     if (names.has(name)) {
@@ -102,10 +119,20 @@ async function openArchiveModal(): Promise<void> {
 }
 
 async function confirmArchive(): Promise<void> {
-  const snapshot = archiveSnapshot();
-  await bridge().saveArchive(archiveName.value.trim() || defaultArchiveName(), snapshot);
-  clearTranscript();
-  archiveModalOpen.value = false;
+  if (archiveSaving.value) return;
+  archiveSaving.value = true;
+  archiveError.value = '';
+  try {
+    const snapshot = archiveSnapshot();
+    await bridge().saveArchive(archiveName.value.trim() || defaultArchiveName(), snapshot, foldersEnabled ? archiveFolder.value : undefined);
+    clearTranscript();
+    archiveModalOpen.value = false;
+  } catch (error) {
+    archiveError.value = t('archive.operationFailed');
+    console.error('[archive:save]', error);
+  } finally {
+    archiveSaving.value = false;
+  }
 }
 
 // 是否开启翻译：现由设置里的「翻译方式」决定（选了模型即启用），主页不再有独立开关。
@@ -135,7 +162,7 @@ const loadingSummary = computed(() =>
 );
 
 // 录音进行中（含启停在途）：顶栏除录音按钮外全部禁用，避免录音过程中误操作打断会话
-const headerLocked = computed(() => recording.value || recordBusy.value || languageSaving.value);
+const headerLocked = computed(() => recording.value || recordBusy.value || languageSaving.value || archiveSaving.value);
 
 // 音源开关：仅当桥接声明支持系统音频时才显示（macOS）。切换即持久化。
 const supportsSystemAudio = bridge().audioSources?.includes('system') ?? false;
@@ -394,18 +421,15 @@ function openMicSettings(): void {
 
 <template>
   <div class="flex h-full flex-col">
-    <header
-      class="flex items-center gap-3.5 border-b border-neutral-200 px-[18px] py-3 dark:border-[#3a3b44]"
-    >
-      <span class="text-[15px] font-semibold">{{ t('main.appTitle') }}</span>
-      <span v-if="errorText" class="text-xs text-red-500">{{ errorDisplay }}</span>
+    <header class="app-header">
+      <span v-if="errorText" class="min-w-0 truncate text-xs text-[var(--rt-live)]">{{ errorDisplay }}</span>
 
       <div class="flex-1" />
 
       <!-- 模型加载状态：顶栏内联，转圈图标 + 文案；hover 看具体加载项 -->
       <n-tooltip v-if="loadingItems.length">
         <template #trigger>
-          <div class="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+          <div class="flex items-center gap-2 text-xs text-[var(--rt-ink-3)]">
             <LoaderCircle :size="14" class="animate-spin" />
             <span>{{ loadingSummary }}</span>
           </div>
@@ -415,59 +439,64 @@ function openMicSettings(): void {
       <!-- 翻译引擎级错误：同一位置收敛为红色警示图标（行级失败仍在对应行内展示） -->
       <n-tooltip v-else-if="translateOn && translationError">
         <template #trigger>
-          <TriangleAlert :size="14" class="text-red-500" />
+          <TriangleAlert :size="14" class="text-[var(--rt-live)]" />
         </template>
         {{ t('status.transFailed') }}
       </n-tooltip>
 
       <!-- 窄屏隐藏，改用下方「...」菜单与底部圆形录音按钮 -->
-      <div class="flex items-center gap-3.5 max-sm:hidden">
-        <!-- NDropdown 无 disabled 属性：无内容或录音锁定时直接渲染禁用按钮，避免仍能弹出菜单 -->
-        <n-dropdown v-if="hasContent && !headerLocked" trigger="hover" :options="clearOptions" @select="onClearSelect">
-          <n-button quaternary circle :aria-label="t('main.clear')">
-            <template #icon><Eraser :size="18" /></template>
+      <div class="flex items-center gap-3 max-sm:hidden">
+        <!-- 次要操作收进一组图标，和主操作（电平 / 语言 / 录音）之间用细分隔线拉开层级 -->
+        <div class="tool-group">
+          <!-- NDropdown 无 disabled 属性：无内容或录音锁定时直接渲染禁用按钮，避免仍能弹出菜单 -->
+          <n-dropdown v-if="hasContent && !headerLocked" trigger="hover" :options="clearOptions" @select="onClearSelect">
+            <n-button quaternary circle size="small" :aria-label="t('main.clear')">
+              <template #icon><Eraser :size="17" /></template>
+            </n-button>
+          </n-dropdown>
+          <n-button v-else quaternary circle size="small" disabled :aria-label="t('main.clear')">
+            <template #icon><Eraser :size="17" /></template>
           </n-button>
-        </n-dropdown>
-        <n-button v-else quaternary circle disabled :aria-label="t('main.clear')">
-          <template #icon><Eraser :size="18" /></template>
-        </n-button>
-        <n-tooltip>
-          <template #trigger>
-            <n-button quaternary circle :disabled="headerLocked" :aria-label="t('main.viewArchives')" @click="$emit('open-archive')">
-              <template #icon><Library :size="18" /></template>
-            </n-button>
-          </template>
-          {{ t('main.viewArchives') }}
-        </n-tooltip>
-        <n-tooltip>
-          <template #trigger>
-            <n-button quaternary circle :disabled="headerLocked" :aria-label="t('main.settings')" @click="$emit('open-settings')">
-              <template #icon><Settings :size="18" /></template>
-            </n-button>
-          </template>
-          {{ t('main.settings') }}
-        </n-tooltip>
-        <!-- 音源开关：仅桥接支持系统音频时显示，图标即当前音源，点击切换 -->
-        <n-tooltip v-if="supportsSystemAudio">
-          <template #trigger>
-            <n-button
-              quaternary
-              circle
-              :disabled="headerLocked"
-              :aria-label="audioSourceTitle"
-              @click="toggleAudioSource"
-            >
-              <template #icon>
-                <component :is="settings?.audioSource === 'system' ? MonitorSpeaker : Mic" :size="18" />
-              </template>
-            </n-button>
-          </template>
-          {{ audioSourceTitle }}
-        </n-tooltip>
+          <n-tooltip>
+            <template #trigger>
+              <n-button quaternary circle size="small" :disabled="headerLocked" :aria-label="t('main.viewArchives')" @click="$emit('open-archive')">
+                <template #icon><Library :size="17" /></template>
+              </n-button>
+            </template>
+            {{ t('main.viewArchives') }}
+          </n-tooltip>
+          <n-tooltip>
+            <template #trigger>
+              <n-button quaternary circle size="small" :disabled="headerLocked" :aria-label="t('main.settings')" @click="$emit('open-settings')">
+                <template #icon><Settings :size="17" /></template>
+              </n-button>
+            </template>
+            {{ t('main.settings') }}
+          </n-tooltip>
+          <!-- 音源开关：仅桥接支持系统音频时显示，图标即当前音源，点击切换 -->
+          <n-tooltip v-if="supportsSystemAudio">
+            <template #trigger>
+              <n-button
+                quaternary
+                circle
+                size="small"
+                :disabled="headerLocked"
+                :aria-label="audioSourceTitle"
+                @click="toggleAudioSource"
+              >
+                <template #icon>
+                  <component :is="settings?.audioSource === 'system' ? MonitorSpeaker : Mic" :size="17" />
+                </template>
+              </n-button>
+            </template>
+            {{ audioSourceTitle }}
+          </n-tooltip>
+        </div>
+        <span class="header-divider" aria-hidden="true" />
         <AudioLevelMeter :active="recording" />
         <n-select
           v-if="internalBuild && settings"
-          class="w-[170px]"
+          class="w-[168px]"
           size="small"
           :aria-label="t('main.primaryLanguage')"
           :value="settings.asr.language"
@@ -475,14 +504,17 @@ function openMicSettings(): void {
           :disabled="headerLocked || preparing || awaitingRecord"
           @update:value="selectPrimaryLanguage"
         />
-        <n-button
-          :type="recording ? 'error' : 'primary'"
+        <button
+          type="button"
+          class="record-btn"
+          :class="{ 'is-live': recording }"
           :disabled="preparing || recordBusy || awaitingRecord || languageSaving"
-          :loading="recordBusy"
           @click="onRecordClick"
         >
-          {{ recording ? t('main.stop') : t('main.start') }}
-        </n-button>
+          <LoaderCircle v-if="recordBusy" :size="15" class="animate-spin" />
+          <span v-else class="record-glyph" aria-hidden="true" />
+          <span>{{ recording ? t('main.stop') : t('main.start') }}</span>
+        </button>
       </div>
 
       <!-- sm:hidden 放在外层 div：Naive 运行时注入的 .n-button{display:inline-flex} 会盖过
@@ -513,7 +545,6 @@ function openMicSettings(): void {
       :draft="draftLine"
       :recording="recording"
       :empty-hint="t('main.emptyHint')"
-      :listening-hint="t('main.listening')"
       :translate-on="translateOn"
       :source-lang="settings?.asr.language"
       :target-lang="settings?.nativeLang"
@@ -524,14 +555,23 @@ function openMicSettings(): void {
       v-model:show="archiveModalOpen"
       preset="card"
       :title="t('archive.modalTitle')"
+      :mask-closable="!archiveSaving"
+      :closable="!archiveSaving"
+      :close-on-esc="!archiveSaving"
       style="width: 420px; max-width: 90vw"
     >
       <div class="mb-1.5 text-xs text-neutral-500 dark:text-neutral-400">{{ t('archive.nameLabel') }}</div>
-      <n-input v-model:value="archiveName" autofocus @keydown.enter="confirmArchive" />
+      <n-input v-model:value="archiveName" autofocus :disabled="archiveSaving" :maxlength="120" @keydown.enter="confirmArchive" />
+      <p v-if="foldersEnabled" class="mt-1 text-xs text-neutral-400">{{ t('archive.autoTitle') }}</p>
+      <template v-if="foldersEnabled">
+        <div class="mb-1.5 mt-4 text-xs text-neutral-500">{{ t('archive.folder') }}</div>
+        <n-select :value="archiveFolder ?? ''" :options="archiveFolderOptions" :disabled="archiveSaving" :aria-label="t('archive.folder')" @update:value="archiveFolder = $event || null" />
+      </template>
+      <p v-if="archiveError" role="alert" class="mt-2 text-sm text-red-500">{{ archiveError }}</p>
       <template #footer>
         <div class="flex justify-end gap-2">
-          <n-button @click="archiveModalOpen = false">{{ t('archive.cancel') }}</n-button>
-          <n-button type="primary" @click="confirmArchive">{{ t('archive.save') }}</n-button>
+          <n-button :disabled="archiveSaving" @click="archiveModalOpen = false">{{ t('archive.cancel') }}</n-button>
+          <n-button type="primary" :loading="archiveSaving" :disabled="archiveSaving" @click="confirmArchive">{{ t('archive.save') }}</n-button>
         </div>
       </template>
     </n-modal>
@@ -621,8 +661,8 @@ function openMicSettings(): void {
     <n-tooltip>
       <template #trigger>
         <button
-          class="fixed left-1/2 z-20 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full text-white shadow-lg transition-colors disabled:opacity-40 sm:hidden"
-          :class="recording ? 'bg-red-500 active:bg-red-600' : 'bg-emerald-500 active:bg-emerald-600'"
+          class="fixed left-1/2 z-20 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full shadow-lg transition-colors disabled:opacity-40 sm:hidden"
+          :class="recording ? 'bg-[var(--rt-live)] text-white' : 'bg-[var(--rt-ink)] text-[var(--rt-bg)]'"
           :style="{ bottom: 'calc(env(safe-area-inset-bottom) + 22px)' }"
           :disabled="preparing || recordBusy || awaitingRecord"
           :aria-label="recording ? t('main.stop') : t('main.start')"
@@ -636,3 +676,54 @@ function openMicSettings(): void {
     </n-tooltip>
   </div>
 </template>
+
+<style scoped>
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 56px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--rt-line);
+}
+
+
+.tool-group { display: flex; align-items: center; gap: 2px; }
+.header-divider { width: 1px; height: 18px; background: var(--rt-line); }
+
+/* 主操作：静止态为墨色实心按钮 + 红色录音圆点；录音中转为红底 + 方形停止符号 */
+.record-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px 0 12px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  white-space: nowrap;
+  color: var(--rt-bg);
+  background: var(--rt-ink);
+  cursor: pointer;
+  transition: background-color 0.25s var(--rt-ease), transform 0.12s ease, opacity 0.2s ease, box-shadow 0.25s ease;
+}
+.record-btn:hover:not(:disabled) { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); }
+.record-btn:active:not(:disabled) { transform: scale(0.97); }
+.record-btn:disabled { opacity: 0.4; cursor: default; }
+.record-btn:focus-visible { outline: 2px solid var(--rt-accent); outline-offset: 2px; }
+.record-glyph {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--rt-live);
+  transition: border-radius 0.25s var(--rt-ease), background-color 0.25s ease;
+}
+.record-btn.is-live { color: #fff; background: var(--rt-live); }
+.record-btn.is-live .record-glyph { border-radius: 2px; background: #fff; }
+
+@media (max-width: 639px) {
+  .app-header { min-height: 52px; padding: 8px 12px 8px 16px; }
+}
+</style>

@@ -39,10 +39,26 @@ const innerRounded = await sharp(svg, { density: 512 })
   ])
   .png()
   .toBuffer();
+// 白底母版在浅色桌面/Dock 上会与背景融在一起：按 Big Sur 网格自带一层柔和投影 + 极淡描边勾出轮廓。
+const shadow = await sharp(
+  Buffer.from(
+    `<svg width="1024" height="1024"><rect x="${MARGIN}" y="${MARGIN + 12}" width="${INNER}" height="${INNER}" rx="${RX}" ry="${RX}" fill="#000" fill-opacity="0.22"/></svg>`
+  )
+)
+  .blur(18)
+  .png()
+  .toBuffer();
+const outline = Buffer.from(
+  `<svg width="1024" height="1024"><rect x="${MARGIN + 1}" y="${MARGIN + 1}" width="${INNER - 2}" height="${INNER - 2}" rx="${RX - 1}" ry="${RX - 1}" fill="none" stroke="#000" stroke-opacity="0.08" stroke-width="2"/></svg>`
+);
 const framed = await sharp({
   create: { width: 1024, height: 1024, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
 })
-  .composite([{ input: innerRounded, top: MARGIN, left: MARGIN }])
+  .composite([
+    { input: shadow, top: 0, left: 0 },
+    { input: innerRounded, top: MARGIN, left: MARGIN },
+    { input: outline, top: 0, left: 0 },
+  ])
   .png()
   .toBuffer();
 

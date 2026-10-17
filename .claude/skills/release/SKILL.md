@@ -1,6 +1,6 @@
 ---
 name: release
-description: 发布/重发 Realtime Translator 的 release（macOS dmg + web 自动部署）。当用户说「发布」「重新发布」「打包发版」「重发 release」时使用。
+description: 发布/重发 Subline（原 Realtime Translator）的 release（macOS dmg + web 自动部署）。当用户说「发布」「重新发布」「打包发版」「重发 release」时使用。
 ---
 
 # Release 流程
@@ -37,7 +37,7 @@ pnpm --filter @rt/macos dist    # 产物在 apps/macos/release/
 - **产物核验**（每次必做）：
 
   ```bash
-  plutil -p "apps/macos/release/mac-arm64/Realtime Translator.app/Contents/Info.plist" \
+  plutil -p "apps/macos/release/mac-arm64/Subline.app/Contents/Info.plist" \
     | grep -E "UsageDescription|CFBundleShortVersion"
   ```
 
@@ -53,8 +53,8 @@ pnpm --filter @rt/macos dist    # 产物在 apps/macos/release/
 git push origin main
 git tag -f v<ver> && git push -f origin v<ver>
 gh release upload v<ver> \
-  "apps/macos/release/Realtime Translator-<ver>-arm64.dmg" \
-  "apps/macos/release/Realtime Translator-<ver>-arm64.dmg.blockmap" --clobber
+  "apps/macos/release/Subline-<ver>-arm64.dmg" \
+  "apps/macos/release/Subline-<ver>-arm64.dmg.blockmap" --clobber
 ```
 
 - 约定：**不 revert、不留版本号往返提交**，tag 直接强推到新 commit。
@@ -65,9 +65,9 @@ gh release upload v<ver> \
 ```bash
 git push origin main
 git tag v<ver> && git push origin v<ver>
-gh release create v<ver> --prerelease --title "Realtime Translator <ver>" --notes "<要点>" \
-  "apps/macos/release/Realtime Translator-<ver>-arm64.dmg" \
-  "apps/macos/release/Realtime Translator-<ver>-arm64.dmg.blockmap"
+gh release create v<ver> --prerelease --title "Subline <ver>" --notes "<要点>" \
+  "apps/macos/release/Subline-<ver>-arm64.dmg" \
+  "apps/macos/release/Subline-<ver>-arm64.dmg.blockmap"
 ```
 
 - beta 阶段用 `--prerelease`。

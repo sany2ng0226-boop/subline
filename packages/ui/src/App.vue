@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { NConfigProvider, darkTheme, lightTheme } from 'naive-ui';
+import { NConfigProvider, darkTheme, lightTheme, type GlobalThemeOverrides } from 'naive-ui';
 import Onboarding from './screens/Onboarding.vue';
 import MainScreen from './screens/MainScreen.vue';
 import SettingsScreen from './screens/SettingsScreen.vue';
@@ -13,6 +13,24 @@ type Screen = 'loading' | 'onboarding' | 'main' | 'settings' | 'archive';
 const screen = ref<Screen>('loading');
 
 const naiveTheme = computed(() => (isDark.value ? darkTheme : lightTheme));
+
+// 组件库主色与 styles.css 的 --rt-accent 对齐：按钮、开关、焦点环与主页译文/电平图同一强调色。
+const themeOverrides = computed<GlobalThemeOverrides>(() => {
+  const [base, hover, pressed] = isDark.value
+    ? ['#8ea2ff', '#a5b5ff', '#7489ec']
+    : ['#3557d6', '#4a6ae0', '#2a47b8'];
+  return {
+    common: {
+      primaryColor: base,
+      primaryColorHover: hover,
+      primaryColorPressed: pressed,
+      primaryColorSuppl: hover,
+      borderRadius: '8px',
+      fontFamily: '-apple-system, "PingFang SC", "Hiragino Sans", "Apple SD Gothic Neo", sans-serif',
+    },
+    Button: isDark.value ? { textColorPrimary: '#14151a', textColorHoverPrimary: '#14151a', textColorPressedPrimary: '#14151a', textColorFocusPrimary: '#14151a' } : {},
+  };
+});
 
 // 进主界面：模型不再在此下载（改为点击录音时按需确认下载），仅后台预热已就绪的 ASR 模型，
 // 使首次点击录音免等冷启动（不触麦克风）。调用前先置 modelLoading，消除 loading 事件到达前的
@@ -36,20 +54,23 @@ onMounted(async () => {
 </script>
 
 <template>
-  <n-config-provider :theme="naiveTheme">
+  <n-config-provider :theme="naiveTheme" :theme-overrides="themeOverrides">
     <!-- safe-area 内边距：iOS 刘海/灵动岛/Home 指示条留白；env() 在桌面端恒为 0，故 macOS 不受影响 -->
     <div
-      class="h-svh overflow-hidden bg-white text-neutral-900 dark:bg-[#1e1f24] dark:text-neutral-100"
+      class="h-svh overflow-hidden bg-[var(--rt-bg)] text-[var(--rt-ink)]"
       style="padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)"
     >
-      <onboarding v-if="screen === 'onboarding'" @done="enterMain" />
-      <main-screen
-        v-else-if="screen === 'main'"
-        @open-settings="screen = 'settings'"
-        @open-archive="screen = 'archive'"
-      />
-      <settings-screen v-else-if="screen === 'settings'" @close="screen = 'main'" />
-      <archive-screen v-else-if="screen === 'archive'" @close="screen = 'main'" />
+      <!-- 屏幕切换过渡（样式见 styles.css .screen-*）；h-full 包裹保证各屏仍撑满 -->
+      <Transition name="screen" mode="out-in">
+        <onboarding v-if="screen === 'onboarding'" @done="enterMain" />
+        <main-screen
+          v-else-if="screen === 'main'"
+          @open-settings="screen = 'settings'"
+          @open-archive="screen = 'archive'"
+        />
+        <settings-screen v-else-if="screen === 'settings'" @close="screen = 'main'" />
+        <archive-screen v-else-if="screen === 'archive'" @close="screen = 'main'" />
+      </Transition>
     </div>
   </n-config-provider>
 </template>

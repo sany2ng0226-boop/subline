@@ -5,9 +5,9 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Realtime Translator uses the microphone to transcribe and translate speech on your device.</string>
+	<string>Subline uses the microphone to transcribe and translate speech on your device.</string>
 	<key>CFBundleDisplayName</key>
-        <string>Realtime Translator</string>
+        <string>Subline</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

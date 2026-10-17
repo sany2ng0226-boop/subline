@@ -1,19 +1,28 @@
-# Realtime Translator Classroom
+# Subline
 
-A classroom-focused derivative of [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator), maintained by [Jack](https://github.com/sany2ng0226-boop). Upstream Git history is preserved. This repository contains our custom source; upstream release links below refer to upstream builds, not this version.
+**Subline** is a local, real-time transcription and translation app, developed as a classroom-focused derivative of [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator), maintained by [Jack](https://github.com/sany2ng0226-boop). Upstream Git history is preserved. This repository contains our custom source; upstream release links below refer to upstream builds, not this version.
 
-## Classroom changes
+**[简体中文](README.zh-CN.md)** · [Product rules](docs/product/experience.md) · [Code map](docs/project-map.md)
+
+![Subline Internal displaying a saved Japanese/Chinese test session](docs/assets/subline-demo.png)
+
+*Actual macOS Internal archive view using synthetic test speech. This is a saved transcript, not a live performance benchmark.*
+
+## Features
 
 - Continuous caption rows: provisional text is extended, corrected and confirmed in place; translations return to the same row.
 - Stable-prefix / tentative-tail styling, language-specific native Japanese and Simplified Chinese fonts, and a narrower bilingual reading layout.
 - Rule-based Japanese sentence assembly before translation. Local-model sentence judging remains an offline experiment, not the default recording path.
 - Built-in macOS Hy-MT2 7B Metal inference and source-only context, also supported by optional OpenAI-compatible endpoints.
 - macOS translation backpressure: one active request, at most three waiting, and a 15-second waiting deadline. Overloaded or expired translations fail visibly while their transcripts remain available.
-- Separate stable and Internal macOS channels from one codebase, with isolated settings, archives and model caches.
+- Separate stable and Internal macOS channels with isolated settings, archives and model caches.
+- Internal archive folders, content-derived editable titles, rename and move, with persistence across restarts. Saving is manual; stopping recording does not automatically archive the session.
 
-## Apple Silicon macOS beta
+## macOS build and distribution status
 
-The current app is **Classroom Translator 0.2.0-beta.1**, intended for a small group of friends. This repository remains private; upstream downloads below are not this beta. The current application is Developer ID signed and Apple notarized, with the notarization ticket stapled to the `.app`. This describes the application, not a separate notarization of the DMG container. System audio requires macOS 14.2 or newer. Other memory capacities have not been qualified; local inference has been exercised on a 48 GB development Mac.
+**Subline** is the new product name; **Subline Internal** is the internal macOS channel. The Subline Internal build has been installed and checked locally: real system-audio capture, Japanese transcription and Chinese translation, scrolling and archive restart persistence. Microphone start/stop has been checked; real microphone recognition, distant speech, noisy groups and sustained event/development use have not been qualified. It is an ad-hoc local build, not a Developer ID signed or Apple-notarized release. Web and iOS builds have not been validated as part of that check.
+
+The previously distributed **Classroom Translator 0.2.0-beta.1** friends beta remains a historical release under its original name. That specific application was Developer ID signed and Apple notarized, with the ticket stapled to the `.app`; this does not cover Subline builds or separately notarize its DMG. The installation steps below apply to that historical beta. This is a public source preview; upstream downloads below are not our builds. No new Subline binary is published with this source milestone. System audio requires macOS 14.2 or newer. Other memory capacities have not been qualified; local inference has been exercised on a 48 GB development Mac.
 
 1. Obtain this beta's `.dmg` from the maintainer, then drag **Classroom Translator.app** into Applications.
 2. Open the app normally and accept the standard macOS first-open confirmation if shown; no quarantine-removal command or security-setting change is required. Choose your native language. New macOS settings enable the built-in **Hy-MT2 7B Q4_K_M** translator; existing settings are preserved.
@@ -25,7 +34,22 @@ The optional API translation backend remains available for an existing local ser
 
 ## Development and checks
 
-Install the package manager pinned in `package.json`, run `pnpm install`, then `pnpm dev`. `pnpm dist` builds the Apple Silicon DMG in `apps/macos/release/`; signing depends on a locally available identity, and the command alone does not complete Apple notarization or publish a release. `pnpm --filter @rt/macos dist:preview` builds **Classroom Translator Internal.app** in `apps/macos/release-preview/mac-arm64` (unless `RT_RELEASE_DIR` overrides the output). It can be installed beside **Classroom Translator.app**: each channel has its own settings, archives and model cache. Internal changes are verified before a stable-channel release; the stable channel is currently the friends beta, not a GA release. Internal signing/notarization must be checked per build; the stable beta's notarization does not cover Internal. The Internal home screen also exposes a persistent primary-recognition-language selector; this shortcut is excluded from stable builds and uses the same settings as the settings page.
+This source milestone includes the Subline branding, continuous-caption UI, following fix and Internal archive folders. The historical Classroom Translator binary remains separate and does not contain these latest changes. The Internal home-screen recognition-language selector and archive folders are enabled by an Internal build.
+
+Use Node.js 22 and pnpm **10.33.0**, pinned in `package.json`. For example:
+
+```sh
+git clone https://github.com/sany2ng0226-boop/subline.git
+cd subline
+npx pnpm@10.33.0 install --frozen-lockfile
+npx pnpm@10.33.0 dev
+# Build the Internal app with the archive-folder interface:
+npx pnpm@10.33.0 --filter @rt/macos dist:preview
+```
+
+The default Internal output is `apps/macos/release-preview/mac-arm64/Subline Internal.app`. The build command does not install or publish the application.
+
+Install the package manager pinned in `package.json`, run `pnpm install`, then `pnpm dev`. `pnpm dist` builds the Apple Silicon DMG in `apps/macos/release/`; signing depends on a locally available identity, and the command alone does not complete Apple notarization or publish a release. The separate Preview build remains available via `pnpm --filter @rt/macos dist:preview` with isolated data.
 
 For a distributable build, select the local Developer ID Application identity with `CSC_NAME` using the certificate display name **without** the `Developer ID Application:` prefix. Keep its private key in Keychain. The verified local notarization route uses an Xcode archive and `xcodebuild -exportArchive` with `method=developer-id` and `destination=upload`, followed by `xcodebuild -exportNotarizedApp` after Apple accepts it. Validate the exported app with `codesign --verify --deep --strict`, `xcrun stapler validate` and `spctl --assess --type execute`; create the DMG from that app via electron-builder `--prepackaged` to preserve its attached ticket. Credentials and private keys are not repository configuration.
 
@@ -33,11 +57,11 @@ Check source with `pnpm check`. Caption identity and macOS queue regressions can
 
 GitHub Actions runs checks on `main`; Pages deployment is disabled unless the repository variable `ENABLE_PAGES` is explicitly set to `true`.
 
-Private classroom recordings, transcripts, user settings, credentials and downloaded model weights are not included. Upstream's small web VAD asset and runtime files remain part of its original source tree. Build and test outputs are reproducible local artifacts.
+Private classroom recordings, transcripts, user settings, credentials and downloaded model weights are not included. Archives contain finalized text and completed translations, not original recordings; pending translations are not added to an already-saved snapshot. There is no cross-device sync. The screenshot uses synthetic test content. Upstream's small web VAD asset and runtime files remain part of its original source tree. Build and test outputs are reproducible local artifacts.
 
 ## Attribution and distribution status
 
-This is derived work, not an independently authored replacement for upstream. The upstream package metadata declares `ISC`; the checked source tree does not include a standalone license text. That metadata and all upstream history are preserved. This private repository is for maintaining the custom source; clarify upstream licensing before a public release. Model weights and dependencies have their own terms.
+This is derived work, not an independently authored replacement for upstream. The upstream package metadata declares `ISC`; the checked source tree does not include a standalone license text. That metadata and all upstream history are preserved. This repository preserves that declaration and does not introduce a replacement license for upstream code. Check upstream licensing before further redistribution. Model weights and dependencies have their own terms.
 
 Current behavior and implementation navigation: [product rules](docs/product/experience.md) and [project map](docs/project-map.md).
 
@@ -45,7 +69,7 @@ Current behavior and implementation navigation: [product rules](docs/product/exp
 
 ## Upstream documentation
 
-The documentation below is retained for upstream platform and build context. **The Classroom beta instructions above and the product rules take precedence.** All upstream release and demo links below belong to upstream, not this derivative.
+The documentation below is retained for upstream platform and build context. **The custom-build status above and the product rules take precedence.** All upstream release and demo links below belong to upstream, not this derivative.
 
 <p align="center">
   <img src="assets/icon.png" alt="Realtime Translator" width="128" height="128" />

@@ -171,10 +171,21 @@ export interface ArchiveLine {
   translation: string;
 }
 
+export interface ArchiveFolder {
+  id: string;
+  name: string;
+}
+
+export interface ArchiveLibrary {
+  folders: ArchiveFolder[];
+  lastFolderId: string | null;
+}
+
 /** 一条完整归档记录（持久化） */
 export interface ArchiveRecord {
   id: string;
   name: string;
+  folderId?: string | null;
   createdAt: number;
   lines: ArchiveLine[];
 }
@@ -184,6 +195,7 @@ export interface ArchiveSummary {
   id: string;
   name: string;
   createdAt: number;
+  folderId?: string | null;
   /** 最后一条对话的原文，列表里弱色小字显示 */
   lastLine: string;
 }

@@ -35,6 +35,8 @@ import { downloadTranslationModel } from './translation/model-downloader';
 import { loadSettings, saveSettings } from './settings';
 import { asrModelsReady, downloadAsrModels } from './model-downloader';
 import { listArchives, getArchive, saveArchive, deleteArchive } from './archives';
+import { ArchiveLibraryStore } from './archive-library';
+import { listSummaries, suggestArchiveTitle } from '@rt/core';
 import { systemAudioSupported } from '../shared/audio-source';
 import asrWorkerPath from './asr-process?modulePath';
 import translateWorkerPath from './translation/translate-process?modulePath';
@@ -55,12 +57,20 @@ const previewProfile = !app.isPackaged ? process.env['RT_PREVIEW_PROFILE'] : und
 if (previewProfile) {
   fs.mkdirSync(path.resolve(previewProfile), { recursive: true });
   app.setPath('userData', path.resolve(previewProfile));
-  app.setName('Realtime Translator Preview');
+  app.setName('Subline Preview');
 }
 
-// Keep the internal channel independent even if Electron changes its default profile naming.
-if (app.isPackaged && app.getName() === 'Classroom Translator Internal') {
-  app.setPath('userData', path.join(app.getPath('appData'), 'Classroom Translator Internal'));
+// Keep each channel's profile (settings / archives / downloaded models) stable across the renames
+// "Classroom Translator" → "Realtime Translator" → "Subline": the data folders keep their legacy names.
+// Bundle IDs are unchanged too, so macOS microphone / system-audio grants carry over.
+const LEGACY_PROFILE_DIRS: Record<string, string> = {
+  'Subline Internal': 'Classroom Translator Internal',
+  'Subline': 'Classroom Translator',
+  'Realtime Translator Internal': 'Classroom Translator Internal',
+  'Realtime Translator': 'Classroom Translator',
+};
+if (app.isPackaged && LEGACY_PROFILE_DIRS[app.getName()]) {
+  app.setPath('userData', path.join(app.getPath('appData'), LEGACY_PROFILE_DIRS[app.getName()]));
 }
 
 // 模型存放目录：
@@ -176,7 +186,7 @@ function createWindow(): void {
   win = new BrowserWindow({
     width: 1100,
     height: 760,
-    title: app.isPackaged ? app.getName() : previewProfile ? 'Realtime Translator Preview' : 'Realtime Translator',
+    title: app.isPackaged ? app.getName() : previewProfile ? 'Subline Preview' : 'Subline',
     ...(app.isPackaged ? {} : { icon: APP_ICON }),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -649,12 +659,51 @@ ipcMain.on('pipeline:audio', (_event, samples: Float32Array) => {
   asrChild.postMessage({ type: 'audio', samples: f });
 });
 
-ipcMain.handle('archive:list', () => listArchives());
-ipcMain.handle('archive:get', (_event, id: string) => getArchive(id));
-ipcMain.handle('archive:save', (_event, name: string, lines: ArchiveLine[]) =>
-  saveArchive(name, lines, Date.now())
-);
-ipcMain.handle('archive:delete', (_event, id: string) => deleteArchive(id));
+const internalArchives = app.getName().endsWith('Internal') || !!previewProfile;
+const archiveLibrary = new ArchiveLibraryStore(path.join(app.getPath('userData'), 'archive-library.json'));
+function requireArchiveLibrary(): void {
+  if (!internalArchives) throw new Error('Archive library is only available in Internal');
+}
+async function archiveSummaries() {
+  if (!internalArchives) return listArchives();
+  const records = listArchives().map((item) => getArchive(item.id)!);
+  return listSummaries(await archiveLibrary.decorate(records));
+}
+ipcMain.handle('archive:list', () => archiveSummaries());
+ipcMain.handle('archive:get', async (_event, id: string) => {
+  const record = getArchive(id);
+  return record && internalArchives ? (await archiveLibrary.decorate([record]))[0] : record;
+});
+ipcMain.handle('archive:save', async (_event, name: string, lines: ArchiveLine[], folderId?: string | null) => {
+  if (internalArchives) {
+    const library = await archiveLibrary.library();
+    const destination = folderId === undefined ? library.lastFolderId : folderId;
+    if (destination !== null && !library.folders.some((folder) => folder.id === destination)) throw new Error('Folder not found');
+    await saveArchive(name.trim() || suggestArchiveTitle(lines, new Date().toLocaleString()), lines, Date.now(), destination);
+    // The archive is already durable; an optional preference write must not invite a duplicate save.
+    try { await archiveLibrary.remember(destination); }
+    catch (error) { console.error('保存归档默认文件夹失败:', error); }
+    return archiveSummaries();
+  }
+  return saveArchive(name, lines, Date.now());
+});
+ipcMain.handle('archive:delete', async (_event, id: string) => {
+  await deleteArchive(id);
+  return archiveSummaries();
+});
+ipcMain.handle('archive:library', () => { requireArchiveLibrary(); return archiveLibrary.library(); });
+ipcMain.handle('archive:folder-create', (_event, name: string) => {
+  requireArchiveLibrary(); return archiveLibrary.createFolder(name);
+});
+ipcMain.handle('archive:folder-rename', (_event, id: string, name: string) => {
+  requireArchiveLibrary(); return archiveLibrary.renameFolder(id, name);
+});
+ipcMain.handle('archive:update', async (_event, id: string, patch: { name?: string; folderId?: string | null }) => {
+  requireArchiveLibrary();
+  if (!getArchive(id)) throw new Error('Archive not found');
+  await archiveLibrary.update(id, patch);
+  return archiveSummaries();
+});
 
 ipcMain.handle('settings:get', (): AppSettings => effectiveSettings());
 

@@ -1,7 +1,7 @@
 {
   "name": "@rt/ios",
   "version": "0.0.0",
-  "description": "Realtime Translator — iOS (Capacitor) app hosting @rt/ui in a WebView",
+  "description": "Subline — iOS (Capacitor) app hosting @rt/ui in a WebView",
   "private": true,
   "type": "module",
   "scripts": {
@@ -21,11 +21,11 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^7.0.0",
-    "esbuild": "^0.28.1",
-    "sharp": "^0.32.6",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
+    "esbuild": "^0.28.1",
+    "sharp": "^0.34.5",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vue": "catalog:",

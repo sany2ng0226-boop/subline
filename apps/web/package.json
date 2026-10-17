@@ -1,7 +1,7 @@
 {
   "name": "@rt/web",
   "version": "0.0.0",
-  "description": "Realtime Translator — installable browser PWA hosting @rt/ui",
+  "description": "Subline — installable browser PWA hosting @rt/ui",
   "private": true,
   "type": "module",
   "scripts": {
@@ -21,7 +21,7 @@
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
-    "sharp": "^0.32.6",
+    "sharp": "^0.34.5",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

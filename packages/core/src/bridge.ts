@@ -19,6 +19,7 @@ import type {
   SetupStatus,
   SetupProgress,
   ArchiveLine,
+  ArchiveLibrary,
   ArchiveSummary,
   ArchiveRecord,
 } from './types';
@@ -109,7 +110,11 @@ export interface AppBridge {
    */
   cancelModelDownload(kind: ModelKind, modelId: string): Promise<void>;
   /** 归档：保存一次对话，返回更新后的列表 */
-  saveArchive(name: string, lines: ArchiveLine[]): Promise<ArchiveSummary[]>;
+  saveArchive(name: string, lines: ArchiveLine[], folderId?: string | null): Promise<ArchiveSummary[]>;
+  getArchiveLibrary?(): Promise<ArchiveLibrary>;
+  createArchiveFolder?(name: string): Promise<ArchiveLibrary>;
+  renameArchiveFolder?(id: string, name: string): Promise<ArchiveLibrary>;
+  updateArchive?(id: string, patch: { name?: string; folderId?: string | null }): Promise<ArchiveSummary[]>;
   listArchives(): Promise<ArchiveSummary[]>;
   getArchive(id: string): Promise<ArchiveRecord | null>;
   deleteArchive(id: string): Promise<ArchiveSummary[]>;

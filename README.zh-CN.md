@@ -1,3 +1,58 @@
+# Subline
+
+本地实时转写与翻译，把原文和译文放在连续的双语字幕流中。
+
+**[English / 构建与验证说明](README.md)** · [产品规则](docs/product/experience.md) · [代码地图](docs/project-map.md)
+
+基于 [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator)，由 [Jack](https://github.com/sany2ng0226-boop) 维护，保留上游作者署名、元数据及 Git 历史。当前定制集中在日中双语阅读、本地翻译与记录整理。
+
+![Subline Internal 日中双语测试记录](docs/assets/subline-demo.png)
+
+*真实应用的归档界面，内容来自合成测试语音；配图是已保存记录，不是实时性能测量。*
+
+## 当前源码节点
+
+- SenseVoice 本地识别 + 应用内 Hy-MT2 7B Q4_K_M Metal 翻译。模型下载后无需 LM Studio、API Key 或另启模型服务。
+- 临时原文在原位续写与确认，译文回填对应行；上翻回看保持位置，点击“回到最新”恢复跟随。
+- 日语使用规则合句与有限原文上下文；模型判断切句仍只用于离线实验。
+- Internal 支持单层文件夹、内容提取标题、改名和移动，保存后重启保留。停止录音不会自动归档。
+- Subline 与 Subline Internal 的设置、模型和归档分离，改名后沿用各自数据目录。
+
+## 验证与发布边界
+
+本次是**源码预览节点**，没有新发 Subline 安装包。当前 Subline Internal 为 ad-hoc 本机构建，尚未完成 Developer ID 签名和 Apple 公证。现有 `v0.2.0-beta.1` 是旧名 Classroom Translator 的朋友测试包，不含当前界面和归档改动；其签名与公证只适用于那个历史产物。下方上游下载链接也不属于 Subline。
+
+已在 48 GB 内存的 Apple 芯片开发机验收：实际应用内的系统音频采集、日语转写与中文翻译、字幕跟随和回看、归档保存改名移动及重启读回。麦克风目前仅验证启停，真实对话、远距离、多人噪声、整场活动和长时间开发负载尚未验收；其他内存容量也未验收。本次不代表 iOS / Web 的最新改动已通过真机或浏览器验收。
+
+系统音频需要 macOS 14.2 或更新。Hy-MT2 权重约 4.62 GB，首次单独下载，并校验固定版本文件的大小和 SHA-256。
+
+## 从源码运行
+
+使用 Node.js 22 和 `package.json` 固定的 pnpm **10.33.0**：
+
+```sh
+git clone https://github.com/sany2ng0226-boop/subline.git
+cd subline
+npx pnpm@10.33.0 install --frozen-lockfile
+npx pnpm@10.33.0 dev
+# 构建带文件夹归档与主页语言选择的 Internal：
+npx pnpm@10.33.0 --filter @rt/macos dist:preview
+```
+
+默认产物：`apps/macos/release-preview/mac-arm64/Subline Internal.app`。构建不安装、不发布，也不自动完成公证。模型下载与麦克风／系统音频权限需在应用中确认。
+
+## 数据与署名
+
+识别在本机运行；本地翻译不向服务商发送会话文字。手动选择 API 翻译时，定稿文字及 macOS 有限原文上下文会发往指定端点，音频不上传。归档保存文字和已完成译文，不保存原始录音，也不会在保存后自动补入晚到译文；没有跨设备同步。
+
+仓库不含私有课堂录音与转写、个人配置、凭据、下载的模型或本机构建产物。上游包清单声明 `ISC`，所核对源码中没有独立许可正文；本仓库保留原有声明，不替上游代码另行授权。进一步分发前请核对上游许可。模型与依赖各自遵循其条款。
+
+---
+
+## 上游文档
+
+以下保留上游的平台与开发说明。**本页上方和 English README 描述 Subline 当前状态；下方的上游下载与演示链接不代表本次 Subline 产物。**
+
 > **课堂定制版**：本仓库基于 [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator)，保留上游历史。新增原位字幕流、日中原生字体与排版、规则合句、翻译上下文和 macOS 翻译队列控制。定制版配置与构建方法见[仓库主页](README.md)，当前行为以[产品规则](docs/product/experience.md)为准。以下下载链接指向上游版本，并非本定制版。课堂录音、个人设置、凭证和额外下载的模型权重不随源码上传。
 
 <p align="center">

@@ -1,6 +1,6 @@
 # 项目地图
 
-Realtime Translator 是 pnpm workspace 单仓库。`@rt/core` 提供平台无关规则与契约，`@rt/ui` 提供三端共享界面，macOS、iOS 和 Web 宿主通过 `AppBridge` 注入平台能力。外部可见的产品行为见[product/overview.md](product/overview.md) 和 [product/experience.md](product/experience.md)。
+Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator / `@rt/*`）是 pnpm workspace 单仓库。`@rt/core` 提供平台无关规则与契约，`@rt/ui` 提供三端共享界面，macOS、iOS 和 Web 宿主通过 `AppBridge` 注入平台能力。外部可见的产品行为见[product/overview.md](product/overview.md) 和 [product/experience.md](product/experience.md)。
 
 ## 模块导航
 
@@ -12,7 +12,7 @@ Realtime Translator 是 pnpm workspace 单仓库。`@rt/core` 提供平台无关
 | `apps/web` (`@rt/web`) | 浏览器 PWA 宿主：使用 IndexedDB/Cache Storage 存储，AudioWorklet 采集，Web Worker 中运行 sherpa-onnx WASM 与本地翻译，并管理 Service Worker 外壳缓存；应用入口是 `apps/web/src/main.ts`，平台契约实现是 `apps/web/src/bridge.ts`。 |
 | `apps/ios` (`@rt/ios`) | Capacitor 宿主和 WebView 侧桥接，设置/归档使用 Preferences；应用入口是 `apps/ios/src/main.ts`，平台契约实现是 `apps/ios/src/bridge.ts`。 |
 | `apps/ios/native-plugin` | iOS 原生能力：`AVAudioEngine` 音频采集、sherpa-onnx ASR、模型下载/管理和 iOS 18+ Apple Translation；TypeScript 契约从 `definitions.ts` 导出，Swift 主入口是 `ios/RealtimeAsrPlugin.swift`。 |
-| `assets` | 三端图标的共享源资产；各端构建脚本由此生成所需尺寸和格式。 |
+| `assets` | 三端图标的共享源资产，满版母版为 `assets/icon.svg`；`apps/macos/scripts/gen-icon.mjs`、`apps/web/scripts/gen-icons.mjs` 和 `apps/ios/scripts/gen-icons.mjs` 由此生成各端尺寸和格式，macOS 取景另加投影与描边。 |
 | 根工作区配置 | `package.json` 和 `pnpm-workspace.yaml` 定义工作区、共享依赖版本与跨模块质量门禁；`.github/workflows/ci.yml` 运行检查；仅仓库变量 `ENABLE_PAGES=true` 时启用 GitHub Pages 的变更探测与部署。 |
 
 ## 关键数据流
@@ -27,7 +27,7 @@ Realtime Translator 是 pnpm workspace 单仓库。`@rt/core` 提供平台无关
 ### 音频音量显示
 
 - `packages/core/src/audio-level.ts` 提供输入 PCM 的音量归一化，macOS 的 `mac-bridge.ts` 在发送识别音频时通过可选 `AppBridge.onAudioLevel` 发布音量事件；它不改写音频或识别管线。
-- `packages/ui/src/components/AudioLevelMeter.vue` 订阅宿主音量，在主页录音按钮旁展示平滑起伏与无输入回落；未提供该桥接能力的宿主不显示。外部行为见[开始一次转写](product/experience.md#开始一次转写)。
+- `packages/ui/src/components/AudioLevelMeter.vue` 订阅宿主音量，以 Canvas 在主页顶栏绘制连续滚动的波形，不经 Vue 响应式；停止录音且波形归零后停止 rAF 循环。未提供该桥接能力的宿主不显示。外部行为见[开始一次转写](product/experience.md#开始一次转写)。
 
 ### 部分识别与字幕显示
 
@@ -35,10 +35,10 @@ Realtime Translator 是 pnpm workspace 单仓库。`@rt/core` 提供平台无关
 - macOS 宿主把合句器中待提交文字与识别器稳定前缀合并，经部分识别事件发送给 UI；定稿事件使 UI 原位确认当前临时字幕行，并清空部分识别状态，不再把刚定稿全文短暂写回。Web 的 ASR Worker 消息和 iOS 原生桥目前未提供稳定前缀元数据。
 - `packages/ui/src/composables/useTranscription.ts` 将临时行保存在独立的 `draftLine` ref，定稿行保存在 `lines`；临时行不参与归档或翻译。首次部分识别创建带稳定 `displayId` 的行，后续部分识别修改它；定稿通过 `Object.assign` 更新同一对象后放入 `lines`，再清空 `draftLine`。无部分识别的定稿也分配 `displayId`；译文仍按宿主段 ID 回填原行。停止录音等待宿主提交剩余文字后清除临时行，清屏同时清除临时行。
 - `stablePartial` 经 `MainScreen.vue` 传入 `components/TranscriptList.vue`。只有它与当前全文前缀匹配时，UI 才将前缀深色展示，其余尾部稍浅色；不匹配时全段浅色。缺少元数据时保留 `undefined`，让 iOS/Web 兼容原有的整段深色外观，不将其伪装为已确认前缀。
-- `TranscriptList.vue` 将已定稿行与临时行合成按时间正序的单一字幕流，并以 `displayId` 作为 Vue key；同一句从临时状态、定稿到翻译回填持续使用同一个 `article`。各行左对齐、同样式，原文字号为设置值加 7 像素，译文为设置值加 5 像素并在下方回填；不再分设临时框、最新定稿框和历史区，也不使用句子过渡动画或文本框内部滚动。
+- `TranscriptList.vue` 将已定稿行与临时行合成按时间正序的单一字幕流，并以 `displayId` 作为 Vue key；同一句从临时状态、定稿到翻译回填持续使用同一个 `article`，不再分设临时框、最新定稿框和历史区，也不使用文本框内部滚动。新行与译文的过渡只改 opacity。
 - `MainScreen.vue` 将识别语言与母语作为 `sourceLang` / `targetLang` 传入 `TranscriptList.vue`；定稿行在 `useTranscription.ts` 中保留段的 `lang`，显示时优先于识别语言设置。组件将 `zh` 标注为 `zh-Hans`，按 `:lang()` 为日语优先指定 Hiragino Sans、简体中文优先指定 PingFang SC；`auto` 不生成具体语言标注。译文标注当前仍使用母语设置，尚未逐行传入自动反向翻译的实际目标语种。
-- 字幕排版由 `TranscriptList.vue` 的 scoped CSS 管理：正文列限制为约 36 个原文全角字宽，时间戳位于侧列；原文与译文均用常规字重、1.6 倍行高，译文下置并使用低饱和蓝。具体间距与移动端缩窄规则见[开始一次转写](product/experience.md#开始一次转写)。
-- 字幕流统一滚动；更新前位于末尾时在原文/译文更新后跟随底部，用户上滚查看前文时不强制返回末尾。上述共享 UI 状态与排版不增加识别计时器、推理或切句步骤。
+- 字幕排版（字号、颜色层级、间距、草稿光标与淡入）由 `TranscriptList.vue` 的 scoped CSS 管理，颜色取自 `styles.css` 的 `--rt-*` 主题变量；外部规则见[开始一次转写](product/experience.md#开始一次转写)。
+- 底部跟随也在 `TranscriptList.vue`：只有用户向上滚动才退出跟随，跟随中的高度变化由 `ResizeObserver` 贴底，数据变化后的 `watch` + `nextTick` 贴底作为后台窗口无渲染帧时的兜底。上述共享 UI 状态与排版不增加识别计时器、推理或切句步骤。
 
 ### 翻译
 
@@ -54,7 +54,10 @@ Realtime Translator 是 pnpm workspace 单仓库。`@rt/core` 提供平台无关
 ### 设置、模型与归档
 
 - `@rt/ui` 只持有表单和当前会话状态；设置、模型和归档持久化经 `AppBridge`。默认值、字段校验、归档摘要和排序在 `@rt/core` 复用，各宿主只选择文件、Preferences 或 IndexedDB 作为存储后端。
-- `apps/macos/src/main/settings.ts` 仅对新建设置启用本地 `hy-mt2-7b`；已有设置由共享兼容逻辑读取。正式课堂应用名为 Classroom Translator，应用标识为 `io.github.sany2ng0226.classroomtranslator`，独立数据目录为 `~/Library/Application Support/Classroom Translator`。
+- Internal 归档入口由 `packages/ui/src/screens/ArchiveLibrary.vue` 管理文件夹、筛选、改名与移动，`MainScreen.vue` 负责手动保存弹窗；内容标题提取属于 `packages/core/src/archive.ts` 的 `suggestArchiveTitle`。产品规则见[清屏与归档](product/experience.md#清屏与归档)。
+- `apps/macos/src/main/archives.ts` 保留 `archives.json` 的记录数组格式，读取旧记录不做迁移；`archive-library.ts` 单独管理 `archive-library.json` 中的文件夹及记录元数据覆盖，改名和移动不重写归档正文。归档正文与元数据各自通过原子替换落盘，UI 等待保存成功后才清屏。
+- 文件夹能力同时受 UI 的 `__INTERNAL_BUILD__`、可选 `AppBridge.getArchiveLibrary` 能力和 macOS 主进程的 Internal 应用身份或隔离预览 profile 检查约束；稳定渠道、Web 与 iOS 保留原路径。
+- `apps/macos/src/main/settings.ts` 仅对新建设置启用本地 `hy-mt2-7b`；已有设置由共享兼容逻辑读取。正式应用名为 Subline，应用标识仍为 `io.github.sany2ng0226.classroomtranslator`，独立数据目录为 `~/Library/Application Support/Classroom Translator`。
 - 模型清单、大小、语言、平台可用性和有序下载源的单一事实源是 `packages/core/src/model-registry.ts`。各宿主将文件下载到本端模型目录或 Cache Storage，再由对应推理运行时离线装载。Hy-MT2 使用 Tencent 固定 revision 的 Q4_K_M 文件，注册表声明精确字节数及 SHA-256；macOS 下载流程据此校验。
 
 ## 测试与构建位置
@@ -71,7 +74,7 @@ Realtime Translator 是 pnpm workspace 单仓库。`@rt/core` 提供平台无关
 - `active-vs-rules` 将逐个已定稿 ASR 片段请求模型判断的 `reviewEverySegment` 实验与 `fast-rules` 对照。后者启用 `shortSentenceRule`：日语具有明确谓语结尾（如「です」「ます」）、至少 4 字且音频至少 1 秒时可提交，并将等待/音频上限设为 12 秒/14 秒。模型复核组同样保留 12 秒/14 秒最终边界；字数、语言、间隔和停止边界仍有效。`shortSentenceRule` 及 12 秒/14 秒上限现为合句器和 macOS 默认录音流程的规则配置；模型判断选项仍仅供离线实验，未接入应用界面或默认录音流程。回放实验会显式指定各组参数，继续保留原 8 秒/10 秒规则基线，避免默认值变化改写历史对照的含义。
 - 根 `pnpm build` / `pnpm dist` 构建或打包 macOS；Web 和 iOS Web 资源分别由各自 `package.json` 的 `build` 脚本构建。iOS 原生工程位于 `apps/ios/ios/App`，注册表到 Swift 的生成入口是 `apps/ios/native-plugin/scripts/gen-asr-models-swift.mjs`。
 - macOS 分发采用本机 Developer ID 签名与独立 Apple 公证步骤：electron-builder 使用本机 Keychain 身份，`CSC_NAME` 不含 `Developer ID Application:` 前缀；Xcode archive 经 `xcodebuild -exportArchive`（`method=developer-id`、`destination=upload`）提交，Apple 接受后由 `-exportNotarizedApp` 导出带票据的应用。签名、stapler 和 Gatekeeper 检查导出应用，再用 electron-builder `--prepackaged` 制作 DMG，不能将 app 的票据误称为 DMG 独立公证。私钥与认证信息不进入仓库。
-- `apps/macos/scripts/package-mac.mjs` 从根版本号构建两个渠道：默认生成 `Classroom Translator.app`，包名 `classroom-translator`、appId `io.github.sany2ng0226.classroomtranslator`；`pnpm --filter @rt/macos dist:preview` 使用 `--preview` 生成 `Classroom Translator Internal.app`，包名 `classroom-translator-internal`、appId `io.github.sany2ng0226.classroomtranslator.preview`，默认输出 `apps/macos/release-preview/mac-arm64`。`RT_RELEASE_DIR` 可覆盖产物目录。命令只构建，不安装、发布或自动完成公证；内部验收后再发布稳定渠道，稳定渠道目前仍为朋友测试版。
-- `apps/macos/src/main/index.ts` 对打包后的 Internal 显式设置独立 userData 为 `Application Support/Classroom Translator Internal`，与稳定版 `Application Support/Classroom Translator` 分离；设置、归档及 `models` 缓存随各自目录隔离。打包窗口使用 `app.getName()` 显示渠道名，并拦截页面标题更新以保持窗口标识。
+- `apps/macos/scripts/package-mac.mjs` 从根版本号构建两个渠道：默认生成 `Subline.app`，包名 `realtime-translator`、appId `io.github.sany2ng0226.classroomtranslator`；`pnpm --filter @rt/macos dist:preview` 使用 `--preview` 生成 `Subline Internal.app`，包名 `realtime-translator-internal`、appId `io.github.sany2ng0226.classroomtranslator.preview`，默认输出 `apps/macos/release-preview/mac-arm64`。`RT_RELEASE_DIR` 可覆盖产物目录。命令只构建，不安装、发布或自动完成公证；内部验收后再发布稳定渠道，稳定渠道目前仍为朋友测试版。
+- `apps/macos/src/main/index.ts` 的 `LEGACY_PROFILE_DIRS` 把打包后的应用名映射到旧数据目录：Subline Internal（及更早的 Realtime Translator Internal）用 `Application Support/Classroom Translator Internal`，Subline（及 Realtime Translator）用 `Application Support/Classroom Translator`，两者分离；未打包且设置 `RT_PREVIEW_PROFILE` 时改用该目录并以 Subline Preview 命名。设置、归档及 `models` 缓存随各自目录隔离。打包窗口使用 `app.getName()` 显示渠道名，并拦截页面标题更新以保持窗口标识。
 - `package-mac.mjs --preview` 构建时设置 `RT_INTERNAL_BUILD=1`，由 `apps/macos/electron.vite.config.ts` 注入 `__INTERNAL_BUILD__`。`packages/ui/src/screens/MainScreen.vue` 仅在内部构建展示主要语言下拉，复用 `saveSettings` 保存 `asr.language`，并按平台和语言校验当前模型、必要时回退 `DEFAULT_ASR_MODEL_ID`。默认稳定构建关闭此入口；入口锁定遵循录音启停和保存状态。
 - `.github/workflows/ci.yml` 在 PR、`main` 分支推送和手动触发时执行 core 单元测试、字幕身份、macOS 翻译队列与阶段延迟记账回归测试、三端类型检查，并校验 iOS 生成的模型清单未与注册表漂移。Pages 变更探测和部署均要求仓库变量 `ENABLE_PAGES=true`；未设置时仅执行质量门禁。启用后，门禁通过的 `main` 推送仅在 Web 相关变更时部署，手动触发则直接进入部署流程。

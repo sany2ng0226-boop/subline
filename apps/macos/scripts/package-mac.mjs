@@ -27,7 +27,8 @@ run('pnpm run icons', appDir);
 console.log('▶ 3/4 导出自包含副本 (pnpm deploy)');
 rmSync(deployDir, { recursive: true, force: true });
 // --prod=false 以带上 electron / electron-builder（构建期需要）；electron-builder 只把生产依赖打进 .app
-run(`pnpm --filter @rt/macos deploy --prod=false --legacy "${deployDir}"`, root);
+// The deploy lockfile must preserve the dependency versions checked in the workspace.
+run(`pnpm --filter @rt/macos deploy --prod=false "${deployDir}"`, root);
 
 console.log('▶ 4/4 打包 (electron-builder)');
 const target = dirOnly ? '--dir' : '';
@@ -36,7 +37,7 @@ const target = dirOnly ? '--dir' : '';
 const { version } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 run(
   `./node_modules/.bin/electron-builder --mac ${target} -c.extraMetadata.version="${version}" ` +
-  (preview ? '-c.appId=io.github.sany2ng0226.classroomtranslator.preview -c.productName="Classroom Translator Internal" -c.extraMetadata.name=classroom-translator-internal -c.extraMetadata.productName="Classroom Translator Internal" ' : '-c.extraMetadata.name=classroom-translator -c.extraMetadata.productName="Classroom Translator" ') +
+  (preview ? '-c.appId=io.github.sany2ng0226.classroomtranslator.preview -c.productName="Subline Internal" -c.extraMetadata.name=realtime-translator-internal -c.extraMetadata.productName="Subline Internal" ' : '-c.extraMetadata.name=realtime-translator -c.extraMetadata.productName="Subline" ') +
   `-c.directories.output="${releaseDir}"`,
   deployDir
 );

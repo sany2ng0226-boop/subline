@@ -1,65 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <!-- 单一图标母版：满版出血（背景渐变铺满整 1024）。各平台在生成脚本里做各自取景：
+  <!-- 单一图标母版（Subline）：满版出血，白底。各平台在生成脚本里做各自取景：
        - iOS（apps/ios/scripts/gen-icons.mjs）：直接满版用，圆角由系统加。
        - macOS（apps/macos/scripts/gen-icon.mjs）：缩进 848 + 圆角 + 居中于 1024 透明画布
          （留 88 边给阴影），符合 Big Sur 图标网格。
-       文字用基线定位（不用 dominant-baseline），保证 sharp/resvg 与浏览器渲染一致、不偏移。 -->
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#FFCB7A"/>
-      <stop offset="0.55" stop-color="#FF9A7E"/>
-      <stop offset="1" stop-color="#FF6D9F"/>
-    </linearGradient>
-    <radialGradient id="bgGlow" cx="0.32" cy="0.2" r="0.85">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.2"/>
-      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="coral" x1="0" y1="0" x2="0.4" y2="1">
-      <stop offset="0" stop-color="#FF7290"/>
-      <stop offset="1" stop-color="#F52F63"/>
-    </linearGradient>
-    <linearGradient id="sun" x1="0" y1="0" x2="0.4" y2="1">
-      <stop offset="0" stop-color="#FFC94F"/>
-      <stop offset="1" stop-color="#FF9E14"/>
-    </linearGradient>
-    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.35"/>
-      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
-    </linearGradient>
-    <filter id="drop" x="-40%" y="-40%" width="180%" height="180%">
-      <feDropShadow dx="0" dy="16" stdDeviation="22" flood-color="#A8324B" flood-opacity="0.34"/>
-    </filter>
-  </defs>
-
-  <!-- full-bleed warm background -->
-  <rect width="1024" height="1024" fill="url(#bg)"/>
-  <rect width="1024" height="1024" fill="url(#bgGlow)"/>
-
-  <g transform="translate(512 512) scale(1.12) translate(-512 -512)">
-    <!-- back bubble (A, sunny) upper-right -->
-    <g filter="url(#drop)">
-      <path d="M 574 196 h 204 a 86 86 0 0 1 86 86 v 128 a 86 86 0 0 1 -86 86
-               h -2 l 4 64 -58 -64 h -148 a 86 86 0 0 1 -86 -86
-               v -128 a 86 86 0 0 1 86 -86 z" fill="url(#sun)"/>
-      <rect x="510" y="214" width="332" height="120" rx="60" fill="url(#gloss)"/>
-    </g>
-    <text x="668" y="420" font-family="Arial Rounded Bold, Arial Rounded MT Bold, sans-serif"
-          font-size="206" font-weight="700" fill="#FFFFFF" text-anchor="middle">A</text>
-
-    <!-- front bubble (文, coral) lower-left, overlapping -->
-    <g filter="url(#drop)">
-      <path d="M 280 388 h 280 a 96 96 0 0 1 96 96 v 152 a 96 96 0 0 1 -96 96
-               h -226 l -78 86 6 -86 h -2 a 96 96 0 0 1 -96 -96
-               v -152 a 96 96 0 0 1 96 -96 z" fill="url(#coral)"/>
-      <rect x="206" y="408" width="402" height="130" rx="65" fill="url(#gloss)"/>
-    </g>
-    <text x="408" y="660" font-family="Hiragino Sans GB, PingFang SC, STHeiti, sans-serif"
-          font-size="248" font-weight="600" fill="#FFFFFF" text-anchor="middle">文</text>
-
-    <!-- cute sparkles -->
-    <g fill="#FFFFFF">
-      <path d="M 250 250 q 12 38 50 50 q -38 12 -50 50 q -12 -38 -50 -50 q 38 -12 50 -50 z" opacity="0.9"/>
-      <path d="M 790 640 q 8 26 34 34 q -26 8 -34 34 q -8 -26 -34 -34 q 26 -8 34 -34 z" opacity="0.85"/>
-    </g>
-  </g>
+       - Web（apps/web/scripts/gen-icons.mjs）：PWA 各尺寸与可遮罩图标。
+       图形即界面本身：上行深色原文、下行蓝色译文、末尾光标；颜色取自 UI 主题的 rt-ink 与 rt-accent 变量。 -->
+  <rect width="1024" height="1024" fill="#FFFFFF"/>
+  <rect x="184" y="380" width="656" height="88" rx="44" fill="#18181B"/>
+  <rect x="184" y="548" width="456" height="88" rx="44" fill="#3557D6"/>
+  <rect x="688" y="532" width="32" height="120" rx="16" fill="#3557D6"/>
 </svg>

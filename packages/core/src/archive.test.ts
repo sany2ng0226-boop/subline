@@ -53,3 +53,21 @@ describe('makeArchiveId', () => {
     expect(ids.size).toBe(100);
   });
 });
+
+describe('suggestArchiveTitle', () => {
+  it('uses completed translation content, with the original as fallback', async () => {
+    const { suggestArchiveTitle } = await import('./archive');
+    const lines = [{ time: '10:00', text: 'バウハウスの教育理念について説明します。', translation: '介绍包豪斯的教育理念及其影响。' }];
+    expect(suggestArchiveTitle(lines, '日期')).toBe('介绍包豪斯的教育理念及其影响');
+    expect(suggestArchiveTitle([{ ...lines[0], translation: '' }], '日期')).toContain('バウハウス');
+    expect(lines[0].translation).toBe('介绍包豪斯的教育理念及其影响。');
+  });
+  it('falls back for silence or short greetings and safely truncates Unicode', async () => {
+    const { suggestArchiveTitle } = await import('./archive');
+    expect(suggestArchiveTitle([], '日期')).toBe('日期');
+    expect(suggestArchiveTitle([{ time: '', text: '嗯。谢谢。', translation: '' }], '日期')).toBe('日期');
+    const title = suggestArchiveTitle([{ time: '', text: '设计😀'.repeat(30), translation: '' }], '日期');
+    expect([...title]).toHaveLength(31);
+    expect(title).not.toContain('\ufffd');
+  });
+});

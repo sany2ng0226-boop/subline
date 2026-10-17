@@ -4,7 +4,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 // 由 `npx cap add ios` + `cap sync ios` 拷贝进原生 iOS 工程。
 const config: CapacitorConfig = {
   appId: 'io.github.baijunjie.realtimetranslator',
-  appName: 'Realtime Translator',
+  appName: 'Subline',
   webDir: 'dist',
 };
 

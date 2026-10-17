@@ -8,6 +8,9 @@ import ConversationLine from '../components/ConversationLine.vue';
 import ScrollArea from '../components/ScrollArea.vue';
 import { fmtDateTime } from '../utils/datetime';
 import { bridge } from '../bridge';
+import ArchiveLibrary from './ArchiveLibrary.vue';
+declare const __INTERNAL_BUILD__: boolean;
+const foldersEnabled = typeof __INTERNAL_BUILD__ !== 'undefined' && __INTERNAL_BUILD__ && !!bridge().getArchiveLibrary;
 
 const { t } = useI18n();
 const emit = defineEmits<{ close: [] }>();
@@ -33,12 +36,13 @@ function back(): void {
 }
 
 onMounted(async () => {
-  items.value = await bridge().listArchives();
+  if (!foldersEnabled) items.value = await bridge().listArchives();
 });
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
+  <ArchiveLibrary v-if="foldersEnabled" @close="emit('close')" />
+  <div v-else class="flex h-full flex-col">
     <header
       class="flex items-center gap-3 border-b border-neutral-200 px-[18px] py-3 dark:border-[#3a3b44]"
     >

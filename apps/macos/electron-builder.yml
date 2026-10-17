@@ -1,5 +1,5 @@
 appId: io.github.sany2ng0226.classroomtranslator
-productName: Classroom Translator
+productName: Subline
 directories:
   output: release
   buildResources: build

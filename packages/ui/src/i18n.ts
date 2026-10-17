@@ -4,6 +4,17 @@ import { createI18n } from 'vue-i18n';
 const messages = {
   en: {
     archive: {
+      all: 'All records',
+      autoTitle: 'Title generated from content; you can edit it.',
+      confirmDelete: 'Delete “{name}”?',
+      folder: 'Folder',
+      folders: 'Folders',
+      move: 'Move',
+      newFolder: 'New folder',
+      operationFailed: 'Could not save. Check the name and try again.',
+      rename: 'Rename',
+      renameFolder: 'Rename folder',
+      unfiled: 'Unfiled',
       cancel: 'Cancel',
       delete: 'Delete',
       empty: 'No archives yet',
@@ -38,7 +49,7 @@ const messages = {
       'system-audio-permission': 'System audio access denied',
     },
     main: {
-      appTitle: 'Realtime Translator',
+      appTitle: 'Subline',
       primaryLanguage: 'Main language',
       archive: 'Archive',
       audioSourceMic: 'Audio source: Microphone',
@@ -46,7 +57,6 @@ const messages = {
       clear: 'Clear',
       emptyHint: 'Click “Start Recording” and results will appear here',
       forceUpdate: 'Force update',
-      listening: 'Listening…',
       menu: 'Menu',
       settings: 'Settings',
       start: 'Start Recording',
@@ -56,12 +66,13 @@ const messages = {
       themeLight: 'Light',
       themeSystem: 'System',
       viewArchives: 'Archives',
+      jumpLatest: 'Jump to latest',
     },
     mic: {
       allow: 'Allow & Start',
       cancel: 'Cancel',
       deniedDesc:
-        'Microphone access was denied. Allow Realtime Translator in System Settings › Privacy & Security › Microphone, then try again.',
+        'Microphone access was denied. Allow Subline in System Settings › Privacy & Security › Microphone, then try again.',
       deniedTitle: 'Microphone access denied',
       desc: 'Recording captures microphone audio in real time for on-device speech recognition and translation. Audio is processed locally and never uploaded.',
       openSettings: 'Open System Settings',
@@ -69,7 +80,7 @@ const messages = {
     },
     sysAudio: {
       deniedDesc:
-        'System audio recording was denied. Allow Realtime Translator in System Settings › Privacy & Security › Screen & System Audio Recording, then try again.',
+        'System audio recording was denied. Allow Subline in System Settings › Privacy & Security › Screen & System Audio Recording, then try again.',
       deniedTitle: 'System audio recording denied',
       desc: 'Recording captures the audio your Mac is playing for on-device speech recognition and translation. macOS will ask for the System Audio Recording permission. Audio is processed locally and never uploaded.',
       title: 'System audio recording permission needed',
@@ -147,6 +158,17 @@ const messages = {
   },
   ja: {
     archive: {
+      all: 'すべての記録',
+      autoTitle: '内容からタイトルを作成しました。編集できます。',
+      confirmDelete: '「{name}」を削除しますか？',
+      folder: 'フォルダ',
+      folders: 'フォルダ',
+      move: '移動',
+      newFolder: '新規フォルダ',
+      operationFailed: '保存できませんでした。名前を確認して再試行してください。',
+      rename: '名前を変更',
+      renameFolder: 'フォルダ名を変更',
+      unfiled: '未分類',
       cancel: 'キャンセル',
       delete: '削除',
       empty: 'アーカイブはまだありません',
@@ -181,7 +203,7 @@ const messages = {
       'system-audio-permission': 'システム音声へのアクセスが拒否されました',
     },
     main: {
-      appTitle: 'リアルタイム翻訳',
+      appTitle: 'Subline',
       primaryLanguage: '主な言語',
       archive: 'アーカイブ',
       audioSourceMic: '音源：マイク',
@@ -189,7 +211,6 @@ const messages = {
       clear: 'クリア',
       emptyHint: '「録音開始」をクリックすると、認識結果がここに表示されます',
       forceUpdate: '強制アップデート',
-      listening: '認識中…',
       menu: 'メニュー',
       settings: '設定',
       start: '録音開始',
@@ -199,12 +220,13 @@ const messages = {
       themeLight: 'ライト',
       themeSystem: 'システムに合わせる',
       viewArchives: 'アーカイブ',
+      jumpLatest: '最新へ移動',
     },
     mic: {
       allow: '許可して開始',
       cancel: 'キャンセル',
       deniedDesc:
-        'マイクへのアクセスが拒否されています。「システム設定 › プライバシーとセキュリティ › マイク」で Realtime Translator を許可してから再試行してください。',
+        'マイクへのアクセスが拒否されています。「システム設定 › プライバシーとセキュリティ › マイク」で Subline を許可してから再試行してください。',
       deniedTitle: 'マイクのアクセスが拒否されました',
       desc: '録音を開始すると、音声の認識と翻訳のためにマイク音声をリアルタイムで取得します。音声は端末内で処理され、アップロードされません。',
       openSettings: 'システム設定を開く',
@@ -212,7 +234,7 @@ const messages = {
     },
     sysAudio: {
       deniedDesc:
-        'システムオーディオ録音へのアクセスが拒否されています。システム設定 › プライバシーとセキュリティ › 画面とシステムオーディオの収録 で Realtime Translator を許可してから、もう一度お試しください。',
+        'システムオーディオ録音へのアクセスが拒否されています。システム設定 › プライバシーとセキュリティ › 画面とシステムオーディオの収録 で Subline を許可してから、もう一度お試しください。',
       deniedTitle: 'システムオーディオ録音が拒否されました',
       desc: '録音では Mac が再生している音声を取り込み、端末内で音声認識・翻訳を行います。macOS がシステムオーディオ録音の許可を求めます。音声はローカルで処理され、アップロードされません。',
       title: 'システムオーディオ録音の許可が必要です',
@@ -289,6 +311,17 @@ const messages = {
   },
   ko: {
     archive: {
+      all: '모든 기록',
+      autoTitle: '내용으로 생성한 제목입니다. 수정할 수 있습니다.',
+      confirmDelete: '“{name}”을 삭제할까요?',
+      folder: '폴더',
+      folders: '폴더',
+      move: '이동',
+      newFolder: '새 폴더',
+      operationFailed: '저장하지 못했습니다. 이름을 확인하고 다시 시도하세요.',
+      rename: '이름 변경',
+      renameFolder: '폴더 이름 변경',
+      unfiled: '미분류',
       cancel: '취소',
       delete: '삭제',
       empty: '보관된 기록이 없습니다',
@@ -323,7 +356,7 @@ const messages = {
       'system-audio-permission': '시스템 오디오 접근이 거부되었습니다',
     },
     main: {
-      appTitle: '실시간 번역',
+      appTitle: 'Subline',
       primaryLanguage: '주요 언어',
       archive: '보관',
       audioSourceMic: '오디오 소스: 마이크',
@@ -331,7 +364,6 @@ const messages = {
       clear: '지우기',
       emptyHint: '「녹음 시작」을 누르면 인식 결과가 여기에 표시됩니다',
       forceUpdate: '강제 업데이트',
-      listening: '인식 중…',
       menu: '메뉴',
       settings: '설정',
       start: '녹음 시작',
@@ -341,12 +373,13 @@ const messages = {
       themeLight: '라이트',
       themeSystem: '시스템 설정',
       viewArchives: '보관 기록',
+      jumpLatest: '최신으로 이동',
     },
     mic: {
       allow: '허용하고 시작',
       cancel: '취소',
       deniedDesc:
-        '마이크 접근이 거부되었습니다. 「시스템 설정 › 개인정보 보호 및 보안 › 마이크」에서 Realtime Translator를 허용한 후 다시 시도하세요.',
+        '마이크 접근이 거부되었습니다. 「시스템 설정 › 개인정보 보호 및 보안 › 마이크」에서 Subline을 허용한 후 다시 시도하세요.',
       deniedTitle: '마이크 접근 거부됨',
       desc: '녹음을 시작하면 음성 인식 및 번역을 위해 마이크 오디오를 실시간으로 수집합니다. 오디오는 기기에서만 처리되며 업로드되지 않습니다.',
       openSettings: '시스템 설정 열기',
@@ -354,7 +387,7 @@ const messages = {
     },
     sysAudio: {
       deniedDesc:
-        '시스템 오디오 녹음이 거부되었습니다. 시스템 설정 › 개인정보 보호 및 보안 › 화면 및 시스템 오디오 녹음에서 Realtime Translator를 허용한 후 다시 시도하세요.',
+        '시스템 오디오 녹음이 거부되었습니다. 시스템 설정 › 개인정보 보호 및 보안 › 화면 및 시스템 오디오 녹음에서 Subline을 허용한 후 다시 시도하세요.',
       deniedTitle: '시스템 오디오 녹음 거부됨',
       desc: '녹음 시 Mac에서 재생 중인 오디오를 캡처하여 기기 내에서 음성 인식·번역합니다. macOS가 시스템 오디오 녹음 권한을 요청합니다. 오디오는 로컬에서만 처리되며 업로드되지 않습니다.',
       title: '시스템 오디오 녹음 권한이 필요합니다',
@@ -429,6 +462,17 @@ const messages = {
   },
   zh: {
     archive: {
+      all: '全部记录',
+      autoTitle: '已根据内容生成标题，可以修改。',
+      confirmDelete: '确定删除“{name}”吗？',
+      folder: '保存到',
+      folders: '文件夹',
+      move: '移动',
+      newFolder: '新建文件夹',
+      operationFailed: '保存失败，请检查名称后重试。',
+      rename: '改名',
+      renameFolder: '文件夹改名',
+      unfiled: '未分类',
       cancel: '取消',
       delete: '删除',
       empty: '暂无归档记录',
@@ -462,7 +506,7 @@ const messages = {
       'system-audio-permission': '未获得系统音频录制权限',
     },
     main: {
-      appTitle: '实时翻译',
+      appTitle: 'Subline',
       primaryLanguage: '主要语言',
       archive: '归档',
       audioSourceMic: '音源：麦克风',
@@ -470,7 +514,6 @@ const messages = {
       clear: '清屏',
       emptyHint: '点击「开始录音」，识别结果会显示在这里',
       forceUpdate: '强制更新',
-      listening: '聆听中…',
       menu: '菜单',
       settings: '设置',
       start: '开始录音',
@@ -480,12 +523,13 @@ const messages = {
       themeLight: '浅色',
       themeSystem: '跟随系统',
       viewArchives: '归档记录',
+      jumpLatest: '回到最新',
     },
     mic: {
       allow: '允许并开始',
       cancel: '取消',
       deniedDesc:
-        '麦克风权限已被拒绝。请在「系统设置 › 隐私与安全性 › 麦克风」中允许 Realtime Translator 后重试。',
+        '麦克风权限已被拒绝。请在「系统设置 › 隐私与安全性 › 麦克风」中允许 Subline 后重试。',
       deniedTitle: '麦克风权限被拒绝',
       desc: '开始后将实时录制麦克风音频，用于语音的识别与翻译。音频仅在本机处理，不会上传。',
       openSettings: '打开系统设置',
@@ -493,7 +537,7 @@ const messages = {
     },
     sysAudio: {
       deniedDesc:
-        '系统音频录制权限已被拒绝。请在 系统设置 › 隐私与安全性 › 屏幕与系统音频录制 中允许 Realtime Translator，然后重试。',
+        '系统音频录制权限已被拒绝。请在 系统设置 › 隐私与安全性 › 屏幕与系统音频录制 中允许 Subline，然后重试。',
       deniedTitle: '系统音频录制被拒绝',
       desc: '录音将采集 Mac 正在播放的声音，在本机完成语音识别与翻译。macOS 会请求「系统音频录制」权限。音频仅在本机处理，不会上传。',
       title: '需要系统音频录制权限',
