@@ -3,11 +3,26 @@
 // Transformers.js 缓存布局 `<cacheDir>/<modelId>/<dir>/<filename>`，之后翻译子进程以
 // allowRemoteModels=false 离线加载。
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { getTranslationModel, type LocalModelFile } from '@rt/core';
 import { downloadFile } from '../model-downloader';
 import { localModelCached } from './model-cache';
 import type { SetupProgress } from '../../shared/types';
+
+export async function verifyModelFile(file: string, spec: LocalModelFile, signal?: AbortSignal): Promise<void> {
+  if (spec.expectedBytes !== undefined && fs.statSync(file).size !== spec.expectedBytes) {
+    fs.rmSync(file, { force: true });
+    throw new Error('模型文件大小不符，请重试下载');
+  }
+  if (!spec.sha256) return;
+  const hash = crypto.createHash('sha256');
+  for await (const chunk of fs.createReadStream(file, { signal })) hash.update(chunk);
+  if (hash.digest('hex') !== spec.sha256) {
+    fs.rmSync(file, { force: true });
+    throw new Error('模型文件校验失败，请重试下载');
+  }
+}
 
 /**
  * 下载并安装指定本地翻译模型：逐个下载其注册表登记的全部文件（已存在的跳过，只补缺）。
@@ -24,7 +39,10 @@ export async function downloadTranslationModel(
   if (!spec) throw new Error(`未知的翻译模型: ${modelId}`);
 
   const localPath = (f: LocalModelFile): string => path.join(cacheDir, spec.modelId, f.dir, f.filename);
-  const toDownload = spec.files.filter((f) => !fs.existsSync(localPath(f)));
+  const toDownload = spec.files.filter((f) => {
+    try { const stat = fs.statSync(localPath(f)); return !stat.isFile() || stat.size === 0 || (f.expectedBytes !== undefined && stat.size !== f.expectedBytes); }
+    catch { return true; }
+  });
   const total = spec.approxDownloadBytes;
   for (const f of toDownload) {
     fs.mkdirSync(path.dirname(localPath(f)), { recursive: true });
@@ -55,6 +73,7 @@ export async function downloadTranslationModel(
       },
       signal
     );
+    await verifyModelFile(localPath(f), f, signal);
     base += last;
   }
   // 末尾对齐 100%：各文件实收合计与近似分母有出入，收尾时把进度贴到满格。

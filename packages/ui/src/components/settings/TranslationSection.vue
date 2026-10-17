@@ -34,8 +34,8 @@ const cloudTestError = ref('');
 const loopback = computed(() => isLoopbackEndpoint(props.form.cloud.baseURL));
 
 function useLocalHy(): void {
-  props.form.cloud = { baseURL: 'http://127.0.0.1:1234/v1', model: 'hy-mt2-1.8b', apiKey: '' };
-  props.form.translationMode = 'cloud';
+  props.form.translationModel = 'hy-mt2-7b';
+  props.form.translationMode = 'local';
 }
 
 // Remote services need a key; loopback services can run without authentication.

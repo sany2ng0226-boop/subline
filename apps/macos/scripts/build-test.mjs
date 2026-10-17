@@ -26,6 +26,6 @@ await build({
   target: 'node22',
   // 原生模块保持外部化（运行时 require），与生产 main 构建一致。
   // @rt/core / chinese-conv 等纯 JS 依赖会被打进产物，使单文件可直接 node 运行。
-  external: ['@huggingface/transformers', 'onnxruntime-node', 'sherpa-onnx-node'],
+  external: ['node-llama-cpp', '@huggingface/transformers', 'onnxruntime-node', 'sherpa-onnx-node'],
   logLevel: 'info',
 });

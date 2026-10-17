@@ -30,8 +30,11 @@ describe('本地翻译模型注册表', () => {
       expect(m.platforms.length).toBeGreaterThan(0);
       // 离线加载所需的 seq2seq 双权重必须在 files 清单内（q8 档带 _quantized 后缀）。
       const names = m.files.map((f) => f.filename).join(' ');
-      expect(names).toContain('encoder_model_quantized.onnx');
-      expect(names).toContain('decoder_model_merged_quantized.onnx');
+      if (m.dtype === 'q4_k_m') expect(names).toContain('Hy-MT2-7B-Q4_K_M.gguf');
+      else {
+        expect(names).toContain('encoder_model_quantized.onnx');
+        expect(names).toContain('decoder_model_merged_quantized.onnx');
+      }
     }
   });
 
@@ -45,13 +48,16 @@ describe('本地翻译模型注册表', () => {
         // dir 为缓存布局子目录：'' 或形如 'onnx'（不含前后斜杠）
         expect(f.dir).not.toMatch(/^\/|\/$/);
         // native 主源为自托管 GitHub Release 资产，扁平命名以文件名结尾（落地文件名与之一致）。
-        expect(f.nativeUrls[0]).toContain('github.com/baijunjie/realtime-translator/releases/download/models-v1/');
+        expect(f.nativeUrls[0]).toContain(m.id === 'hy-mt2-7b' ? 'huggingface.co/tencent/Hy-MT2-7B-GGUF/' : 'github.com/baijunjie/realtime-translator/releases/download/models-v1/');
         expect(f.nativeUrls[0].endsWith(f.filename)).toBe(true);
       }
       // 离线加载所需的 seq2seq 双权重必须在 files 清单内（q8 档带 _quantized 后缀）。
       const names = m.files.map((f) => f.filename).join(' ');
-      expect(names).toContain('encoder_model_quantized.onnx');
-      expect(names).toContain('decoder_model_merged_quantized.onnx');
+      if (m.dtype === 'q4_k_m') expect(names).toContain('Hy-MT2-7B-Q4_K_M.gguf');
+      else {
+        expect(names).toContain('encoder_model_quantized.onnx');
+        expect(names).toContain('decoder_model_merged_quantized.onnx');
+      }
     }
   });
 
@@ -91,8 +97,8 @@ describe('本地翻译模型注册表', () => {
     }
   });
 
-  it('translationModelsFor 按平台过滤：macos 两款、web 仅轻量款、ios 无本地模型', () => {
-    expect(translationModelsFor('macos').map((m) => m.id)).toEqual(['m2m100', 'm2m100-1.2b']);
+  it('translationModelsFor 按平台过滤：macos 三款、web 仅轻量款、ios 无本地模型', () => {
+    expect(translationModelsFor('macos').map((m) => m.id)).toEqual(['m2m100', 'm2m100-1.2b', 'hy-mt2-7b']);
     expect(translationModelsFor('web').map((m) => m.id)).toEqual(['m2m100']);
     expect(translationModelsFor('ios')).toEqual([]);
   });
@@ -107,7 +113,7 @@ describe('内存门槛：availableTranslationModels / localTranslationSupported'
   it('宿主不受限（macos/native，memoryConstrained=false）：等同 translationModelsFor', () => {
     expect(
       availableTranslationModels('macos', { memoryConstrained: false }).map((m) => m.id),
-    ).toEqual(['m2m100', 'm2m100-1.2b']);
+    ).toEqual(['m2m100', 'm2m100-1.2b', 'hy-mt2-7b']);
     expect(
       availableTranslationModels('web', { memoryConstrained: false }).map((m) => m.id),
     ).toEqual(['m2m100']);

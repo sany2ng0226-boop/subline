@@ -23,11 +23,11 @@ pnpm --filter @rt/macos test-stage-latency \
 
 音频须为固定样本对应的 16 kHz 单声道 WAV；参数采用绝对路径，避免工作区过滤命令改变相对路径的含义。仓库只保存含音频 SHA-256、12 个定稿段文本哈希及音频起止信息的 manifest，不保存课堂音频或其原文。音频哈希不匹配时拒绝运行；定稿段数量、文本哈希、语种或起止与基线不匹配时评测失败。这个检查验证固定输入的回归一致性，不能作为识别准确率证明。
 
-运行前须在模型目录准备 SenseVoice 及其 VAD 文件，并在本机 OpenAI 兼容服务加载别名 `hy-mt2-7b`。默认端点为 `http://127.0.0.1:1234/v1`，可通过 `RT_TRANSLATION_BASE_URL`、`RT_TRANSLATION_API_KEY` 指定其他本机端点与凭据；评测拒绝非回环地址。它使用固定日语识别、默认规则合句和产品的 `TranslationRequestQueue`，不读取或修改应用设置。ASR 在独立子进程运行，翻译先执行一次预热请求。
+运行前须在模型目录准备 SenseVoice 及其 VAD 文件。设置 `RT_LOCAL_CACHE=/absolute/path/model-cache` 可直接使用应用内 `HyTranslator`，该缓存根目录须包含注册表所定义的 Hy-MT2 GGUF 文件；不需要 LM Studio 或 HTTP 服务。未设置此变量时，须在本机 OpenAI 兼容服务加载别名 `hy-mt2-7b`。默认端点为 `http://127.0.0.1:1234/v1`，可通过 `RT_TRANSLATION_BASE_URL`、`RT_TRANSLATION_API_KEY` 指定其他本机端点与凭据；评测拒绝非回环地址。它使用固定日语识别、默认规则合句和产品的 `TranslationRequestQueue`，不读取或修改应用设置。ASR 在独立子进程运行，翻译先执行一次预热请求。
 
 默认启用本机 Hy-MT2 7B 的流式回调；使用 `RT_TRANSLATION_STREAM=0` 运行同一命令可测完整响应路径。`firstTranslationMs` 记录首批译文在回放时间轴上的时刻，完整返回仍以 `completedMs` 记录；降低首批等待不代表完整生成更快。
 
-输出 JSON 包含逐句时刻、事件、统计分布、音频与相关代码哈希、模型标识、预热耗时和回放投递迟到量。模型仅记录配置标识，不校验或记录权重文件哈希；服务别名不变不能证明权重未更换。结果包含识别原文与译文，建议放在已被 Git 忽略的 `apps/macos/test-results/`，按私有课堂资料保管，不提交到仓库。各指标使用同一回放时间轴：
+输出 JSON 包含逐句时刻、事件、统计分布、音频与相关代码哈希、模型标识、预热耗时和回放投递迟到量。评测输出仅记录配置标识，不记录权重文件哈希；使用 API 时服务别名不变不能证明权重未更换。应用内下载器对注册表中的 Hy-MT2 文件执行校验，不等于评测输出包含该校验的证据。结果包含识别原文与译文，建议放在已被 Git 忽略的 `apps/macos/test-results/`，按私有课堂资料保管，不提交到仓库。各指标使用同一回放时间轴：
 
 | 指标 | 边界与解释 |
 | --- | --- |
@@ -39,7 +39,7 @@ pnpm --filter @rt/macos test-stage-latency \
 | `queueWaitMs` | 开始执行翻译减进入队列时刻。 |
 | `translationFirstContentMs` | 开始执行翻译至首批非空译文回调的耗时；非流式路径使用完整返回时刻。 |
 | `firstVisibleEndToEndMs` | 首批译文回调时刻减逻辑音频末端；名称中的 visible 指交付调用方，不包含 UI 渲染或实际显示时刻。 |
-| `translationMs` | 完整本机 HTTP 翻译请求耗时，包含服务端调度、生成和响应，不是纯 GPU 计算。 |
+| `translationMs` | 完整翻译调用耗时；API 路径包含本机服务端调度、生成和响应，`RT_LOCAL_CACHE` 路径包含应用内推理，不是纯 GPU 计算。 |
 | `endToEndMs` | 完整译文返回时刻减逻辑音频末端；不包含真实设备采集、设备缓冲或 UI 渲染。 |
 
 识别提交、额外合句等待、分发、排队和翻译五项之和应等于端到端延迟，脚本对此做一致性检查。统计给出均值、nearest-rank p50/p95 和最大值；12 句样本的 p95 不足以代表长期课堂表现。预热与初始化单独报告，不计入逐句统计。录屏与正在运行的翻译应用仍会共享硬件资源，因此测量反映本次机器负载，不能直接解释为隔离环境的模型性能。

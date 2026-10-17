@@ -22,3 +22,5 @@ export * from './translation/segment-translation';
 export * from './translation/context';
 
 export { audioLevel } from './audio-level';
+
+export { translationPrompt } from "./translation/cloud-translator";

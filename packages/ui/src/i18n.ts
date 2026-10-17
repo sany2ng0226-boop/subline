@@ -75,6 +75,7 @@ const messages = {
     },
     models: {
       m2m100: 'M2M-100 (Lightweight)',
+      hy_mt2_7b: 'Hy-MT2 7B',
       m2m100_1_2b: 'M2M-100 1.2B (Higher quality)',
       paraformerZh: 'Paraformer (Chinese)',
       parakeetEn: 'Parakeet (English)',
@@ -216,6 +217,7 @@ const messages = {
     },
     models: {
       m2m100: 'M2M-100（軽量）',
+      hy_mt2_7b: 'Hy-MT2 7B',
       m2m100_1_2b: 'M2M-100 1.2B（高品質）',
       paraformerZh: 'Paraformer（中国語）',
       parakeetEn: 'Parakeet（英語）',
@@ -356,6 +358,7 @@ const messages = {
     },
     models: {
       m2m100: 'M2M-100 (경량)',
+      hy_mt2_7b: 'Hy-MT2 7B',
       m2m100_1_2b: 'M2M-100 1.2B (고품질)',
       paraformerZh: 'Paraformer (중국어)',
       parakeetEn: 'Parakeet (영어)',
@@ -493,6 +496,7 @@ const messages = {
     },
     models: {
       m2m100: 'M2M-100（轻量）',
+      hy_mt2_7b: 'Hy-MT2 7B',
       m2m100_1_2b: 'M2M-100 1.2B（更高质量）',
       paraformerZh: 'Paraformer（中文专用）',
       parakeetEn: 'Parakeet（英文专用）',

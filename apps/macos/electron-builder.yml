@@ -1,45 +1,30 @@
-appId: io.github.baijunjie.realtimetranslator
-productName: Realtime Translator
+appId: io.github.sany2ng0226.classroomtranslator
+productName: Classroom Translator
 directories:
   output: release
   buildResources: build
 # electron-vite 产物在 out/；node_modules 由 electron-builder 按生产依赖自动包含
 files:
   - out/**
+  - "!**/node_modules/@node-llama-cpp/linux*/**"
+  - "!**/node_modules/@node-llama-cpp/win*/**"
+  - "!**/node_modules/@node-llama-cpp/mac-x64/**"
   - package.json
   # onnxruntime-node 自带全平台二进制，仅保留 macOS arm64，去掉 linux/win/x64 以瘦身
   - "!**/node_modules/onnxruntime-node/bin/napi-v6/linux/**"
   - "!**/node_modules/onnxruntime-node/bin/napi-v6/win32/**"
   - "!**/node_modules/onnxruntime-node/bin/napi-v6/darwin/x64/**"
-# 解包到 app.asar.unpacked 的两类文件：
-# 1) 原生模块（.node/.dylib）本就不能从 asar 内加载；
-# 2) 翻译子进程以 ELECTRON_RUN_AS_NODE 的纯 Node 运行，无 asar 补丁，读不了 app.asar 内的
-#    任何文件——它 fork 的入口（out/main）及其运行时 require 的整棵依赖树（含纯 JS 依赖）都必须解包。
-#    实测闭包（hook Module._load 真跑一次翻译）：@huggingface/transformers、chinese-conv、
-#    onnxruntime-node、onnxruntime-common、sharp、@img/*、detect-libc、semver；
-#    color 系为 sharp 部分发行版 require 的纯 JS 依赖，按「宁可多解包不可漏」保留。
+# The isolated Node translator must resolve its complete ESM dependency tree outside asar.
 asarUnpack:
-  - "**/node_modules/sherpa-onnx-node/**"
-  - "**/node_modules/onnxruntime-node/**"
-  - "**/node_modules/sharp/**"
-  - "**/node_modules/@img/**"
-  # 翻译子进程 fork 的入口 chunk（纯 Node 无法从 asar 读取）
   - "out/main/**"
-  # 翻译链路运行时依赖闭包
-  - "**/node_modules/@huggingface/**"
-  - "**/node_modules/onnxruntime-common/**"
-  - "**/node_modules/chinese-conv/**"
-  - "**/node_modules/detect-libc/**"
-  - "**/node_modules/semver/**"
-  - "**/node_modules/color/**"
-  - "**/node_modules/color-convert/**"
-  - "**/node_modules/color-string/**"
-  - "**/node_modules/color-name/**"
-  - "**/node_modules/simple-swizzle/**"
-  - "**/node_modules/is-arrayish/**"
+  - "**/node_modules/**"
 # 原生模块是 N-API 预编译产物（ABI 稳定），无需也不应重新编译
+extraResources:
+  - from: build/HY-MT2-LICENSE.txt
+    to: licenses/HY-MT2-LICENSE.txt
 npmRebuild: false
 mac:
+  minimumSystemVersion: "14.2"
   category: public.app-category.productivity
   icon: build/icon.icns
   hardenedRuntime: true

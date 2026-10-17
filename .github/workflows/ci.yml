@@ -29,6 +29,7 @@ jobs:
       cancel-in-progress: true
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      NODE_LLAMA_CPP_SKIP_DOWNLOAD: true
     steps:
       - uses: actions/checkout@v4
 
@@ -47,6 +48,9 @@ jobs:
 
       - name: Caption, queue and latency accounting regressions
         run: pnpm exec vitest run packages/ui/src/composables/useTranscription.test.ts apps/macos/src/main/translation/request-queue.test.ts apps/macos/test/stage-metrics.test.ts
+
+      - name: Model file integrity regressions
+        run: pnpm --filter @rt/macos test-model-integrity
 
       - name: Type-check (@rt/macos)
         run: pnpm --filter @rt/macos type-check

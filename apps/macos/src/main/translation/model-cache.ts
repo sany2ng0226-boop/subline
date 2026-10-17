@@ -12,6 +12,9 @@ import type { LocalModelSpec } from '@rt/core';
  */
 export function localModelCached(cacheDir: string, spec: LocalModelSpec): boolean {
   return spec.files.every((f) =>
-    fs.existsSync(path.join(cacheDir, spec.modelId, f.dir, f.filename)),
+    (() => { try {
+      const stat = fs.statSync(path.join(cacheDir, spec.modelId, f.dir, f.filename));
+      return stat.isFile() && stat.size > 0 && (f.expectedBytes === undefined || stat.size === f.expectedBytes);
+    } catch { return false; } })(),
   );
 }

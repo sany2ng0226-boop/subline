@@ -112,7 +112,7 @@ realtime-translator（曾名 meeting-translator）是用户要分发给他人使
 
 **本地翻译模型注册表（2026-07-03）：**
 - 与 ASR 同构的注册表多选：`m2m100`（默认，轻量 ~630MB）+ `mbart50`（Xenova/mbart-large-50-many-to-many-mmt，q8 ~890MB，基座 MIT，质量更高），均 platforms ['macos','web']；iOS 走 Apple Translation 不感知模型 id。设置页翻译方式三态「无/本地/云端」，本地时出模型下拉。
-- **翻译模型选型已否决**：NLLB-200 与 SeamlessM4T（CC-BY-NC 不可商用）、MADLAD-400-3B（3B CPU 非实时）、M2M100-1.2B 与 SMaLL-100（MIT 但无现成 ONNX 转换，将来可自转再入册）、OPUS-MT（按语言对一模型，四语互译需 12 个且 ja↔zh 覆盖差）、端上 LLM（逐段生成太慢）。
+- **翻译模型选型已否决**：NLLB-200 与 SeamlessM4T（CC-BY-NC 不可商用）、MADLAD-400-3B（3B CPU 非实时）、M2M100-1.2B 与 SMaLL-100（MIT 但无现成 ONNX 转换，将来可自转再入册）、OPUS-MT（按语言对一模型，四语互译需 12 个且 ja↔zh 覆盖差）。
 - **mBART-50 已下架（2026-07-03，实证根因）**：q8 约 870MB 的推理在 **Electron utilityProcess 里触发 Chromium 分配器对超大分配的 SIGTRAP 终止**（EXC_BREAKPOINT，栈底 `_malloc_zone_memalign`；本机 utilityProcess 复现 100% 崩、与用户侧 Realtime Translator Helper 崩溃报告完全同源）——每段翻译崩一次子进程，UI 表现为行行「翻译失败」。**分端差异**：web（WASM 内存）可用（用户实测）、纯 Node（系统 malloc）可用、macOS utilityProcess 必崩——纯 Node 测试结果不能代表 utilityProcess，排查大模型问题必须在真实 utilityProcess 里复现。相对 M2M-100 体积增量收益有限（用户判断），不值得为其改造运行时，故下架。次生加固：翻译子进程构造期异常（如产物版本错位导致的未知引擎 id）已改为报错不崩溃。
 - **翻译模型下载已统一自研链路（2026-07-03）**：spec 声明文件 URL、按 modelId 参数化下载（与当前引擎解耦，修复了管理页下载秒关）、落 Transformers.js 缓存布局后 `allowRemoteModels=false` 离线装载；下载进度统一走 setup:progress。**缓存键与下载源 URL 解耦**（web 端按 HF 目录式键 cache.put），模型可托管到 GitHub Releases（扁平资产名，单文件 2GB 内免流量费）——大文件不用 HF 账号也不用 LFS。
 - **引入更大本地翻译模型的硬前置（已完成，2026-07-03）**：macOS 翻译子进程已改为 `ELECTRON_RUN_AS_NODE` 纯 Node child_process（c46519a，脱离 Chromium 分配器；打包态注意纯 Node 读不了 asar → fork 目标与翻译依赖闭包全部 asarUnpack，闭包经 Module._load hook 实测核定）。ASR 子进程保持 utilityProcess。

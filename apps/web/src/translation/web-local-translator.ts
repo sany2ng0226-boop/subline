@@ -91,7 +91,7 @@ export class WebLocalTranslator {
     w.postMessage({
       type: 'init',
       modelId: this.spec.modelId,
-      dtype: this.spec.dtype,
+      dtype: 'q8',
     } satisfies ToTranslateWorker);
     return this.warming;
   }
@@ -122,7 +122,7 @@ export class WebLocalTranslator {
         srcLang: src.code,
         tgtLang: tgt.code,
         modelId: this.spec.modelId,
-        dtype: this.spec.dtype,
+        dtype: 'q8',
       } satisfies ToTranslateWorker);
     });
     return tgt.toScript ? tgt.toScript(result) : result;

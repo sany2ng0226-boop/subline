@@ -2,6 +2,7 @@
 // 具体用哪个本地模型 / 云 API 由工厂决定，方便以后替换。
 // Translator 接口、TranslateProgress、CloudTranslator 均来自 @rt/core；
 // 本地 LocalTranslator 依赖原生模块，留在 macOS。
+import { HyTranslator } from './hy-translator';
 import { createLocalTranslator } from './local-translator';
 import { CloudTranslator, type Translator, type TranslateProgress } from '@rt/core';
 import type { CloudTranslationConfig, TranslationEngine } from '../../shared/types';
@@ -28,5 +29,6 @@ export function createTranslator(cfg: TranslatorConfig): Translator {
   if (!cfg.cacheDir) {
     throw new Error('本地翻译缺少 cacheDir');
   }
+  if (cfg.backend === 'hy-mt2-7b') return new HyTranslator(cfg.cacheDir);
   return createLocalTranslator(cfg.backend, cfg.cacheDir);
 }

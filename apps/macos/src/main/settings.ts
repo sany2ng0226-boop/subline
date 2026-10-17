@@ -11,11 +11,13 @@ import type { AppSettings } from '../shared/types';
 /** 按系统偏好语言生成默认设置（电子环境下读取系统语言） */
 function defaults(): AppSettings {
   // 优先用系统偏好语言（getLocale 返回的是 Chromium/应用语言，开发环境常为 en-US）。
-  return makeDefaults([
+  const settings = makeDefaults([
     ...(app.getPreferredSystemLanguages?.() ?? []),
     app.getSystemLocale?.() ?? '',
     app.getLocale(),
   ]);
+  settings.translation = { ...settings.translation, enabled: true, engine: 'hy-mt2-7b' };
+  return settings;
 }
 
 let cached: AppSettings | null = null;

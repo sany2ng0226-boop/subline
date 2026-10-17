@@ -7,21 +7,27 @@ A classroom-focused derivative of [baijunjie/realtime-translator](https://github
 - Continuous caption rows: provisional text is extended, corrected and confirmed in place; translations return to the same row.
 - Stable-prefix / tentative-tail styling, language-specific native Japanese and Simplified Chinese fonts, and a narrower bilingual reading layout.
 - Rule-based Japanese sentence assembly before translation. Local-model sentence judging remains an offline experiment, not the default recording path.
-- Source-only context for OpenAI-compatible translation, including local LM Studio endpoints.
+- Built-in macOS Hy-MT2 7B Metal inference and source-only context, also supported by optional OpenAI-compatible endpoints.
 - macOS translation backpressure: one active request, at most three waiting, and a 15-second waiting deadline. Overloaded or expired translations fail visibly while their transcripts remain available.
 - A separate macOS Preview build and isolated application data.
 
-## Local classroom setup
+## Apple Silicon macOS beta
 
-The tested configuration is SenseVoice with Japanese recognition and a local Hy-MT2 7B model served by LM Studio. These are runtime selections, not bundled weights or repository-wide forced defaults.
+The current app is **Classroom Translator 0.2.0-beta.1**, intended for a small group of friends. This repository remains private; upstream downloads below are not this beta. The current build is unsigned and not notarized. System audio requires macOS 14.2 or newer. Other memory capacities have not been qualified; local inference has been exercised on a 48 GB development Mac.
 
-1. Install dependencies with the package manager pinned in `package.json` (`pnpm install`).
-2. Run `pnpm dev`, or build the separate Preview app with `pnpm --filter @rt/macos dist:preview`.
-3. In settings, choose Japanese and SenseVoice, with Chinese as the native language.
-4. For local Hy-MT2, run your model in LM Studio under the alias `hy-mt2-7b`, then select the API translation backend with base URL `http://127.0.0.1:1234/v1` and that model name. A key is optional only for loopback endpoints.
-5. Choose system audio on supported macOS versions and grant the app the requested capture permission.
+1. Obtain this beta's `.dmg` from the maintainer, then drag **Classroom Translator.app** into Applications.
+2. Open the app and choose your native language. New macOS settings enable the built-in **Hy-MT2 7B Q4_K_M** translator; existing settings are preserved.
+3. Choose Japanese and SenseVoice for the classroom configuration. On first recording, confirm the required model downloads. The Hy-MT2 weights are approximately 4.62 GB and are downloaded from a pinned Tencent source with size and SHA-256 validation.
+4. After the downloads finish, the app runs recognition and translation locally. **LM Studio, an API key and a separately started model server are not required.** The Metal inference runtime is included; model weights are not bundled.
+5. Choose system audio on supported macOS versions and grant the requested capture permission. Transcripts and translations remain in one continuous timeline; archive a session to keep it for later.
 
-Check source with `pnpm check`. Caption identity and macOS queue regressions can be checked with `pnpm exec vitest run packages/ui/src/composables/useTranscription.test.ts apps/macos/src/main/translation/request-queue.test.ts`.
+The optional API translation backend remains available for an existing local server or a user-configured remote service. Local Hy-MT2 keeps the same source-only context, rule-based sentence assembly and translation backpressure. Changing the inference runtime does not guarantee byte-for-byte identical translations.
+
+## Development and checks
+
+Install the package manager pinned in `package.json`, run `pnpm install`, then `pnpm dev`. `pnpm dist` builds the Apple Silicon DMG in `apps/macos/release/`; it does not publish a release or complete signing/notarization. The separate Preview build remains available via `pnpm --filter @rt/macos dist:preview` with isolated data.
+
+Check source with `pnpm check`. Caption identity and macOS queue regressions can be checked with `pnpm exec vitest run packages/ui/src/composables/useTranscription.test.ts apps/macos/src/main/translation/request-queue.test.ts`. Fixed classroom replay, including the direct local engine via `RT_LOCAL_CACHE`, is described in [macOS test documentation](apps/macos/test/README.md).
 
 GitHub Actions runs checks on `main`; Pages deployment is disabled unless the repository variable `ENABLE_PAGES` is explicitly set to `true`.
 
@@ -37,7 +43,7 @@ Current behavior and implementation navigation: [product rules](docs/product/exp
 
 ## Upstream documentation
 
-The documentation below is retained for upstream platform and build context. Its release links and feature descriptions may differ from this classroom derivative; use the product rules above for custom behavior.
+The documentation below is retained for upstream platform and build context. **The Classroom beta instructions above and the product rules take precedence.** All upstream release and demo links below belong to upstream, not this derivative.
 
 <p align="center">
   <img src="assets/icon.png" alt="Realtime Translator" width="128" height="128" />
@@ -59,7 +65,7 @@ All three platforms share the same core logic and UI; they differ in how they ru
 |---|---|---|---|
 | **Get it** | Unsigned `.dmg` ([Releases](https://github.com/baijunjie/realtime-translator/releases)) | Build from source | [Open in browser](https://baijunjie.github.io/realtime-translator/) / install as PWA |
 | **Recognition models** | SenseVoice + Paraformer / ReazonSpeech / Parakeet | SenseVoice | SenseVoice + Paraformer / ReazonSpeech / Parakeet |
-| **Local translation** | M2M-100 418M / 1.2B | Apple on-device | M2M-100 418M † |
+| **Local translation** | Hy-MT2 7B (Classroom default) / M2M-100 418M / 1.2B | Apple on-device | M2M-100 418M † |
 | **Cloud translation** | ✓ | ✓ | ✓ |
 | **Audio source** | Microphone + system audio (14.2+) | Microphone | Microphone |
 | **Runtime** | Electron · sherpa-onnx N-API | Capacitor · native C++ | Browser · single-thread WASM |
@@ -94,7 +100,7 @@ Runs entirely in the browser — nothing to install and no server. **Open it at 
 - **On-device or cloud translation** — local models run offline and text never leaves your machine; cloud is an optional OpenAI-compatible endpoint (text is sent to a third party)
 - Multiple recognition and translation models, downloaded on demand (nothing is bundled into the app)
 - Conversation archive — save a session and reopen it later
-- Runs in real time on CPU (RTF ≈ 0.03 on Apple Silicon), no GPU required
+- Recognition runs locally; the Classroom Hy-MT2 translator uses the Apple Silicon Metal GPU
 
 ## Usage
 
@@ -116,7 +122,8 @@ Every model is fetched on demand from the `@rt/core` registry (nothing is bundle
 | Paraformer-zh (int8) | Chinese recognition | macOS / web | ~220MB |
 | ReazonSpeech-ja | Japanese recognition | macOS / web | ~160MB |
 | Parakeet-en (int8) | English recognition | macOS / web | ~630MB |
-| M2M100-418M (q8) | multilingual translation (default) | macOS / web | ~640MB |
+| Hy-MT2 7B (Q4_K_M) | Classroom default translation | macOS / Apple Silicon | ~4.62GB |
+| M2M100-418M (q8) | multilingual translation (Web default) | macOS / web | ~640MB |
 | M2M100-1.2B (q8) | multilingual translation (higher quality) | macOS | ~1.5GB |
 
 iOS downloads no translation model — it uses Apple's on-device translation. Chinese output is normalized to Simplified (neither M2M100 nor Apple distinguishes Simplified/Traditional scripts). On web, Silero VAD is bundled same-origin instead of downloaded.
@@ -132,7 +139,7 @@ A **pnpm-workspace monorepo**: shared logic and UI, one package per platform. Al
 - `apps/web` (`@rt/web`) — the browser PWA.
 - `assets/` — shared brand source (`icon.svg` / `icon.png`); each app generates its own icon format from it.
 
-Transcription uses [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (ONNX Runtime) on every platform, via a per-platform runtime (see the [Platforms](#platforms) table). Local translation uses [Transformers.js](https://github.com/huggingface/transformers.js) running Meta M2M100 (MIT) on macOS and web, and Apple's Translation framework on iOS. Both sit behind interfaces in `@rt/core`, so swapping in another model or a cloud API is just another implementation.
+Transcription uses [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (ONNX Runtime) on every platform, via a per-platform runtime (see the [Platforms](#platforms) table). Classroom macOS Hy-MT2 uses node-llama-cpp with Metal. M2M-100 local translation uses [Transformers.js](https://github.com/huggingface/transformers.js) running Meta M2M100 (MIT) on macOS and web, and Apple's Translation framework on iOS. Both sit behind interfaces in `@rt/core`, so swapping in another model or a cloud API is just another implementation.
 
 On macOS, ASR runs in its own Electron `utilityProcess`, while translation runs in a plain Node child process (`child_process.fork` + `ELECTRON_RUN_AS_NODE`, off the Chromium allocator so it can handle 1.5 GB-class inference). Heavy native work never blocks the UI, and a native crash or oversized allocation is isolated to that process. On web the equivalent isolation is a Web Worker per task; on iOS the work happens in the native plugin.
 
@@ -147,7 +154,7 @@ flowchart LR
   end
   subgraph UTIL["isolated subprocesses"]
     ASR["ASR (utilityProcess): Silero VAD → recognition model<br/>(SenseVoice default · per-language models selectable)<br/>partial while speaking · final on segment end"]
-    TRANS["Translation (plain Node child process): M2M100<br/>· or Cloud (OpenAI-compatible)"]
+    TRANS["Translation (plain Node child process): Hy-MT2 7B / M2M100<br/>· or Cloud (OpenAI-compatible)"]
   end
   MIC -- "IPC: audio" --> HUB
   HUB -- audio --> ASR
@@ -173,7 +180,7 @@ For iOS, see [`apps/ios/native-plugin/INTEGRATION.md`](apps/ios/native-plugin/IN
 
 **Packaging (macOS)** — `pnpm dist` builds an unsigned arm64 `.dmg` into `apps/macos/release/` (`pnpm dist:dir` produces an unpacked `.app` for debugging). See [macOS](#macos) for opening an unsigned build; for public distribution, sign & notarize with an Apple Developer ID.
 
-**Web deploy** — a GitHub Actions workflow (`.github/workflows/ci.yml`, the `deploy-web` job) deploys to GitHub Pages on every push to `main`, but only after the quality gate (`check`) passes. ASR runs as single-threaded WASM specifically so no COOP/COEP headers are needed and it can be hosted free on Pages.
+**Web deploy** — a GitHub Actions workflow (`.github/workflows/ci.yml`, the `deploy-web` job) can deploy to GitHub Pages when `ENABLE_PAGES=true`, after the quality gate (`check`) passes. ASR runs as single-threaded WASM specifically so no COOP/COEP headers are needed and it can be hosted free on Pages.
 
 **Offline testing (no GUI)**:
 

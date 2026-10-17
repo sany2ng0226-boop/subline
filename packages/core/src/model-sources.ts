@@ -50,6 +50,6 @@ export function selfHostedAsset(asset: string): string {
  * @param repo 仓库标识，形如 'csukuangfj/sherpa-onnx-...' 或 'Xenova/m2m100_418M'
  * @param rel  仓内相对路径（含子目录，如 'onnx/encoder_model_quantized.onnx'）
  */
-export function hfResolveUrls(repo: string, rel: string): string[] {
-  return [HF.host, ...HF_MIRRORS].map((host) => `${host}/${repo}/resolve/main/${rel}`);
+export function hfResolveUrls(repo: string, rel: string, revision = 'main'): string[] {
+  return [HF.host, ...HF_MIRRORS].map((host) => `${host}/${repo}/resolve/${revision}/${rel}`);
 }

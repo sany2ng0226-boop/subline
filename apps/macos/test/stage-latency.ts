@@ -1,5 +1,6 @@
 // Silent, real-time replay of the production macOS ASR, assembler and translation queue.
 import fs from 'node:fs';
+import { HyTranslator } from '../src/main/translation/hy-translator';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fork } from 'node:child_process';
@@ -58,7 +59,9 @@ async function main() {
   if (audioHash !== manifest.audioSha256 || wave.sampleRate !== 16000 || manifest.sampleRate !== 16000) throw new Error('Audio hash/sample rate mismatch; refusing an incomparable run');
   const baseURL = process.env.RT_TRANSLATION_BASE_URL ?? 'http://127.0.0.1:1234/v1';
   if (!isLoopbackEndpoint(baseURL)) throw new Error('This private classroom benchmark permits loopback translation only');
-  const translator = new CloudTranslator({ baseURL, apiKey: process.env.RT_TRANSLATION_API_KEY ?? '', model: manifest.translationModel });
+  const translator = process.env.RT_LOCAL_CACHE
+    ? new HyTranslator(process.env.RT_LOCAL_CACHE)
+    : new CloudTranslator({ baseURL, apiKey: process.env.RT_TRANSLATION_API_KEY ?? '', model: manifest.translationModel });
   const warmStart = clockMs();
   await translator.translate('こんにちは。', { source: 'ja', target: 'zh' });
   const translationWarmupMs = clockMs() - warmStart;
@@ -133,7 +136,7 @@ async function main() {
   const appRoot = path.resolve(__dirname, '../..');
   const codeHashes = Object.fromEntries(['src/main/pipeline.ts', 'src/main/translation/request-queue.ts', '../../packages/core/src/asr/sentence-assembler.ts', '../../packages/core/src/asr/transcription-pipeline.ts', '../../packages/core/src/translation/cloud-translator.ts', '../../packages/core/src/translation/translation-stream.ts'].map(file => [file, sha(fs.readFileSync(path.resolve(appRoot, file)))]));
   const report = { schemaVersion: 1, caseId: manifest.caseId, audioSha256: audioHash, audioSeconds: wave.samples.length / wave.sampleRate,
-    createdAt: new Date().toISOString(), models: { asr: manifest.asrModel, language: 'ja', translation: manifest.translationModel, baseURL }, codeHashes,
+    createdAt: new Date().toISOString(), models: { asr: manifest.asrModel, language: 'ja', translation: manifest.translationModel, ...(process.env.RT_LOCAL_CACHE ? { runtime: 'node-llama-cpp Metal' } : { baseURL }) }, codeHashes,
     warmup: { asrBootMs: bootMs, translationMs: translationWarmupMs },
     checks: { goldenMatch, additiveMatch, allTranslated: rows.every(row => !!row.translation && !row.error), maxActive, maxPending, maxFeedLatenessMs },
     definitions: {
@@ -142,7 +145,7 @@ async function main() {
       assemblyWaitMs: 'Sentence emitted minus last contributing raw fragment; additive post-ASR sentence waiting.',
       assemblyResidenceMs: 'Sentence emitted minus FIRST contributing fragment; contextual residence, not an additive stage.',
       queueWaitMs: 'Translation execution starts minus queue submission.',
-      translationMs: 'Full local HTTP request, including server scheduling and generation; not isolated GPU compute.',
+      translationMs: process.env.RT_LOCAL_CACHE ? 'App-managed local Metal inference; not isolated GPU compute.' : 'Full local HTTP request, including server scheduling and generation; not isolated GPU compute.',
       translationFirstContentMs: 'First nonempty cumulative translation returned to caller minus execution start. RT_TRANSLATION_STREAM=0 measures non-streaming.',
       firstVisibleEndToEndMs: 'First translation callback minus logical audio end; excludes UI rendering.',
       endToEndMs: 'Complete translation minus logical sentence audio end; excludes microphone capture, device buffers and UI rendering.',

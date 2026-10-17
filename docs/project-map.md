@@ -44,14 +44,18 @@ Realtime Translator 是 pnpm workspace 单仓库。`@rt/core` 提供平台无关
 
 1. 宿主在定稿段到达时调用 `packages/core/src/translation/segment-translation.ts` 的共享编排。
 2. 共享编排根据母语、识别语言和会话内最近外语决定跳过、字形归一化或发起翻译。
-3. macOS API 翻译通过 `packages/core/src/translation/context.ts` 管理同语言对的有限原文上下文；会话与配置变化由主进程重置。宿主执行具体引擎：macOS 将 M2M-100/云端请求放在纯 Node 子进程，Web 用 Transformers.js Worker 或直接调云端，iOS 调 Apple Translation 或直接调云端。
+3. macOS 应用内 Hy-MT2 与 API 翻译通过 `packages/core/src/translation/context.ts` 管理同语言对的有限原文上下文；会话与配置变化由主进程重置。宿主执行具体引擎：macOS 将应用内 Hy-MT2 7B、M2M-100/API 请求放在纯 Node 子进程，Web 用 Transformers.js Worker 或直接调云端，iOS 调 Apple Translation 或直接调云端。
 4. macOS 主进程在发送翻译 IPC 前通过 `apps/macos/src/main/translation/request-queue.ts` 调度请求，负责并发、等待容量、排队过期及配置变更时的等待取消；具体限制与行级降级见[翻译规则](product/experience.md#翻译规则)。翻译子进程仍负责具体推理，ASR 定稿路径不等待翻译队列完成。
-5. pending、部分译文、成功或失败事件按段 ID 回到 UI 的原文行；共享编排负责部分译文的目标字形归一化，并忽略请求结束后的迟到更新。macOS 通过翻译子进程 IPC 回传本机 Hy-MT2 7B 的流式结果；`packages/core/src/translation/translation-stream.ts` 负责读取 OpenAI 兼容 SSE，部分结果不结束队列请求。Web 与 iOS 未订阅部分回填，保持完整结果路径。流式显示与失败契约见[翻译规则](product/experience.md#翻译规则)。
+5. pending、部分译文、成功或失败事件按段 ID 回到 UI 的原文行；共享编排负责部分译文的目标字形归一化，并忽略请求结束后的迟到更新。macOS 通过翻译子进程 IPC 回传应用内及本机 API Hy-MT2 7B 的流式结果；`packages/core/src/translation/translation-stream.ts` 负责读取 OpenAI 兼容 SSE，部分结果不结束队列请求。Web 与 iOS 未订阅部分回填，保持完整结果路径。流式显示与失败契约见[翻译规则](product/experience.md#翻译规则)。
+
+- `apps/macos/src/main/translation/hy-translator.ts` 通过 node-llama-cpp 的 Metal 后端装载 GGUF；每句创建独立 session，仅使用显式原文上下文。`getLlama` 禁止运行时构建和下载原生组件。`translator.ts` 工厂路由 Hy-MT2 与 `local-translator.ts` 的 M2M-100 实现，上层 IPC 将上下文和部分结果回调传入本地实现。
+- `apps/macos/electron-builder.yml` 将 Node 翻译子进程入口及依赖解包到 `app.asar.unpacked`，包含 arm64 Metal 原生运行时而不打包权重；纯 Node 子进程不能依赖 Electron 的 asar 读取补丁。
 
 ### 设置、模型与归档
 
 - `@rt/ui` 只持有表单和当前会话状态；设置、模型和归档持久化经 `AppBridge`。默认值、字段校验、归档摘要和排序在 `@rt/core` 复用，各宿主只选择文件、Preferences 或 IndexedDB 作为存储后端。
-- 模型清单、大小、语言、平台可用性和有序下载源的单一事实源是 `packages/core/src/model-registry.ts`。各宿主将文件下载到本端模型目录或 Cache Storage，再由对应推理运行时离线装载。
+- `apps/macos/src/main/settings.ts` 仅对新建设置启用本地 `hy-mt2-7b`；已有设置由共享兼容逻辑读取。正式课堂应用名为 Classroom Translator，应用标识为 `io.github.sany2ng0226.classroomtranslator`，独立数据目录为 `~/Library/Application Support/Classroom Translator`。
+- 模型清单、大小、语言、平台可用性和有序下载源的单一事实源是 `packages/core/src/model-registry.ts`。各宿主将文件下载到本端模型目录或 Cache Storage，再由对应推理运行时离线装载。Hy-MT2 使用 Tencent 固定 revision 的 Q4_K_M 文件，注册表声明精确字节数及 SHA-256；macOS 下载流程据此校验。
 
 ## 测试与构建位置
 

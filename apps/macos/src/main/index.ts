@@ -310,7 +310,7 @@ function translateSegment(segment: SegmentPayload): void {
     nativeLang: settings.nativeLang,
     asrLanguage: settings.asr.language,
     reverse: reverseCtx,
-    context: settings.translation.engine === 'cloud' ? translationContext : undefined,
+    context: ['cloud', 'hy-mt2-7b'].includes(settings.translation.engine) ? translationContext : undefined,
     translate: requestTranslate,
     emitTranslation: (p) => sendToRenderer('pipeline:translation', p),
   });

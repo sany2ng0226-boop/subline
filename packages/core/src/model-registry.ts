@@ -13,6 +13,8 @@ import type { AsrCommitStrategy, AsrLang, LocalEngine, Platform } from './types'
  * 全部失败才判失败（见各端下载器）。翻译文件即此形态（不逐文件记字节/角色）；ASR 见 AsrFileSpec。
  */
 export interface ModelFileSpec {
+  expectedBytes?: number;
+  sha256?: string;
   /** 落地文件名。 */
   filename: string;
   /**
@@ -98,7 +100,7 @@ export interface TranslationModelEntry extends CommonModelFields {
   /** HuggingFace 仓库标识：Transformers.js 的模型 id + 缓存布局根目录名。 */
   modelId: string;
   /** 量化档位。 */
-  dtype: 'q8';
+  dtype: 'q8' | 'q4_k_m';
   /** 未知语言的回退（通常英语）。 */
   fallbackLang: string;
   /** app 语言（含 ASR 源码 yue）→ 处理方式；未列出的语言回退到 fallbackLang。 */
@@ -298,6 +300,25 @@ export const MODELS: readonly ModelEntry[] = [
     fallbackLang: 'en',
     langs: M2M100_LANGS,
     // 体积超出浏览器 WASM 内存的稳妥范围，web 暂不放开；iOS 走系统翻译不消费本地权重。
+    availability: { platforms: ['macos'], memoryHeavy: true },
+  },
+  {
+    kind: 'translation',
+    id: 'hy-mt2-7b',
+    nameKey: 'models.hy_mt2_7b',
+    modelId: 'tencent/Hy-MT2-7B-GGUF',
+    dtype: 'q4_k_m',
+    files: [{
+      dir: '',
+      filename: 'Hy-MT2-7B-Q4_K_M.gguf',
+      nativeUrls: hfResolveUrls('tencent/Hy-MT2-7B-GGUF', 'Hy-MT2-7B-Q4_K_M.gguf', 'ab8472660ac61fac25f1af43fac2599d52a8a775'),
+      webUrls: [],
+      expectedBytes: 4624648896,
+      sha256: '9f96256500f3fc1ab4d64336b58f52a949a95ad7516b0c229476eef782f9f77b',
+    }],
+    approxBytes: 4624648896,
+    fallbackLang: 'en',
+    langs: M2M100_LANGS,
     availability: { platforms: ['macos'], memoryHeavy: true },
   },
 ];

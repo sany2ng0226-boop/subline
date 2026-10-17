@@ -60,7 +60,7 @@ class LocalTranslator implements Translator {
         return Promise.reject(new Error('本地翻译模型未下载，请先在模型管理页下载'));
       }
       // 已缓存：把模型从磁盘载入内存（离线，不报字节进度）。
-      this.loading = pipeline('translation', this.spec.modelId, { dtype: this.spec.dtype })
+      this.loading = pipeline('translation', this.spec.modelId, { dtype: 'q8' })
         .then((fn) => {
           this.translate$ = fn as unknown as TranslationFn;
         })

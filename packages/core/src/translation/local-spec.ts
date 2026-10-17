@@ -44,7 +44,7 @@ export interface LocalModelSpec {
   /** HuggingFace 仓库标识：既是 Transformers.js 的模型 id，也是缓存布局的根目录名。 */
   modelId: string;
   /** 量化档位 */
-  dtype: 'q8';
+  dtype: 'q8' | 'q4_k_m';
   /**
    * 该模型全部需下载文件（权重 + tokenizer/config）。自研下载器按此逐个下载，落入
    * Transformers.js 缓存布局后离线加载。清单以本机真实缓存为准枚举，缺任一文件都会导致离线加载失败。
