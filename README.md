@@ -1,8 +1,8 @@
-# Realtime Translator Classroom
+# Subline
 
-A classroom-focused derivative of [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator), maintained by [Jack](https://github.com/sany2ng0226-boop). Upstream Git history is preserved. This repository contains our custom source; upstream release links below refer to upstream builds, not this version.
+**Subline** is a local, real-time transcription and translation app, developed as a classroom-focused derivative of [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator), maintained by [Jack](https://github.com/sany2ng0226-boop). Upstream Git history is preserved. This repository contains our custom source; upstream release links below refer to upstream builds, not this version.
 
-## Classroom changes
+## Features
 
 - Continuous caption rows: provisional text is extended, corrected and confirmed in place; translations return to the same row.
 - Stable-prefix / tentative-tail styling, language-specific native Japanese and Simplified Chinese fonts, and a narrower bilingual reading layout.
@@ -11,9 +11,11 @@ A classroom-focused derivative of [baijunjie/realtime-translator](https://github
 - macOS translation backpressure: one active request, at most three waiting, and a 15-second waiting deadline. Overloaded or expired translations fail visibly while their transcripts remain available.
 - A separate macOS Preview build and isolated application data.
 
-## Apple Silicon macOS beta
+## macOS build and distribution status
 
-The current app is **Classroom Translator 0.2.0-beta.1**, intended for a small group of friends. This repository remains private; upstream downloads below are not this beta. The current application is Developer ID signed and Apple notarized, with the notarization ticket stapled to the `.app`. This describes the application, not a separate notarization of the DMG container. System audio requires macOS 14.2 or newer. Other memory capacities have not been qualified; local inference has been exercised on a 48 GB development Mac.
+**Subline** is the new product name; **Subline Internal** is the internal macOS channel. The Subline Internal build has been installed and checked locally, including audio capture, bilingual captions, scrolling and archive persistence. It is an ad-hoc local build, not a Developer ID signed or Apple-notarized release. Web and iOS builds have not been validated as part of that check.
+
+The previously distributed **Classroom Translator 0.2.0-beta.1** friends beta remains a historical release under its original name. That specific application was Developer ID signed and Apple notarized, with the ticket stapled to the `.app`; this does not cover Subline builds or separately notarize its DMG. The installation steps below apply to that historical beta. This repository remains private; upstream downloads below are not our builds. System audio requires macOS 14.2 or newer. Other memory capacities have not been qualified; local inference has been exercised on a 48 GB development Mac.
 
 1. Obtain this beta's `.dmg` from the maintainer, then drag **Classroom Translator.app** into Applications.
 2. Open the app normally and accept the standard macOS first-open confirmation if shown; no quarantine-removal command or security-setting change is required. Choose your native language. New macOS settings enable the built-in **Hy-MT2 7B Q4_K_M** translator; existing settings are preserved.
@@ -24,6 +26,8 @@ The current app is **Classroom Translator 0.2.0-beta.1**, intended for a small g
 The optional API translation backend remains available for an existing local server or a user-configured remote service. Local Hy-MT2 keeps the same source-only context, rule-based sentence assembly and translation backpressure. Changing the inference runtime does not guarantee byte-for-byte identical translations.
 
 ## Development and checks
+
+This repository-name and README update does not include the uncommitted Subline application changes. Existing source, build commands and release assets can still use earlier names until those changes are reviewed and synchronized. Renaming the repository does not rename an existing binary or grant it a new signing/notarization result.
 
 Install the package manager pinned in `package.json`, run `pnpm install`, then `pnpm dev`. `pnpm dist` builds the Apple Silicon DMG in `apps/macos/release/`; signing depends on a locally available identity, and the command alone does not complete Apple notarization or publish a release. The separate Preview build remains available via `pnpm --filter @rt/macos dist:preview` with isolated data.
 
@@ -45,7 +49,7 @@ Current behavior and implementation navigation: [product rules](docs/product/exp
 
 ## Upstream documentation
 
-The documentation below is retained for upstream platform and build context. **The Classroom beta instructions above and the product rules take precedence.** All upstream release and demo links below belong to upstream, not this derivative.
+The documentation below is retained for upstream platform and build context. **The custom-build status above and the product rules take precedence.** All upstream release and demo links below belong to upstream, not this derivative.
 
 <p align="center">
   <img src="assets/icon.png" alt="Realtime Translator" width="128" height="128" />
