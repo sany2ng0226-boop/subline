@@ -117,6 +117,8 @@ export interface AppBridge {
   // 组件级订阅（如 SetupScreen）须在卸载时反注册，避免监听器持有已卸载组件的闭包累积。
   onSetupProgress(cb: (progress: SetupProgress) => void): () => void;
   onSegment(cb: (segment: SegmentPayload) => void): () => void;
+  /** Optional input loudness telemetry; does not modify captured PCM. */
+  onAudioLevel?(cb: (level: number) => void): () => void;
   onPartial(cb: (partial: PartialPayload) => void): () => void;
   onTranslation(cb: (translation: TranslationPayload) => void): () => void;
   onStatus(cb: (status: StatusPayload) => void): () => void;

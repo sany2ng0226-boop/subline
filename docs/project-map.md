@@ -24,6 +24,11 @@ Realtime Translator 是 pnpm workspace 单仓库。`@rt/core` 提供平台无关
 3. macOS 和 Web 将音频送入 `@rt/core` 的共享转写管线，分别在 utility process 和 WASM Worker 中执行 VAD 与 ASR；iOS 原生插件在自身 ASR 队列中执行对应的 VAD、部分识别与定稿。
 4. macOS 在识别后使用 `packages/core/src/asr/sentence-assembler.ts` 按规则合并文字片段，不注入模型切句判断器；默认启用日语短谓语句提前提交，等待上限为 12 秒、累计音频上限为 14 秒，不改变 ASR 识别窗口或翻译模型。部分文本与合并后的定稿段经 `AppBridge` 事件返回 `@rt/ui`。Web 与 iOS 直接发布自身管线的定稿段；UI 将定稿段追加为对话行。
 
+### 音频音量显示
+
+- `packages/core/src/audio-level.ts` 提供输入 PCM 的音量归一化，macOS 的 `mac-bridge.ts` 在发送识别音频时通过可选 `AppBridge.onAudioLevel` 发布音量事件；它不改写音频或识别管线。
+- `packages/ui/src/components/AudioLevelMeter.vue` 订阅宿主音量，在主页录音按钮旁展示平滑起伏与无输入回落；未提供该桥接能力的宿主不显示。外部行为见[开始一次转写](product/experience.md#开始一次转写)。
+
 ### 部分识别与字幕显示
 
 - `packages/core/src/types.ts` 的 `PartialPayload.stableText` 是可选的已确认显示前缀。共享转写管线在实时识别时从 `committedDone + committedInWindow` 生成它；音频块更新时只使用 `committedDone`。后续识别重基仍可修改前缀，它不构成不可变文本的承诺。

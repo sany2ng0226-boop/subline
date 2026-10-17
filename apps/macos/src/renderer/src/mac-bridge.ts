@@ -6,12 +6,15 @@
 // stopPipeline：先停采集（停轨 + 关闭 AudioContext），再停 ASR 子进程（api.stopPipeline）。
 // 其余方法全部直通 window.api。
 
+import { audioLevel } from '@rt/core';
 import type { AppBridge, StartResult, PipelineErrorCode } from '@rt/core';
 import type { ElectronApi } from '@shared/types';
 
 export function createMacBridge(api: ElectronApi): AppBridge {
   let audioContext: AudioContext | null = null;
   let mediaStream: MediaStream | null = null;
+  const levelListeners = new Set<(level: number) => void>();
+  const publishLevel = (level: number) => levelListeners.forEach(cb => cb(level));
   // 重入守卫：正在进行的启动 promise，供并发/重复调用复用，避免双路采集与旧流引用被覆盖泄漏
   let starting: Promise<StartResult> | null = null;
 
@@ -50,10 +53,14 @@ export function createMacBridge(api: ElectronApi): AppBridge {
       await audioContext.audioWorklet.addModule('audio-worklet.js');
       const audioSource = audioContext.createMediaStreamSource(mediaStream);
       const capture = new AudioWorkletNode(audioContext, 'capture-processor');
-      capture.port.onmessage = (e: MessageEvent<Float32Array>) => api.sendAudio(e.data);
+      capture.port.onmessage = (e: MessageEvent<Float32Array>) => {
+        api.sendAudio(e.data);
+        publishLevel(audioLevel(e.data));
+      };
       audioSource.connect(capture);
       return r;
     } catch (err) {
+      publishLevel(0);
       mediaStream?.getTracks().forEach((tr) => tr.stop());
       mediaStream = null;
       await audioContext?.close();
@@ -72,6 +79,7 @@ export function createMacBridge(api: ElectronApi): AppBridge {
   }
 
   return {
+    onAudioLevel(cb) { levelListeners.add(cb); return () => { levelListeners.delete(cb); }; },
     platform: api.platform,
     audioSources: api.audioSources,
     // 构建期注入的发布版本串；define 缺失的环境（如单测导入）下不暴露
@@ -88,6 +96,7 @@ export function createMacBridge(api: ElectronApi): AppBridge {
     },
 
     async stopPipeline() {
+      publishLevel(0);
       // 等在途启动先完成再拆除：保证「stop 晚于 start 调用」必然「stop 晚于 start 生效」，
       // 不会在 beginCapture 取到麦克风前拆了个寂寞、留下持续采集的流。
       if (starting) {

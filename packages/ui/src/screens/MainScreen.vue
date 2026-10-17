@@ -21,6 +21,7 @@ import {
   translationLoading,
   translationError,
 } from '../composables/useTranscription';
+import AudioLevelMeter from '../components/AudioLevelMeter.vue';
 import TranscriptList from '../components/TranscriptList.vue';
 import ModelDownloadModal from '../components/ModelDownloadModal.vue';
 import {
@@ -441,6 +442,7 @@ function openMicSettings(): void {
           </template>
           {{ audioSourceTitle }}
         </n-tooltip>
+        <AudioLevelMeter :active="recording" />
         <n-button
           :type="recording ? 'error' : 'primary'"
           :disabled="preparing || recordBusy || awaitingRecord"
