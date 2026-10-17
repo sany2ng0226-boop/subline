@@ -19,7 +19,7 @@ const preview = process.argv.includes('--preview');
 const run = (cmd, cwd) => execSync(cmd, { cwd, stdio: 'inherit' });
 
 console.log('▶ 1/4 构建 (electron-vite)');
-run('pnpm run build', appDir);
+run(preview ? 'RT_INTERNAL_BUILD=1 pnpm run build' : 'pnpm run build', appDir);
 
 console.log('▶ 2/4 生成应用图标 (从共享 assets/ 重建 build/icon.icns)');
 run('pnpm run icons', appDir);

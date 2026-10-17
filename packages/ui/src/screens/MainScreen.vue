@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, h, watch, onUnmounted } from 'vue';
-import { NButton, NModal, NInput, NDropdown, NTooltip, NProgress } from 'naive-ui';
+import { NButton, NModal, NInput, NDropdown, NTooltip, NProgress, NSelect } from 'naive-ui';
 import type { DropdownMixedOption } from 'naive-ui/es/dropdown/src/interface';
 import { Settings, Trash2, Archive, Library, Eraser, LoaderCircle, TriangleAlert, MoreHorizontal, Mic, MonitorSpeaker, Square, RefreshCw } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
-import { getAsrModel, getTranslationModel } from '@rt/core';
+import { getAsrModel, getTranslationModel, UI_LANGS, asrModelsFor, DEFAULT_ASR_MODEL_ID, type AsrLang } from '@rt/core';
+import { LANG_LABELS } from '../components/settings/form';
 import { settings, saveSettings } from '../composables/useSettings';
 import {
   lines, archiveSnapshot,
@@ -37,6 +38,27 @@ import { bridge } from '../bridge';
 
 const { t } = useI18n();
 const emit = defineEmits<{ 'open-settings': []; 'open-archive': [] }>();
+
+declare const __INTERNAL_BUILD__: boolean;
+const internalBuild = typeof __INTERNAL_BUILD__ !== 'undefined' && __INTERNAL_BUILD__;
+const languageSaving = ref(false);
+const primaryLanguageOptions = computed(() => [
+  { label: `${t('main.primaryLanguage')}: ${t('settings.asrLanguageAuto')}`, value: 'auto' },
+  ...UI_LANGS.map((lang) => ({ label: `${t('main.primaryLanguage')}: ${LANG_LABELS[lang]}`, value: lang })),
+]);
+async function selectPrimaryLanguage(language: AsrLang): Promise<void> {
+  const current = settings.value;
+  if (!current || headerLocked.value || current.asr.language === language) return;
+  languageSaving.value = true;
+  try {
+    const compatible = asrModelsFor(language, bridge().platform).some((model) => model.id === current.asr.model);
+    await saveSettings({ ...current, asr: { language, model: compatible ? current.asr.model : DEFAULT_ASR_MODEL_ID } });
+  } catch (error) {
+    console.error('[settings:primary-language]', error);
+  } finally {
+    languageSaving.value = false;
+  }
+}
 
 // 仅已定稿记录才算"有内容可清"：实时 partial 是瞬时的，清它没意义（归档也只存 lines）
 const hasContent = computed(() => lines.length > 0);
@@ -113,7 +135,7 @@ const loadingSummary = computed(() =>
 );
 
 // 录音进行中（含启停在途）：顶栏除录音按钮外全部禁用，避免录音过程中误操作打断会话
-const headerLocked = computed(() => recording.value || recordBusy.value);
+const headerLocked = computed(() => recording.value || recordBusy.value || languageSaving.value);
 
 // 音源开关：仅当桥接声明支持系统音频时才显示（macOS）。切换即持久化。
 const supportsSystemAudio = bridge().audioSources?.includes('system') ?? false;
@@ -443,9 +465,19 @@ function openMicSettings(): void {
           {{ audioSourceTitle }}
         </n-tooltip>
         <AudioLevelMeter :active="recording" />
+        <n-select
+          v-if="internalBuild && settings"
+          class="w-[170px]"
+          size="small"
+          :aria-label="t('main.primaryLanguage')"
+          :value="settings.asr.language"
+          :options="primaryLanguageOptions"
+          :disabled="headerLocked || preparing || awaitingRecord"
+          @update:value="selectPrimaryLanguage"
+        />
         <n-button
           :type="recording ? 'error' : 'primary'"
-          :disabled="preparing || recordBusy || awaitingRecord"
+          :disabled="preparing || recordBusy || awaitingRecord || languageSaving"
           :loading="recordBusy"
           @click="onRecordClick"
         >

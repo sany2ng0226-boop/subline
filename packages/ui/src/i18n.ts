@@ -39,6 +39,7 @@ const messages = {
     },
     main: {
       appTitle: 'Realtime Translator',
+      primaryLanguage: 'Main language',
       archive: 'Archive',
       audioSourceMic: 'Audio source: Microphone',
       audioSourceSystem: 'Audio source: System audio',
@@ -181,6 +182,7 @@ const messages = {
     },
     main: {
       appTitle: 'リアルタイム翻訳',
+      primaryLanguage: '主な言語',
       archive: 'アーカイブ',
       audioSourceMic: '音源：マイク',
       audioSourceSystem: '音源：システム音声',
@@ -322,6 +324,7 @@ const messages = {
     },
     main: {
       appTitle: '실시간 번역',
+      primaryLanguage: '주요 언어',
       archive: '보관',
       audioSourceMic: '오디오 소스: 마이크',
       audioSourceSystem: '오디오 소스: 시스템 오디오',
@@ -460,6 +463,7 @@ const messages = {
     },
     main: {
       appTitle: '实时翻译',
+      primaryLanguage: '主要语言',
       archive: '归档',
       audioSourceMic: '音源：麦克风',
       audioSourceSystem: '音源：系统音频',

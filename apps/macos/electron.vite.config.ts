@@ -25,6 +25,7 @@ export default defineConfig({
     // 发布版本串（包版本+commit 短哈希），mac-bridge 经 appVersion 暴露给设置页
     define: {
       __APP_VERSION__: JSON.stringify(buildVersion(root)),
+      __INTERNAL_BUILD__: JSON.stringify(process.env['RT_INTERNAL_BUILD'] === '1'),
     },
     resolve: {
       alias: {
