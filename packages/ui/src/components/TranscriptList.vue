@@ -23,9 +23,14 @@ function textLang(value?: string): string | undefined {
 const scroller = ref<HTMLElement | null>(null);
 const followEnd = ref(true);
 const rows = computed(() => props.draft ? [...props.lines, props.draft] : props.lines);
-const stableText = computed(() => props.stablePartial === undefined ? props.partial :
-  props.partial.startsWith(props.stablePartial) ? props.stablePartial : '');
-const tentativeText = computed(() => props.partial.slice(stableText.value.length));
+const stableText = computed(() => props.stablePartial && props.partial.startsWith(props.stablePartial)
+  ? props.stablePartial : '');
+const visiblePartial = computed(() => {
+  const raw = Array.from(props.partial);
+  // Delay only the tentative tail; allow later ASR corrections to replace any prefix.
+  return raw.slice(0, Math.max(Array.from(stableText.value).length, raw.length - 2, 0)).join('');
+});
+const tentativeText = computed(() => visiblePartial.value.slice(stableText.value.length));
 
 function onScroll(): void {
   const el = scroller.value;
@@ -48,7 +53,7 @@ watch(() => [props.draft?.text, ...props.lines.map((line) =>
         <div class="caption-time tabular-nums text-neutral-400 dark:text-neutral-500">{{ line.time }}</div>
         <div class="caption-body">
         <div :lang="textLang(line.lang || sourceLang)" class="caption-source text-neutral-800 dark:text-neutral-100">
-          <template v-if="line === draft"><span>{{ stableText }}</span><span class="text-neutral-500 dark:text-neutral-400">{{ tentativeText }}</span></template>
+          <template v-if="line === draft"><span>{{ stableText }}</span><span :class="stablePartial !== undefined ? 'text-neutral-500 dark:text-neutral-400' : undefined">{{ tentativeText }}</span></template>
           <template v-else>{{ line.text }}</template>
         </div>
         <div v-if="translateOn" :lang="textLang(targetLang)" class="caption-translation">
