@@ -34,7 +34,7 @@ Classroom Translator 是基于 Realtime Translator 定制、面向中文、日�
 
 ### macOS
 
-macOS 测试版名为 Classroom Translator，当前分发目标为 Apple 芯片 Mac，先供少量朋友测试。当前安装包未使用 Developer ID 签名或完成公证；这不代表已公开发布。Hy-MT2 已在 48 GB 内存的开发机运行，其他内存容量的最低要求尚未验收。
+macOS 测试版名为 Classroom Translator，当前分发目标为 Apple 芯片 Mac，先供少量朋友测试。当前应用已完成 Developer ID 签名和 Apple 公证，公证票据已附在 `.app` 上，并通过签名、stapler 和 Gatekeeper 验收；这不等于 DMG 容器另获独立公证，也不代表已公开发布。Hy-MT2 已在 48 GB 内存的开发机运行，其他内存容量的最低要求尚未验收。
 
 macOS 版是 Electron 应用。麦克风由渲染进程采集；系统音频通过 CoreAudio Tap 回环采集，因此只在 macOS 14.2 及以上显示音源切换。ASR 与本地翻译分别运行在隔离子进程中，某个推理进程崩溃不会连带关闭主窗口。Hy-MT2 通过随应用提供的 node-llama-cpp Metal 后端执行，用户无需安装编译工具；应用不在运行时编译或下载可执行推理组件。设置和归档使用独立的 `~/Library/Application Support/Classroom Translator` 数据目录，不自动迁移原版或 Preview 的配置。
 

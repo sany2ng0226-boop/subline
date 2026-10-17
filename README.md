@@ -13,10 +13,10 @@ A classroom-focused derivative of [baijunjie/realtime-translator](https://github
 
 ## Apple Silicon macOS beta
 
-The current app is **Classroom Translator 0.2.0-beta.1**, intended for a small group of friends. This repository remains private; upstream downloads below are not this beta. The current build is unsigned and not notarized. System audio requires macOS 14.2 or newer. Other memory capacities have not been qualified; local inference has been exercised on a 48 GB development Mac.
+The current app is **Classroom Translator 0.2.0-beta.1**, intended for a small group of friends. This repository remains private; upstream downloads below are not this beta. The current application is Developer ID signed and Apple notarized, with the notarization ticket stapled to the `.app`. This describes the application, not a separate notarization of the DMG container. System audio requires macOS 14.2 or newer. Other memory capacities have not been qualified; local inference has been exercised on a 48 GB development Mac.
 
 1. Obtain this beta's `.dmg` from the maintainer, then drag **Classroom Translator.app** into Applications.
-2. Open the app and choose your native language. New macOS settings enable the built-in **Hy-MT2 7B Q4_K_M** translator; existing settings are preserved.
+2. Open the app normally and accept the standard macOS first-open confirmation if shown; no quarantine-removal command or security-setting change is required. Choose your native language. New macOS settings enable the built-in **Hy-MT2 7B Q4_K_M** translator; existing settings are preserved.
 3. Choose Japanese and SenseVoice for the classroom configuration. On first recording, confirm the required model downloads. The Hy-MT2 weights are approximately 4.62 GB and are downloaded from a pinned Tencent source with size and SHA-256 validation.
 4. After the downloads finish, the app runs recognition and translation locally. **LM Studio, an API key and a separately started model server are not required.** The Metal inference runtime is included; model weights are not bundled.
 5. Choose system audio on supported macOS versions and grant the requested capture permission. Transcripts and translations remain in one continuous timeline; archive a session to keep it for later.
@@ -25,7 +25,9 @@ The optional API translation backend remains available for an existing local ser
 
 ## Development and checks
 
-Install the package manager pinned in `package.json`, run `pnpm install`, then `pnpm dev`. `pnpm dist` builds the Apple Silicon DMG in `apps/macos/release/`; it does not publish a release or complete signing/notarization. The separate Preview build remains available via `pnpm --filter @rt/macos dist:preview` with isolated data.
+Install the package manager pinned in `package.json`, run `pnpm install`, then `pnpm dev`. `pnpm dist` builds the Apple Silicon DMG in `apps/macos/release/`; signing depends on a locally available identity, and the command alone does not complete Apple notarization or publish a release. The separate Preview build remains available via `pnpm --filter @rt/macos dist:preview` with isolated data.
+
+For a distributable build, select the local Developer ID Application identity with `CSC_NAME` using the certificate display name **without** the `Developer ID Application:` prefix. Keep its private key in Keychain. The verified local notarization route uses an Xcode archive and `xcodebuild -exportArchive` with `method=developer-id` and `destination=upload`, followed by `xcodebuild -exportNotarizedApp` after Apple accepts it. Validate the exported app with `codesign --verify --deep --strict`, `xcrun stapler validate` and `spctl --assess --type execute`; create the DMG from that app via electron-builder `--prepackaged` to preserve its attached ticket. Credentials and private keys are not repository configuration.
 
 Check source with `pnpm check`. Caption identity and macOS queue regressions can be checked with `pnpm exec vitest run packages/ui/src/composables/useTranscription.test.ts apps/macos/src/main/translation/request-queue.test.ts`. Fixed classroom replay, including the direct local engine via `RT_LOCAL_CACHE`, is described in [macOS test documentation](apps/macos/test/README.md).
 
@@ -75,12 +77,7 @@ All three platforms share the same core logic and UI; they differ in how they ru
 
 ### macOS
 
-Download the latest `.dmg` (Apple Silicon) from the [Releases page](https://github.com/baijunjie/realtime-translator/releases) and drag the app into **Applications**.
-
-**Unsigned build** — this beta is not signed/notarized. On first open:
-
-- Right-click the app → **Open**, then confirm; or
-- Run: `xattr -dr com.apple.quarantine "/Applications/Realtime Translator.app"`
+The linked upstream releases belong to Realtime Translator. For this signed and notarized Classroom beta, use the maintainer-provided package and installation steps above; open **Classroom Translator.app** normally after copying it to Applications. The standard first-open confirmation and audio-capture permission prompts still apply.
 
 macOS is the most capable target: it can capture **system audio** (what your Mac is playing, macOS 14.2+) as well as the microphone, and it offers the higher-quality M2M-100 1.2B translation model.
 
@@ -178,7 +175,7 @@ pnpm --filter @rt/web dev   # run the browser PWA dev server (→ @rt/web)
 
 For iOS, see [`apps/ios/native-plugin/INTEGRATION.md`](apps/ios/native-plugin/INTEGRATION.md). Other scripts: `pnpm build`, `pnpm type-check`; per-package `pnpm --filter @rt/macos <script>` (e.g. `clean`, `test-translate`).
 
-**Packaging (macOS)** — `pnpm dist` builds an unsigned arm64 `.dmg` into `apps/macos/release/` (`pnpm dist:dir` produces an unpacked `.app` for debugging). See [macOS](#macos) for opening an unsigned build; for public distribution, sign & notarize with an Apple Developer ID.
+**Packaging (macOS)** — `pnpm dist` builds an arm64 `.dmg` into `apps/macos/release/` (`pnpm dist:dir` produces an unpacked `.app` for debugging). Developer ID signing requires a local signing identity; Apple notarization and ticket validation are separate release steps described above.
 
 **Web deploy** — a GitHub Actions workflow (`.github/workflows/ci.yml`, the `deploy-web` job) can deploy to GitHub Pages when `ENABLE_PAGES=true`, after the quality gate (`check`) passes. ASR runs as single-threaded WASM specifically so no COOP/COEP headers are needed and it can be hosted free on Pages.
 
