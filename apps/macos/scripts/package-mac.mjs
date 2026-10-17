@@ -36,7 +36,7 @@ const target = dirOnly ? '--dir' : '';
 const { version } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 run(
   `./node_modules/.bin/electron-builder --mac ${target} -c.extraMetadata.version="${version}" ` +
-  (preview ? '-c.appId=io.github.sany2ng0226.classroomtranslator.preview -c.productName="Realtime Translator Preview" -c.extraMetadata.name=realtime-translator-preview -c.extraMetadata.productName="Realtime Translator Preview" ' : '-c.extraMetadata.name=classroom-translator -c.extraMetadata.productName="Classroom Translator" ') +
+  (preview ? '-c.appId=io.github.sany2ng0226.classroomtranslator.preview -c.productName="Classroom Translator Internal" -c.extraMetadata.name=classroom-translator-internal -c.extraMetadata.productName="Classroom Translator Internal" ' : '-c.extraMetadata.name=classroom-translator -c.extraMetadata.productName="Classroom Translator" ') +
   `-c.directories.output="${releaseDir}"`,
   deployDir
 );

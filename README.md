@@ -9,7 +9,7 @@ A classroom-focused derivative of [baijunjie/realtime-translator](https://github
 - Rule-based Japanese sentence assembly before translation. Local-model sentence judging remains an offline experiment, not the default recording path.
 - Built-in macOS Hy-MT2 7B Metal inference and source-only context, also supported by optional OpenAI-compatible endpoints.
 - macOS translation backpressure: one active request, at most three waiting, and a 15-second waiting deadline. Overloaded or expired translations fail visibly while their transcripts remain available.
-- A separate macOS Preview build and isolated application data.
+- Separate stable and Internal macOS channels from one codebase, with isolated settings, archives and model caches.
 
 ## Apple Silicon macOS beta
 
@@ -25,7 +25,7 @@ The optional API translation backend remains available for an existing local ser
 
 ## Development and checks
 
-Install the package manager pinned in `package.json`, run `pnpm install`, then `pnpm dev`. `pnpm dist` builds the Apple Silicon DMG in `apps/macos/release/`; signing depends on a locally available identity, and the command alone does not complete Apple notarization or publish a release. The separate Preview build remains available via `pnpm --filter @rt/macos dist:preview` with isolated data.
+Install the package manager pinned in `package.json`, run `pnpm install`, then `pnpm dev`. `pnpm dist` builds the Apple Silicon DMG in `apps/macos/release/`; signing depends on a locally available identity, and the command alone does not complete Apple notarization or publish a release. `pnpm --filter @rt/macos dist:preview` builds **Classroom Translator Internal.app** in `apps/macos/release-preview/mac-arm64` (unless `RT_RELEASE_DIR` overrides the output). It can be installed beside **Classroom Translator.app**: each channel has its own settings, archives and model cache. Internal changes are verified before a stable-channel release; the stable channel is currently the friends beta, not a GA release. Internal signing/notarization must be checked per build; the stable beta's notarization does not cover Internal.
 
 For a distributable build, select the local Developer ID Application identity with `CSC_NAME` using the certificate display name **without** the `Developer ID Application:` prefix. Keep its private key in Keychain. The verified local notarization route uses an Xcode archive and `xcodebuild -exportArchive` with `method=developer-id` and `destination=upload`, followed by `xcodebuild -exportNotarizedApp` after Apple accepts it. Validate the exported app with `codesign --verify --deep --strict`, `xcrun stapler validate` and `spctl --assess --type execute`; create the DMG from that app via electron-builder `--prepackaged` to preserve its attached ticket. Credentials and private keys are not repository configuration.
 

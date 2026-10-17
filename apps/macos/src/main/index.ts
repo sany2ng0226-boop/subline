@@ -58,6 +58,11 @@ if (previewProfile) {
   app.setName('Realtime Translator Preview');
 }
 
+// Keep the internal channel independent even if Electron changes its default profile naming.
+if (app.isPackaged && app.getName() === 'Classroom Translator Internal') {
+  app.setPath('userData', path.join(app.getPath('appData'), 'Classroom Translator Internal'));
+}
+
 // 模型存放目录：
 // - 打包后 app.getAppPath() 指向只读的 app.asar，必须写到可写的 userData；
 // - 开发时用仓库根目录的 models/，便于复用已下载的模型。
@@ -171,12 +176,15 @@ function createWindow(): void {
   win = new BrowserWindow({
     width: 1100,
     height: 760,
-    title: previewProfile || app.getName() === 'Realtime Translator Preview' ? 'Realtime Translator Preview' : 'Realtime Translator',
+    title: app.isPackaged ? app.getName() : previewProfile ? 'Realtime Translator Preview' : 'Realtime Translator',
     ...(app.isPackaged ? {} : { icon: APP_ICON }),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
     },
+  });
+  win.on('page-title-updated', (event) => {
+    if (app.isPackaged) event.preventDefault();
   });
   // 开发用 vite dev server，生产加载打包后的 HTML
   if (process.env['ELECTRON_RENDERER_URL']) {
