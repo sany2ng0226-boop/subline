@@ -1,6 +1,6 @@
 {
   "name": "realtime-translator-monorepo",
-  "version": "0.2.0-beta.2",
+  "version": "0.2.0-beta.3-windows.1",
   "description": "Local, real-time speech transcription & translation for macOS, iOS, and the browser (monorepo)",
   "private": true,
   "packageManager": "pnpm@10.33.0",
@@ -11,7 +11,8 @@
     "type-check": "pnpm --filter @rt/macos type-check",
     "dist": "pnpm --filter @rt/macos dist",
     "dist:dir": "pnpm --filter @rt/macos dist:dir",
-    "check": "pnpm --filter @rt/core test && pnpm --filter @rt/macos test-eval-corpus && pnpm --filter @rt/macos type-check && pnpm --filter @rt/web type-check && pnpm --filter @rt/ios type-check"
+    "check": "pnpm --filter @rt/core test && pnpm --filter @rt/macos test-eval-corpus && pnpm --filter @rt/macos type-check && pnpm --filter @rt/web type-check && pnpm --filter @rt/ios type-check",
+    "dist:windows": "pnpm --filter @rt/macos dist:windows"
   },
   "keywords": [],
   "author": "",

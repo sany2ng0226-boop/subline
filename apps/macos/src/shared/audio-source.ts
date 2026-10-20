@@ -3,12 +3,14 @@
 import type { AudioSource } from '@rt/core';
 
 /** 系统版本（形如 "14.2" / "15.1.1"，取自 process.getSystemVersion()）是否支持系统音频采集。 */
-export function systemAudioSupported(systemVersion: string): boolean {
+export function systemAudioSupported(systemVersion: string, platform = 'darwin'): boolean {
+  if (platform === 'win32') return Number.parseInt(systemVersion, 10) >= 10;
+  if (platform !== 'darwin') return false;
   const [major, minor] = systemVersion.split('.').map((n) => parseInt(n, 10) || 0);
   return major > 14 || (major === 14 && minor >= 2);
 }
 
 /** 本机可用的音频采集来源列表：支持系统音频时为 ['system','mic']，否则仅 ['mic']。 */
-export function availableAudioSources(systemVersion: string): AudioSource[] {
-  return systemAudioSupported(systemVersion) ? ['system', 'mic'] : ['mic'];
+export function availableAudioSources(systemVersion: string, platform = 'darwin'): AudioSource[] {
+  return systemAudioSupported(systemVersion, platform) ? ['system', 'mic'] : ['mic'];
 }

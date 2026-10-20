@@ -21,6 +21,9 @@ import {
   clearTranscript,
   translationLoading,
   translationError,
+  translationErrorDetail,
+  translationBackend,
+  translationNotice,
 } from '../composables/useTranscription';
 import AudioLevelMeter from '../components/AudioLevelMeter.vue';
 import TranscriptList from '../components/TranscriptList.vue';
@@ -138,6 +141,7 @@ async function confirmArchive(): Promise<void> {
 // 是否开启翻译：现由设置里的「翻译方式」决定（选了模型即启用），主页不再有独立开关。
 // 仍需此值让转写列表决定是否显示「翻译中」等待动画。
 const translateOn = computed<boolean>(() => settings.value?.translation.enabled ?? false);
+const windowsHost = bridge().platform === 'windows';
 
 // 错误显示：有稳定错误码时用本地化文案，无码回退宿主原文（自由文本，可能非界面语言）
 const errorDisplay = computed(() =>
@@ -368,6 +372,7 @@ const showSysAudioModal = computed({
 });
 watch(errorCode, (code) => {
   if (code === 'system-audio-permission') sysAudioModal.value = 'denied';
+  if (code === 'mic-permission') micModal.value = 'denied';
 });
 
 function confirmSysAudio(): void {
@@ -441,7 +446,15 @@ function openMicSettings(): void {
         <template #trigger>
           <TriangleAlert :size="14" class="text-[var(--rt-live)]" />
         </template>
-        {{ t('status.transFailed') }}
+        {{ translationErrorDetail || t('status.transFailed') }}
+      </n-tooltip>
+      <n-tooltip v-else-if="windowsHost && translateOn && translationBackend">
+        <template #trigger>
+          <span class="text-xs text-[var(--rt-ink-3)]">
+            {{ t(translationBackend === 'cuda' ? 'status.localCuda' : 'status.localCpu') }}
+          </span>
+        </template>
+        {{ translationNotice || t('status.localPrivate') }}
       </n-tooltip>
 
       <!-- 窄屏隐藏，改用下方「...」菜单与底部圆形录音按钮 -->
@@ -584,7 +597,7 @@ function openMicSettings(): void {
       style="width: 420px; max-width: 90vw"
     >
       <p class="text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        {{ micModal === 'denied' ? t('mic.deniedDesc') : t('mic.desc') }}
+        {{ micModal === 'denied' ? t(windowsHost ? 'mic.windowsDeniedDesc' : 'mic.deniedDesc') : t('mic.desc') }}
       </p>
       <template #footer>
         <div class="flex justify-end gap-2">
@@ -605,7 +618,9 @@ function openMicSettings(): void {
       style="width: 420px; max-width: 90vw"
     >
       <p class="text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        {{ sysAudioModal === 'denied' ? t('sysAudio.deniedDesc') : t('sysAudio.desc') }}
+        {{ sysAudioModal === 'denied'
+          ? t(windowsHost ? 'sysAudio.windowsDeniedDesc' : 'sysAudio.deniedDesc')
+          : t(windowsHost ? 'sysAudio.windowsDesc' : 'sysAudio.desc') }}
       </p>
       <template #footer>
         <div class="flex justify-end gap-2">

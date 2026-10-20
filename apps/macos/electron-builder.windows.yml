@@ -1,0 +1,46 @@
+appId: io.github.sany2ng0226.subline.windows.candidate
+productName: Subline
+directories:
+  output: release-windows
+  buildResources: build
+files:
+  - out/**
+  - package.json
+  - "!**/node_modules/@node-llama-cpp/mac-*/**"
+  - "!**/node_modules/@node-llama-cpp/linux*/**"
+  - "!**/node_modules/@node-llama-cpp/win-arm64/**"
+  - "!**/node_modules/@node-llama-cpp/win-x64-vulkan/**"
+  - "!**/node_modules/sherpa-onnx-darwin-*/**"
+  - "!**/node_modules/sherpa-onnx-linux-*/**"
+  - "!**/node_modules/sherpa-onnx-win-ia32/**"
+  - "!**/node_modules/onnxruntime-node/bin/napi-v*/darwin/**"
+  - "!**/node_modules/onnxruntime-node/bin/napi-v*/linux/**"
+  - "!**/node_modules/onnxruntime-node/bin/napi-v*/win32/arm64/**"
+asarUnpack:
+  # The isolated translator runs as plain Node and cannot read ESM dependencies inside asar.
+  - "out/main/**"
+  - "**/node_modules/**"
+extraResources:
+  - from: build/HY-MT2-LICENSE.txt
+    to: licenses/HY-MT2-LICENSE.txt
+npmRebuild: false
+publish: null
+win:
+  icon: build/icon.ico
+  executableName: Subline
+  signAndEditExecutable: false
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: zip
+      arch: [x64]
+nsis:
+  artifactName: Subline-${version}-windows-x64-setup.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  shortcutName: Subline
+  uninstallDisplayName: Subline Windows Candidate
+  differentialPackage: false
+artifactName: Subline-${version}-windows-x64.${ext}

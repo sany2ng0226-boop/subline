@@ -2,6 +2,7 @@ import path from 'node:path';
 import type { LlamaModel, LlamaContext, LlamaChatSession } from 'node-llama-cpp';
 import { getTranslationModel, translationPrompt, normalizeZh, type Translator } from '@rt/core';
 import { localModelCached } from './model-cache';
+import { loadHyRuntime, type HyRuntimeOptions } from './hy-runtime';
 
 const LANG_NAMES: Record<string, string> = { zh: 'Chinese (Simplified)', ja: 'Japanese', en: 'English', ko: 'Korean', yue: 'Cantonese' };
 
@@ -11,7 +12,7 @@ export class HyTranslator implements Translator {
   private context: LlamaContext | undefined;
   private Session: typeof LlamaChatSession | undefined;
 
-  constructor(private readonly cacheDir: string) {}
+  constructor(private readonly cacheDir: string, private readonly runtimeOptions: HyRuntimeOptions = {}) {}
 
   init(): Promise<void> {
     if (!this.loading) this.loading = this.load().catch(error => { this.loading = null; throw error; });
@@ -22,12 +23,10 @@ export class HyTranslator implements Translator {
     const spec = getTranslationModel('hy-mt2-7b')!;
     if (!localModelCached(this.cacheDir, spec)) throw new Error('Hy-MT2 7B 未下载，请先在模型管理中下载');
     const { getLlama, LlamaChatSession } = await import('node-llama-cpp');
-    // End-user machines must never need a compiler or download executable code at runtime.
-    const llama = await getLlama({ gpu: 'metal', build: 'never', skipDownload: true });
-    this.model = await llama.loadModel({ modelPath: path.join(this.cacheDir, spec.modelId, spec.files[0]!.filename) });
-    try {
-      this.context = await this.model.createContext({ contextSize: 4096, sequences: 1, flashAttention: true });
-    } catch (error) { await this.model.dispose(); throw error; }
+    const runtime = await loadHyRuntime(getLlama,
+      path.join(this.cacheDir, spec.modelId, spec.files[0]!.filename), this.runtimeOptions);
+    this.model = runtime.model;
+    this.context = runtime.context;
     this.Session = LlamaChatSession;
   }
 

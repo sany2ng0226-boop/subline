@@ -69,6 +69,7 @@ const messages = {
       jumpLatest: 'Jump to latest',
     },
     mic: {
+      windowsDeniedDesc: 'Allow desktop apps to access your microphone in Windows Settings > Privacy & security > Microphone, then retry.',
       allow: 'Allow & Start',
       cancel: 'Cancel',
       deniedDesc:
@@ -79,6 +80,8 @@ const messages = {
       title: 'Microphone permission needed',
     },
     sysAudio: {
+      windowsDeniedDesc: 'Check the Windows default playback device and retry. Protected audio or an unavailable device may prevent capture.',
+      windowsDesc: 'Captures all audio from the Windows default playback device for local recognition and translation. Screen images are not saved or sent. Use headphones to avoid feedback.',
       deniedDesc:
         'System audio recording was denied. Allow Subline in System Settings › Privacy & Security › Screen & System Audio Recording, then try again.',
       deniedTitle: 'System audio recording denied',
@@ -149,6 +152,9 @@ const messages = {
       version: 'Version',
     },
     status: {
+      localPrivate: 'Recognition and translation stay on this computer.',
+      localCuda: 'Local translation · NVIDIA',
+      localCpu: 'Local translation · CPU (slower)',
       loadingModel: 'Loading speech model…',
       preparing: 'Preparing models…',
       transFailed: 'Failed to load translation model',
@@ -223,6 +229,7 @@ const messages = {
       jumpLatest: '最新へ移動',
     },
     mic: {
+      windowsDeniedDesc: 'Windows の設定 > プライバシーとセキュリティ > マイクでデスクトップアプリのアクセスを許可し、再試行してください。',
       allow: '許可して開始',
       cancel: 'キャンセル',
       deniedDesc:
@@ -233,6 +240,8 @@ const messages = {
       title: 'マイクの許可が必要です',
     },
     sysAudio: {
+      windowsDeniedDesc: 'Windows の既定の再生デバイスを確認して再試行してください。保護された音声や利用できないデバイスは取り込めない場合があります。',
+      windowsDesc: 'Windows の既定の再生デバイスの音声全体を取り込み、この PC で認識と翻訳を行います。画面画像は保存・送信しません。音の回り込みを防ぐためヘッドホンを使用してください。',
       deniedDesc:
         'システムオーディオ録音へのアクセスが拒否されています。システム設定 › プライバシーとセキュリティ › 画面とシステムオーディオの収録 で Subline を許可してから、もう一度お試しください。',
       deniedTitle: 'システムオーディオ録音が拒否されました',
@@ -302,6 +311,9 @@ const messages = {
       version: 'バージョン',
     },
     status: {
+      localPrivate: '音声認識と翻訳はこの PC 内で処理します。',
+      localCuda: 'ローカル翻訳 · NVIDIA',
+      localCpu: 'ローカル翻訳 · CPU（低速）',
       loadingModel: '音声認識モデルを読み込み中…',
       preparing: 'モデルを準備中…',
       transFailed: '翻訳モデルの読み込みに失敗しました',
@@ -376,6 +388,7 @@ const messages = {
       jumpLatest: '최신으로 이동',
     },
     mic: {
+      windowsDeniedDesc: 'Windows 설정 > 개인 정보 및 보안 > 마이크에서 데스크톱 앱의 접근을 허용한 후 다시 시도하세요.',
       allow: '허용하고 시작',
       cancel: '취소',
       deniedDesc:
@@ -386,6 +399,8 @@ const messages = {
       title: '마이크 권한 필요',
     },
     sysAudio: {
+      windowsDeniedDesc: 'Windows 기본 재생 장치를 확인하고 다시 시도하세요. 보호된 오디오나 사용할 수 없는 장치는 캡처되지 않을 수 있습니다.',
+      windowsDesc: 'Windows 기본 재생 장치의 모든 소리를 캡처하여 이 컴퓨터에서 인식하고 번역합니다. 화면 이미지는 저장하거나 전송하지 않습니다. 소리 피드백을 막으려면 헤드폰을 사용하세요.',
       deniedDesc:
         '시스템 오디오 녹음이 거부되었습니다. 시스템 설정 › 개인정보 보호 및 보안 › 화면 및 시스템 오디오 녹음에서 Subline을 허용한 후 다시 시도하세요.',
       deniedTitle: '시스템 오디오 녹음 거부됨',
@@ -453,6 +468,9 @@ const messages = {
       version: '버전',
     },
     status: {
+      localPrivate: '음성 인식과 번역은 이 컴퓨터에서 처리됩니다.',
+      localCuda: '로컬 번역 · NVIDIA',
+      localCpu: '로컬 번역 · CPU (느림)',
       loadingModel: '음성 인식 모델 로딩 중…',
       preparing: '모델 준비 중…',
       transFailed: '번역 모델 로딩 실패',
@@ -526,6 +544,7 @@ const messages = {
       jumpLatest: '回到最新',
     },
     mic: {
+      windowsDeniedDesc: '请在 Windows 设置 > 隐私和安全性 > 麦克风中允许桌面应用访问麦克风，然后重试。',
       allow: '允许并开始',
       cancel: '取消',
       deniedDesc:
@@ -536,6 +555,8 @@ const messages = {
       title: '需要麦克风权限',
     },
     sysAudio: {
+      windowsDeniedDesc: '请检查 Windows 默认播放设备后重试。受保护的声音或不可用的播放设备可能无法采集。',
+      windowsDesc: '采集 Windows 默认播放设备的全部声音，在本机识别和翻译。屏幕图像不会保存或上传。建议戴耳机，避免声音回录。',
       deniedDesc:
         '系统音频录制权限已被拒绝。请在 系统设置 › 隐私与安全性 › 屏幕与系统音频录制 中允许 Subline，然后重试。',
       deniedTitle: '系统音频录制被拒绝',
@@ -603,6 +624,9 @@ const messages = {
       version: '版本',
     },
     status: {
+      localPrivate: '语音识别与翻译均在这台电脑上处理。',
+      localCuda: '本地翻译 · NVIDIA',
+      localCpu: '本地翻译 · CPU（较慢）',
       loadingModel: '识别模型加载中…',
       preparing: '模型准备中…',
       transFailed: '翻译模型加载失败',

@@ -205,7 +205,7 @@ export const MODELS: readonly ModelEntry[] = [
       asrFile('sense-voice', SENSE_VOICE_DIR, 'tokens.txt', 315_894, 'tokens'),
     ],
     approxBytes: 239_549_735,
-    availability: { platforms: ['macos', 'web', 'ios'] },
+    availability: { platforms: ['macos', 'windows', 'web', 'ios'] },
   },
   {
     kind: 'asr',
@@ -220,7 +220,7 @@ export const MODELS: readonly ModelEntry[] = [
       asrFile('paraformer-zh', PARAFORMER_ZH_DIR, 'tokens.txt', 75_354, 'tokens'),
     ],
     approxBytes: 227_405_559,
-    availability: { platforms: ['macos', 'web'] },
+    availability: { platforms: ['macos', 'windows', 'web'] },
   },
   {
     kind: 'asr',
@@ -240,7 +240,7 @@ export const MODELS: readonly ModelEntry[] = [
       asrFile('zipformer-ja-reazonspeech', 'reazonspeech-k2-v2', 'tokens.txt', 45_754, 'tokens', REAZONSPEECH_JA_DIR),
     ],
     approxBytes: 169_180_699,
-    availability: { platforms: ['macos', 'web'] },
+    availability: { platforms: ['macos', 'windows', 'web'] },
   },
   {
     kind: 'asr',
@@ -258,7 +258,7 @@ export const MODELS: readonly ModelEntry[] = [
       asrFile('parakeet-tdt-0.6b-v2-en', PARAKEET_EN_DIR, 'tokens.txt', 9_384, 'tokens'),
     ],
     approxBytes: 661_190_513,
-    availability: { platforms: ['macos', 'web'] },
+    availability: { platforms: ['macos', 'windows', 'web'] },
   },
   {
     kind: 'translation',
@@ -280,7 +280,7 @@ export const MODELS: readonly ModelEntry[] = [
     fallbackLang: 'en',
     langs: M2M100_LANGS,
     // 内存偏大：内存受限运行环境（iOS/iPadOS WebKit）排除本地翻译，只走云端。
-    availability: { platforms: ['macos', 'web'], memoryHeavy: true },
+    availability: { platforms: ['macos', 'windows', 'web'], memoryHeavy: true },
   },
   {
     kind: 'translation',
@@ -300,7 +300,7 @@ export const MODELS: readonly ModelEntry[] = [
     fallbackLang: 'en',
     langs: M2M100_LANGS,
     // 体积超出浏览器 WASM 内存的稳妥范围，web 暂不放开；iOS 走系统翻译不消费本地权重。
-    availability: { platforms: ['macos'], memoryHeavy: true },
+    availability: { platforms: ['macos', 'windows'], memoryHeavy: true },
   },
   {
     kind: 'translation',
@@ -319,6 +319,6 @@ export const MODELS: readonly ModelEntry[] = [
     approxBytes: 4624648896,
     fallbackLang: 'en',
     langs: M2M100_LANGS,
-    availability: { platforms: ['macos'], memoryHeavy: true },
+    availability: { platforms: ['macos', 'windows'], memoryHeavy: true },
   },
 ];

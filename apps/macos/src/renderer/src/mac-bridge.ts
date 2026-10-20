@@ -7,16 +7,27 @@
 // 其余方法全部直通 window.api。
 
 import { audioLevel } from '@rt/core';
-import type { AppBridge, StartResult, PipelineErrorCode } from '@rt/core';
+import type { AppBridge, StartResult, PipelineErrorCode, StatusPayload } from '@rt/core';
 import type { ElectronApi } from '@shared/types';
 
 export function createMacBridge(api: ElectronApi): AppBridge {
   let audioContext: AudioContext | null = null;
   let mediaStream: MediaStream | null = null;
   const levelListeners = new Set<(level: number) => void>();
+  const statusListeners = new Set<(status: StatusPayload) => void>();
   const publishLevel = (level: number) => levelListeners.forEach(cb => cb(level));
   // 重入守卫：正在进行的启动 promise，供并发/重复调用复用，避免双路采集与旧流引用被覆盖泄漏
   let starting: Promise<StartResult> | null = null;
+
+  async function releaseCapture(): Promise<void> {
+    const stream = mediaStream;
+    mediaStream = null;
+    stream?.getTracks().forEach((track) => track.stop());
+    const context = audioContext;
+    audioContext = null;
+    await context?.close().catch(() => undefined);
+    publishLevel(0);
+  }
 
   /** 权限类采集失败（用户拒绝 / 未授权）。 */
   function isPermissionError(err: unknown): boolean {
@@ -33,6 +44,10 @@ export function createMacBridge(api: ElectronApi): AppBridge {
       audio: true,
       video: { width: 4, height: 4, frameRate: 1 },
     });
+    if (!stream.getAudioTracks().some((track) => track.readyState === 'live')) {
+      stream.getTracks().forEach((track) => track.stop());
+      throw new Error('未取得电脑声音，请检查默认播放设备后重试。');
+    }
     stream.getVideoTracks().forEach((tr) => tr.stop());
     return stream;
   }
@@ -49,6 +64,15 @@ export function createMacBridge(api: ElectronApi): AppBridge {
         source === 'system'
           ? await captureSystemAudio()
           : await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
+      for (const track of mediaStream.getAudioTracks()) {
+        track.addEventListener('ended', () => {
+          if (!mediaStream) return;
+          void releaseCapture().then(() => api.stopPipeline()).catch(() => undefined).finally(() => {
+            statusListeners.forEach((listener) => listener({ state: 'error', code: 'audio-interrupted',
+              error: '音频输入已中断，请检查播放或输入设备后重新开始。' }));
+          });
+        }, { once: true });
+      }
       audioContext = new AudioContext({ sampleRate: 16000 });
       await audioContext.audioWorklet.addModule('audio-worklet.js');
       const audioSource = audioContext.createMediaStreamSource(mediaStream);
@@ -60,11 +84,7 @@ export function createMacBridge(api: ElectronApi): AppBridge {
       audioSource.connect(capture);
       return r;
     } catch (err) {
-      publishLevel(0);
-      mediaStream?.getTracks().forEach((tr) => tr.stop());
-      mediaStream = null;
-      await audioContext?.close();
-      audioContext = null;
+      await releaseCapture();
       await api.stopPipeline();
       const error = err instanceof Error ? err.message : String(err);
       // 系统音频路径：区分「录制权限被拒」与「采集链路建立失败」；麦克风路径沿用原语义。
@@ -74,7 +94,7 @@ export function createMacBridge(api: ElectronApi): AppBridge {
           : 'audio-capture-failed';
         return { ok: false, error, code };
       }
-      return { ok: false, error };
+      return { ok: false, error, code: isPermissionError(err) ? 'mic-permission' : 'audio-capture-failed' };
     }
   }
 
@@ -102,14 +122,7 @@ export function createMacBridge(api: ElectronApi): AppBridge {
       if (starting) {
         await starting.catch(() => undefined);
       }
-      if (mediaStream) {
-        mediaStream.getTracks().forEach((tr) => tr.stop());
-        mediaStream = null;
-      }
-      if (audioContext) {
-        await audioContext.close();
-        audioContext = null;
-      }
+      await releaseCapture();
       return api.stopPipeline();
     },
 
@@ -117,6 +130,7 @@ export function createMacBridge(api: ElectronApi): AppBridge {
     prewarmPipeline: () => api.prewarmPipeline(),
     getMicStatus: () => api.getMicStatus(),
     openMicSettings: () => api.openMicSettings(),
+    openSystemAudioSettings: () => api.openSystemAudioSettings?.(),
     getSettings: () => api.getSettings(),
     saveSettings: (settings) => api.saveSettings(settings),
     testCloud: (cfg) => api.testCloud(cfg),
@@ -139,7 +153,11 @@ export function createMacBridge(api: ElectronApi): AppBridge {
     onSegment: (cb) => api.onSegment(cb),
     onPartial: (cb) => api.onPartial(cb),
     onTranslation: (cb) => api.onTranslation(cb),
-    onStatus: (cb) => api.onStatus(cb),
+    onStatus: (cb) => {
+      statusListeners.add(cb);
+      const unsubscribe = api.onStatus(cb);
+      return () => { statusListeners.delete(cb); unsubscribe(); };
+    },
     onTranslationStatus: (cb) => api.onTranslationStatus(cb),
   };
 }

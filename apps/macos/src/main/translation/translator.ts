@@ -3,6 +3,7 @@
 // Translator 接口、TranslateProgress、CloudTranslator 均来自 @rt/core；
 // 本地 LocalTranslator 依赖原生模块，留在 macOS。
 import { HyTranslator } from './hy-translator';
+import type { HyRuntimeOptions } from './hy-runtime';
 import { createLocalTranslator } from './local-translator';
 import { CloudTranslator, type Translator, type TranslateProgress } from '@rt/core';
 import type { CloudTranslationConfig, TranslationEngine } from '../../shared/types';
@@ -17,6 +18,7 @@ export interface TranslatorConfig {
   cacheDir?: string;
   /** [cloud] OpenAI 兼容端点配置 */
   cloud?: CloudTranslationConfig;
+  onRuntimeStatus?: HyRuntimeOptions['onRuntimeStatus'];
 }
 
 export function createTranslator(cfg: TranslatorConfig): Translator {
@@ -29,6 +31,6 @@ export function createTranslator(cfg: TranslatorConfig): Translator {
   if (!cfg.cacheDir) {
     throw new Error('本地翻译缺少 cacheDir');
   }
-  if (cfg.backend === 'hy-mt2-7b') return new HyTranslator(cfg.cacheDir);
+  if (cfg.backend === 'hy-mt2-7b') return new HyTranslator(cfg.cacheDir, { onRuntimeStatus: cfg.onRuntimeStatus });
   return createLocalTranslator(cfg.backend, cfg.cacheDir);
 }

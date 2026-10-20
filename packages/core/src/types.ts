@@ -77,6 +77,9 @@ export interface StartResult {
 export interface TranslationStatusPayload {
   state: 'loading' | 'ready' | 'error';
   error?: string;
+  backend?: 'cuda' | 'cpu' | 'metal';
+  notice?: string;
+  memory?: { ramTotalBytes: number; ramFreeBytes: number; vramTotalBytes?: number; vramFreeBytes?: number };
 }
 
 /** 首次启动下载 ASR 模型的状态 */
@@ -137,7 +140,7 @@ export type AsrLang = 'auto' | 'en' | 'ja' | 'ko' | 'zh';
 export type AsrCommitStrategy = 'agreement' | 'chunk';
 
 /** 运行平台标识：由各端桥接注入，用于按平台过滤可用模型、收敛音源等。 */
-export type Platform = 'macos' | 'web' | 'ios';
+export type Platform = 'macos' | 'windows' | 'web' | 'ios';
 
 /** 音频采集来源：麦克风 / 系统音频（不支持系统音频的端在桥接层收敛为 mic）。 */
 export type AudioSource = 'mic' | 'system';

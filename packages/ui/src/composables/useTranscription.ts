@@ -1,5 +1,5 @@
 import { reactive, ref } from 'vue';
-import type { PipelineErrorCode } from '@rt/core';
+import type { PipelineErrorCode, TranslationStatusPayload } from '@rt/core';
 import { fmtClock } from '../utils/datetime';
 import { bridge } from '../bridge';
 
@@ -38,6 +38,9 @@ export const errorCode = ref<PipelineErrorCode | null>(null);
 // 翻译引擎装载状态（独立，显示在顶栏，不影响录音）。下载进度不在此，走 onSetupProgress（下载弹窗消费）。
 export const translationLoading = ref(false);
 export const translationError = ref(false);
+export const translationErrorDetail = ref('');
+export const translationBackend = ref<TranslationStatusPayload['backend']>();
+export const translationNotice = ref('');
 
 // 录音开始时的本地时刻（epoch ms），用于把片段的相对偏移换算成本地时钟时间
 let recordStartEpoch = 0;
@@ -132,6 +135,9 @@ export function registerTranscriptionListeners(): void {
     }
   });
   bridge().onTranslationStatus((s) => {
+    translationBackend.value = s.backend;
+    translationNotice.value = s.notice ?? '';
+    translationErrorDetail.value = s.error ?? '';
     if (s.state === 'loading') {
       // 装载模型入内存（无字节进度；下载进度另经 onSetupProgress 上报给下载弹窗）。
       translationLoading.value = true;

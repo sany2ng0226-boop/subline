@@ -25,7 +25,11 @@
     "dist:preview": "node scripts/package-mac.mjs --dir --preview",
     "test-stage-latency": "node scripts/build-test.mjs test/stage-latency.ts && node dist-test/test/stage-latency.js",
     "test-model-integrity": "node scripts/build-test.mjs test/model-integrity.ts && node --test dist-test/test/model-integrity.js",
-    "test-hy-local": "node scripts/build-test.mjs test/hy-local.ts && node dist-test/test/hy-local.js"
+    "test-hy-local": "node scripts/build-test.mjs test/hy-local.ts && node dist-test/test/hy-local.js",
+    "dist:windows": "node scripts/package-win.mjs",
+    "dist:win": "node scripts/package-win.mjs",
+    "dist:win:dir": "node scripts/package-win.mjs --dir",
+    "test:win-native": "node scripts/windows-native-smoke.mjs"
   },
   "keywords": [],
   "author": "",

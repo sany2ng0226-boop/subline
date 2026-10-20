@@ -32,3 +32,10 @@ apps/macos/build/icon.icns
 
 # Private diagnostic traces and transcripts
 apps/macos/test-results/
+
+/.deploy-windows/
+apps/macos/release-windows/
+apps/macos/build/icon.ico
+apps/macos/build/icon-windows.png
+apps/macos/build/.icon-ico/
+work/

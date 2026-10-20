@@ -1,10 +1,12 @@
 import { TranslationRequestQueue } from './translation/request-queue';
+import { runCandidateSmoke } from './candidate-smoke';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fork, type ChildProcess } from 'node:child_process';
 import {
   app,
   BrowserWindow,
+  desktopCapturer,
   ipcMain,
   session,
   shell,
@@ -69,8 +71,16 @@ const LEGACY_PROFILE_DIRS: Record<string, string> = {
   'Realtime Translator Internal': 'Classroom Translator Internal',
   'Realtime Translator': 'Classroom Translator',
 };
-if (app.isPackaged && LEGACY_PROFILE_DIRS[app.getName()]) {
+if (app.isPackaged && process.platform === 'win32') {
+  app.setPath('userData', path.join(app.getPath('appData'), 'Subline Windows Candidate'));
+} else if (app.isPackaged && LEGACY_PROFILE_DIRS[app.getName()]) {
   app.setPath('userData', path.join(app.getPath('appData'), LEGACY_PROFILE_DIRS[app.getName()]));
+}
+const smokeFlag = process.platform === 'win32' ? process.argv.indexOf('--candidate-smoke') : -1;
+const smokeReport = smokeFlag >= 0 ? process.argv[smokeFlag + 1] : undefined;
+if (smokeFlag >= 0) {
+  if (!smokeReport || !path.isAbsolute(smokeReport)) throw new Error('Candidate smoke requires an absolute report path');
+  app.setPath('userData', fs.mkdtempSync(path.join(app.getPath('temp'), 'subline-candidate-smoke-')));
 }
 
 // 模型存放目录：
@@ -137,7 +147,7 @@ function translationModelCached(): boolean {
 
 /** 本机是否支持系统音频采集（macOS 14.2+）。与 preload 的音源判定共用同一逻辑。 */
 function systemAudioAvailable(): boolean {
-  return process.platform === 'darwin' && systemAudioSupported(process.getSystemVersion());
+  return systemAudioSupported(process.getSystemVersion(), process.platform);
 }
 
 /**
@@ -186,6 +196,7 @@ function createWindow(): void {
   win = new BrowserWindow({
     width: 1100,
     height: 760,
+    show: !smokeReport,
     title: app.isPackaged ? app.getName() : previewProfile ? 'Subline Preview' : 'Subline',
     ...(app.isPackaged ? {} : { icon: APP_ICON }),
     webPreferences: {
@@ -483,6 +494,8 @@ ipcMain.on('mic:open-settings', () => {
     void shell.openExternal(
       'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
     );
+  } else if (process.platform === 'win32') {
+    void shell.openExternal('ms-settings:privacy-microphone');
   }
 });
 
@@ -493,6 +506,8 @@ ipcMain.on('system-audio:open-settings', () => {
     void shell.openExternal(
       'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
     );
+  } else if (process.platform === 'win32') {
+    void shell.openExternal('ms-settings:sound');
   }
 });
 
@@ -529,7 +544,7 @@ ipcMain.handle('models:list', (): ModelInfo[] => {
   const settings = loadSettings();
   const models: ModelInfo[] = [];
   for (const spec of ASR_MODELS) {
-    if (!spec.platforms.includes('macos')) continue;
+    if (!spec.platforms.includes(process.platform === 'win32' ? 'windows' : 'macos')) continue;
     // sizeBytes 为该模型自身文件的实际字节和（不含公共依赖 VAD）
     let sizeBytes = 0;
     for (const f of spec.files) {
@@ -550,7 +565,7 @@ ipcMain.handle('models:list', (): ModelInfo[] => {
   // 翻译模型：注册表驱动（platforms 含 macos）。每模型占用/齐全按其在 transformers 缓存中的
   // 子目录（<cacheDir>/<modelId>）判断；modelId 形如 Xenova/xxx，path.join 拼出该模型独立目录。
   for (const spec of LOCAL_TRANSLATION_MODELS) {
-    if (!spec.platforms.includes('macos')) continue;
+    if (!spec.platforms.includes(process.platform === 'win32' ? 'windows' : 'macos')) continue;
     models.push({
       kind: 'translation',
       id: spec.id,
@@ -659,7 +674,7 @@ ipcMain.on('pipeline:audio', (_event, samples: Float32Array) => {
   asrChild.postMessage({ type: 'audio', samples: f });
 });
 
-const internalArchives = app.getName().endsWith('Internal') || !!previewProfile;
+const internalArchives = process.platform === 'win32' || app.getName().endsWith('Internal') || !!previewProfile;
 const archiveLibrary = new ArchiveLibraryStore(path.join(app.getPath('userData'), 'archive-library.json'));
 function requireArchiveLibrary(): void {
   if (!internalArchives) throw new Error('Archive library is only available in Internal');
@@ -773,17 +788,36 @@ app.whenReady().then(() => {
   if (!app.isPackaged && process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(APP_ICON);
   }
-  // 系统音频采集：渲染层 getDisplayMedia 走到这里，audio:'loopback' 采集系统播放的声音
-  // （CoreAudio Tap，触发的是「系统音频录制」授权）。video 轨用请求方自身 frame 的画面充当
-  // （渲染层拿到流后立即停掉，只用 audio）——不经 desktopCapturer 取屏幕源，因此**不需要**
-  // macOS「屏幕录制」权限，也不存在取源失败的异步拒绝路径。不使用系统选择器（useSystemPicker）。
+  // macOS keeps its frame-only CoreAudio path. Windows loopback needs a desktop source;
+  // the renderer immediately stops its video track and never renders or saves screen content.
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
-    // frame 已随导航/窗口关闭销毁时不作答：请求随渲染上下文一并消亡，无需（也无法）供流
-    if (request.frame) {
-      callback({ video: request.frame, audio: 'loopback' });
+    const frame = request.frame;
+    if (!frame || !win || win.isDestroyed() || frame !== win.webContents.mainFrame
+      || !request.audioRequested || effectiveSettings().audioSource !== 'system' || !systemAudioAvailable()) {
+      callback({});
+      return;
     }
+    if (process.platform !== 'win32') {
+      callback({ video: frame, audio: 'loopback' });
+      return;
+    }
+    void desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } })
+      .then((sources) => {
+        if (!win || win.isDestroyed() || frame.isDestroyed() || frame !== win.webContents.mainFrame || !sources[0]) {
+          callback({});
+          return;
+        }
+        callback({ video: sources[0], audio: 'loopback' });
+      })
+      .catch(() => callback({}));
   });
   createWindow();
+  if (smokeReport && win) {
+    void runCandidateSmoke(win, app.getPath('userData'), smokeReport)
+      .then((ok) => app.exit(ok ? 0 : 1))
+      .catch((error) => { console.error(error); app.exit(1); });
+    return;
+  }
   // 启动即按「翻译已开 + 本地引擎 + 模型已缓存」预热本地翻译模型，降低首句翻译延迟；
   // 未缓存则不在此下载（首次下载交给翻译模型下载页）。cloud 引擎的预热仍只在设置保存时触发。
   const t = loadSettings().translation;

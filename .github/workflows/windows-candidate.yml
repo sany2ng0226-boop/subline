@@ -1,0 +1,74 @@
+name: Windows candidate
+
+on:
+  push:
+    branches: [codex/windows-candidate]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-x64:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      NODE_LLAMA_CPP_SKIP_DOWNLOAD: 'true'
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      RT_INTERNAL_BUILD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install the locked Windows dependency graph
+        run: pnpm install --frozen-lockfile
+      - name: Core tests
+        run: pnpm --filter @rt/core test
+      - name: Desktop type check
+        run: pnpm --filter @rt/macos type-check
+      - name: Audio, inference and subtitle regressions
+        run: pnpm exec vitest run apps/macos/src/shared/audio-source.test.ts apps/macos/src/renderer/src/mac-bridge.test.ts apps/macos/src/main/translation/hy-runtime.test.ts packages/ui/src/composables/useTranscription.test.ts apps/macos/src/main/translation/request-queue.test.ts
+      - name: Package NSIS installer and portable zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force work/windows-diagnostics | Out-Null
+          pnpm --filter @rt/macos dist:win 2>&1 | Tee-Object -FilePath work/windows-diagnostics/package.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Load the packaged native runtimes on Windows
+        run: pnpm --filter @rt/macos test:win-native --app-dir release-windows/win-unpacked --diagnostics ../../work/windows-diagnostics
+      - name: Hash the distributable files
+        shell: pwsh
+        run: |
+          Get-ChildItem apps/macos/release-windows -File | Where-Object { $_.Extension -in '.exe', '.zip' } | ForEach-Object {
+            $hash = Get-FileHash $_.FullName -Algorithm SHA256
+            "$($hash.Hash.ToLower())  $($_.Name)"
+          } | Set-Content -Encoding utf8 apps/macos/release-windows/SHA256SUMS.txt
+      - name: Upload validated candidate files
+        uses: actions/upload-artifact@v4
+        with:
+          name: Subline-windows-x64-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+          path: |
+            apps/macos/release-windows/*.exe
+            apps/macos/release-windows/*.zip
+            apps/macos/release-windows/SHA256SUMS.txt
+      - name: Preserve build and native smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Subline-windows-diagnostics-${{ github.sha }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            work/windows-diagnostics/
+            apps/macos/release-windows/builder-debug.yml
+            apps/macos/release-windows/builder-effective-config.yaml

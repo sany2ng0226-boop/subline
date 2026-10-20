@@ -10,11 +10,13 @@ import type {
   TranslateToMain,
   TranslationEngine,
   CloudTranslationConfig,
+  TranslationStatusPayload,
 } from '../../shared/types';
 
 let translator: Translator | null = null;
 let ready: Promise<void> | null = null;
 let config: { engine: TranslationEngine; cloud: CloudTranslationConfig; cacheDir: string } | null = null;
+let runtimeStatus: Pick<TranslationStatusPayload, 'backend' | 'notice' | 'memory'> = {};
 
 function post(msg: TranslateToMain): void {
   process.send!(msg);
@@ -27,7 +29,12 @@ function build(): Translator {
   if (config.engine === 'cloud') {
     return createTranslator({ backend: 'cloud', cloud: config.cloud });
   }
-  return createTranslator({ backend: config.engine, cacheDir: config.cacheDir });
+  return createTranslator({ backend: config.engine, cacheDir: config.cacheDir,
+    onRuntimeStatus: (status) => {
+      runtimeStatus = { backend: status.backend, notice: status.fallbackReason, memory: status.memory };
+      post({ type: 'status', payload: { state: 'loading', ...runtimeStatus } });
+    },
+  });
 }
 
 /** 懒加载翻译器，并把加载/下载进度报回主进程；重复调用幂等 */
@@ -49,7 +56,7 @@ function ensure(): Promise<Translator> {
     // 本进程只负责装载与推理（下载由主进程的自研下载链路完成），故仅上报 loading/ready/error 状态。
     ready = instance
       .init()
-      .then(() => post({ type: 'status', payload: { state: 'ready' } }))
+      .then(() => post({ type: 'status', payload: { state: 'ready', ...runtimeStatus } }))
       .catch((err) => {
         ready = null; // 允许下次重试
         post({ type: 'status', payload: { state: 'error', error: (err as Error).message } });
@@ -66,12 +73,13 @@ process.on('message', (msg: MainToTranslate) => {
       config = { engine: msg.engine, cloud: msg.cloud, cacheDir: msg.cacheDir };
       translator = null;
       ready = null;
+      runtimeStatus = {};
       break;
     case 'preheat':
       // 仅装载模型入内存（降低首句翻译延迟）；补发 ready 使装载状态明确终结。
       // 首次预热会与 ensure 内部的 ready 重复一次，UI 幂等，无害。
       ensure()
-        .then(() => post({ type: 'status', payload: { state: 'ready' } }))
+        .then(() => post({ type: 'status', payload: { state: 'ready', ...runtimeStatus } }))
         .catch(() => {});
       break;
     case 'translate':
