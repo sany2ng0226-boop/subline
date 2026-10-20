@@ -15,7 +15,8 @@ const flag = (name, fallback) => {
 };
 const appDir = path.resolve(flag('--app-dir', 'release-windows/win-unpacked'));
 const diagnostics = path.resolve(flag('--diagnostics', '../../work/windows-diagnostics'));
-const report = { platform: process.platform, arch: process.arch, node: process.versions.node, checks: [] };
+const nativeKind = flag('--native-kind');
+const report = { platform: process.platform, arch: process.arch, node: process.versions.node, nativeKind, checks: [] };
 mkdirSync(diagnostics, { recursive: true });
 
 function check(name, detail) {
@@ -40,25 +41,30 @@ function magic(file) {
 }
 
 async function nativeChild() {
+  assert.ok(nativeKind === 'asr' || nativeKind === 'translation', 'A native child requires --native-kind asr or translation.');
   const unpacked = path.join(appDir, 'resources', 'app.asar.unpacked');
   const appRequire = createRequire(path.join(unpacked, 'package.json'));
-  const sherpa = appRequire('sherpa-onnx-node');
-  assert.equal(typeof sherpa.OfflineRecognizer, 'function');
-  assert.equal(typeof sherpa.Vad, 'function');
-  // readWave calls the same N-API addon as recognizer construction, without a model download.
-  const wav = Buffer.alloc(44 + 320);
-  wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
-  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
-  wav.writeUInt32LE(16_000, 24); wav.writeUInt32LE(32_000, 28);
-  wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(320, 40);
-  const wavPath = path.join(diagnostics, 'native-silence.wav');
-  writeFileSync(wavPath, wav);
-  // Electron's memory cage requires copied samples, including in ELECTRON_RUN_AS_NODE mode.
-  const wave = sherpa.readWave(wavPath, false);
-  assert.equal(wave.sampleRate, 16_000);
-  assert.equal(wave.samples.length, 160);
-  check('packaged-sherpa-native-call', { sampleRate: wave.sampleRate, samples: wave.samples.length });
+  if (nativeKind === 'asr') {
+    const sherpa = appRequire('sherpa-onnx-node');
+    assert.equal(typeof sherpa.OfflineRecognizer, 'function');
+    assert.equal(typeof sherpa.Vad, 'function');
+    // readWave calls the same N-API addon as recognizer construction, without a model download.
+    const wav = Buffer.alloc(44 + 320);
+    wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
+    wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+    wav.writeUInt32LE(16_000, 24); wav.writeUInt32LE(32_000, 28);
+    wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(320, 40);
+    const wavPath = path.join(diagnostics, 'native-silence.wav');
+    writeFileSync(wavPath, wav);
+    // Electron's memory cage requires copied samples, including in ELECTRON_RUN_AS_NODE mode.
+    const wave = sherpa.readWave(wavPath, false);
+    assert.equal(wave.sampleRate, 16_000);
+    assert.equal(wave.samples.length, 160);
+    check('packaged-sherpa-native-call', { sampleRate: wave.sampleRate, samples: wave.samples.length });
+    return;
+  }
 
+  // Match production process isolation: Sherpa and Transformers ship different onnxruntime.dll versions.
   const { getLlama } = await import(pathToFileURL(appRequire.resolve('node-llama-cpp')).href);
   const llama = await getLlama({ gpu: false, build: 'never', skipDownload: true });
   try {
@@ -132,18 +138,23 @@ async function main() {
   }
   check('windows-only-native-assets', { inspectedFiles: inspected, archiveEntries: entries.length });
 
-  const child = spawnSync(executable, [
-    path.resolve(process.argv[1]), '--native-child', '--app-dir', appDir, '--diagnostics', diagnostics,
-  ], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', NODE_LLAMA_CPP_SKIP_DOWNLOAD: 'true' },
-    encoding: 'utf8', timeout: 120_000, maxBuffer: 8 * 1024 * 1024,
-  });
-  writeFileSync(path.join(diagnostics, 'native-runtime.log'), `${child.stdout ?? ''}\n${child.stderr ?? ''}`);
-  if (child.error) throw child.error;
-  assert.equal(child.status, 0, `Packaged native runtime failed; see native-runtime.log (${child.status ?? child.signal})`);
-  const nativeReport = JSON.parse(readFileSync(path.join(diagnostics, 'native-child.json'), 'utf8'));
-  assert.equal(nativeReport.status, 'passed');
-  check('packaged-electron-native-process', { checks: nativeReport.checks });
+  for (const kind of ['asr', 'translation']) {
+    const child = spawnSync(executable, [
+      path.resolve(process.argv[1]), '--native-child', '--native-kind', kind,
+      '--app-dir', appDir, '--diagnostics', diagnostics,
+    ], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', NODE_LLAMA_CPP_SKIP_DOWNLOAD: 'true' },
+      encoding: 'utf8', timeout: 120_000, maxBuffer: 8 * 1024 * 1024,
+    });
+    const logName = `native-runtime-${kind}.log`;
+    writeFileSync(path.join(diagnostics, logName), `${child.stdout ?? ''}\n${child.stderr ?? ''}`);
+    if (child.error) throw child.error;
+    assert.equal(child.status, 0, `Packaged ${kind} runtime failed; see ${logName} (${child.status ?? child.signal})`);
+    const nativeReport = JSON.parse(readFileSync(path.join(diagnostics, `native-child-${kind}.json`), 'utf8'));
+    assert.equal(nativeReport.status, 'passed');
+    assert.equal(nativeReport.nativeKind, kind);
+    check(`packaged-electron-${kind}-process`, { checks: nativeReport.checks });
+  }
 
   const guiReportPath = path.join(diagnostics, 'candidate-gui-smoke.json');
   const guiEnv = { ...process.env, NODE_LLAMA_CPP_SKIP_DOWNLOAD: 'true' };
@@ -168,6 +179,7 @@ try {
   console.error(report.error);
   process.exitCode = 1;
 } finally {
-  writeFileSync(path.join(diagnostics, process.argv.includes('--native-child') ? 'native-child.json' : 'native-smoke.json'),
+  const childKind = ['asr', 'translation'].includes(nativeKind) ? nativeKind : 'invalid';
+  writeFileSync(path.join(diagnostics, process.argv.includes('--native-child') ? `native-child-${childKind}.json` : 'native-smoke.json'),
     `${JSON.stringify(report, null, 2)}\n`);
 }
