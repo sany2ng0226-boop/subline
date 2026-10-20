@@ -53,7 +53,8 @@ async function nativeChild() {
   wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(320, 40);
   const wavPath = path.join(diagnostics, 'native-silence.wav');
   writeFileSync(wavPath, wav);
-  const wave = sherpa.readWave(wavPath);
+  // Electron's memory cage requires copied samples, including in ELECTRON_RUN_AS_NODE mode.
+  const wave = sherpa.readWave(wavPath, false);
   assert.equal(wave.sampleRate, 16_000);
   assert.equal(wave.samples.length, 160);
   check('packaged-sherpa-native-call', { sampleRate: wave.sampleRate, samples: wave.samples.length });
