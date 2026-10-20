@@ -34,6 +34,16 @@ The older **Classroom Translator 0.2.0-beta.1** remains a historical build under
 
 The optional API translation backend remains available for an existing local server or a user-configured remote service. Local Hy-MT2 keeps the same source-only context, rule-based sentence assembly and translation backpressure. Changing the inference runtime does not guarantee byte-for-byte identical translations.
 
+## Windows candidate status
+
+Windows work targets **Windows 10/11 x64**, with microphone **or** default system-playback audio selected before recording, local SenseVoice recognition, Hy-MT2 7B translation and manual text archives. The candidate version is **0.2.0-beta.3-windows.1**; it is not yet a published or real-device-qualified Windows release. The signed macOS beta.2 above remains available and unchanged.
+
+Windows tries the packaged NVIDIA CUDA runtime first and reports CPU fallback when CUDA or GPU allocation is unavailable. It never switches to a cloud service automatically. Hardware capacity and actual performance remain unqualified; having an NVIDIA GPU alone does not establish compatibility. Model downloads require confirmation and an internet connection.
+
+The candidate uses `%APPDATA%\Subline Windows Candidate` for settings, archives and models, separate from macOS data. The installer is unsigned, so Windows SmartScreen may warn about an unrecognized application. Check its source and checksum; do not disable Windows protection globally. Normal uninstall retains candidate app data. Meeting, Interview and shadowing are excluded.
+
+The Windows-only build command is `pnpm --filter @rt/macos dist:win`; the directory and package name are retained for the shared Electron desktop host. It prepares NSIS and ZIP candidates without publishing. Automated checks cover packaged native bindings and a synthetic GUI/settings/archive flow; build completion, real microphone/system capture and GPU inference must be reported separately. See the [approved scope and friend acceptance checklist](docs/product/windows-candidate.md).
+
 ## Development and checks
 
 This source and the new Internal beta include the Subline branding, continuous-caption UI, following fix and archive folders. The historical Classroom Translator binary remains separate. The Internal home-screen recognition-language selector and archive folders are enabled by an Internal build.

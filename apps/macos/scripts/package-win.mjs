@@ -13,6 +13,12 @@ const releaseDir = process.env.RT_RELEASE_DIR
   ? path.resolve(process.env.RT_RELEASE_DIR)
   : path.join(appDir, 'release-windows');
 const dirOnly = process.argv.includes('--dir');
+const prepackagedIndex = process.argv.indexOf('--prepackaged');
+const prepackagedArg = prepackagedIndex >= 0 ? process.argv[prepackagedIndex + 1] : undefined;
+if (prepackagedIndex >= 0 && (!prepackagedArg || prepackagedArg.startsWith('--') || dirOnly)) {
+  throw new Error('--prepackaged requires the verified win-unpacked directory and cannot be combined with --dir.');
+}
+const prepackaged = prepackagedArg ? path.resolve(appDir, prepackagedArg) : undefined;
 const pnpmCli = process.env.npm_execpath;
 
 if (process.platform !== 'win32' || process.arch !== 'x64') {
@@ -35,39 +41,48 @@ function run(executable, args, cwd = appDir) {
 }
 const pnpm = (args, cwd) => run(process.execPath, [pnpmCli, ...args], cwd);
 
-console.log('1/4 Build the shared desktop host');
-pnpm(['run', 'build']);
+if (!prepackaged) {
+  console.log('1/4 Build the shared desktop host');
+  pnpm(['run', 'build']);
 
-console.log('2/4 Generate the Windows icon');
-const buildDir = path.join(appDir, 'build');
-const iconPng = path.join(buildDir, 'icon-windows.png');
-const iconDir = path.join(buildDir, '.icon-ico');
-mkdirSync(buildDir, { recursive: true });
-await sharp(path.join(root, 'assets', 'icon.svg'), { density: 256 })
-  .resize(256, 256).png().toFile(iconPng);
-rmSync(iconDir, { recursive: true, force: true });
-try {
-  const { appBuilderPath } = require('app-builder-bin');
-  run(appBuilderPath, ['icon', '--format', 'ico', '--root', buildDir, '--out', iconDir, '--input', iconPng]);
-  renameSync(path.join(iconDir, 'icon.ico'), path.join(buildDir, 'icon.ico'));
-} finally {
+  console.log('2/4 Generate the Windows icon');
+  const buildDir = path.join(appDir, 'build');
+  const iconPng = path.join(buildDir, 'icon-windows.png');
+  const iconDir = path.join(buildDir, '.icon-ico');
+  mkdirSync(buildDir, { recursive: true });
+  await sharp(path.join(root, 'assets', 'icon.svg'), { density: 256 })
+    .resize(256, 256).png().toFile(iconPng);
   rmSync(iconDir, { recursive: true, force: true });
-}
+  try {
+    const { appBuilderPath } = require('app-builder-bin');
+    run(appBuilderPath, ['icon', '--format', 'ico', '--root', buildDir, '--out', iconDir, '--input', iconPng]);
+    renameSync(path.join(iconDir, 'icon.ico'), path.join(buildDir, 'icon.ico'));
+  } finally {
+    rmSync(iconDir, { recursive: true, force: true });
+  }
 
-console.log('3/4 Export the locked, self-contained dependency graph');
-rmSync(deployDir, { recursive: true, force: true });
-pnpm(['--filter', '@rt/macos', 'deploy', '--prod=false', deployDir], root);
-// Generated icons may be excluded by pnpm's pack rules; copy only the build resources explicitly.
-mkdirSync(path.join(deployDir, 'build'), { recursive: true });
-copyFileSync(path.join(buildDir, 'icon.ico'), path.join(deployDir, 'build', 'icon.ico'));
-copyFileSync(path.join(buildDir, 'HY-MT2-LICENSE.txt'), path.join(deployDir, 'build', 'HY-MT2-LICENSE.txt'));
-copyFileSync(path.join(appDir, 'electron-builder.windows.yml'), path.join(deployDir, 'electron-builder.windows.yml'));
-for (const dependency of [
-  '@node-llama-cpp/win-x64', '@node-llama-cpp/win-x64-cuda',
-  '@node-llama-cpp/win-x64-cuda-ext', 'sherpa-onnx-win-x64',
-]) {
-  if (!existsSync(path.join(deployDir, 'node_modules', dependency, 'package.json'))) {
-    throw new Error(`Missing locked Windows runtime ${dependency}; install optional dependencies on Windows before packaging.`);
+  console.log('3/4 Export the locked, self-contained dependency graph');
+  rmSync(deployDir, { recursive: true, force: true });
+  pnpm(['--filter', '@rt/macos', 'deploy', '--prod=false', deployDir], root);
+  // Generated icons may be excluded by pnpm's pack rules; copy only the build resources explicitly.
+  mkdirSync(path.join(deployDir, 'build'), { recursive: true });
+  copyFileSync(path.join(buildDir, 'icon.ico'), path.join(deployDir, 'build', 'icon.ico'));
+  copyFileSync(path.join(buildDir, 'HY-MT2-LICENSE.txt'), path.join(deployDir, 'build', 'HY-MT2-LICENSE.txt'));
+  copyFileSync(path.join(appDir, 'electron-builder.windows.yml'), path.join(deployDir, 'electron-builder.windows.yml'));
+  for (const dependency of [
+    '@node-llama-cpp/win-x64', '@node-llama-cpp/win-x64-cuda',
+    '@node-llama-cpp/win-x64-cuda-ext', 'sherpa-onnx-win-x64',
+  ]) {
+    if (!existsSync(path.join(deployDir, 'node_modules', dependency, 'package.json'))) {
+      throw new Error(`Missing locked Windows runtime ${dependency}; install optional dependencies on Windows before packaging.`);
+    }
+  }
+} else {
+  for (const file of [
+    path.join(prepackaged, 'Subline.exe'), path.join(prepackaged, 'resources', 'app.asar'),
+    path.join(deployDir, 'package.json'), path.join(deployDir, 'electron-builder.windows.yml'),
+  ]) {
+    if (!existsSync(file)) throw new Error(`Missing prepackaged build resource: ${file}. Run dist:win:dir first.`);
   }
 }
 
@@ -77,7 +92,7 @@ const deployRequire = createRequire(path.join(deployDir, 'package.json'));
 const builderCli = path.join(path.dirname(deployRequire.resolve('electron-builder/package.json')), 'cli.js');
 run(process.execPath, [
   builderCli, '--config', 'electron-builder.windows.yml', '--win', '--x64',
-  ...(dirOnly ? ['--dir'] : []), '--publish', 'never',
+  ...(dirOnly ? ['--dir'] : []), ...(prepackaged ? ['--prepackaged', prepackaged] : []), '--publish', 'never',
   `-c.extraMetadata.version=${version}`,
   '-c.extraMetadata.name=subline-windows-candidate',
   '-c.extraMetadata.productName=Subline',

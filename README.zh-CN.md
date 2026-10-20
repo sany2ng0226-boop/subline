@@ -31,6 +31,16 @@
 
 旧 `v0.2.0-beta.1` 是 Classroom Translator 历史测试包；下方上游下载也不属于 Subline。Internal 与稳定渠道使用各自的设置、归档和模型目录；替换 Internal 应用会沿用现有 Internal 数据。
 
+## Windows 候选版
+
+Windows 版目标为 **Windows 10/11 x64**：录音前选择麦克风或默认播放设备的系统声音，使用本地 SenseVoice 识别、Hy-MT2 7B 翻译，并手动保存文字归档。候选版本为 **0.2.0-beta.3-windows.1**，目前尚未公开发布或完成真实设备验收；上方已签名、公证的 Mac beta.2 下载保持不变。
+
+本地翻译优先尝试随包提供的 NVIDIA CUDA 运行时，不可用时明确显示 CPU 降级；不会自动切到云服务。具体显卡、显存和内存未知，尚无经过验收的最低硬件配置，也不承诺 CPU 实时速度。首次模型下载需联网和用户确认。
+
+候选版的设置、归档与模型独立保存在 `%APPDATA%\Subline Windows Candidate`。安装器未签名，Windows SmartScreen 可能提示未知应用；核对来源与校验值，不要全局关闭系统防护。常规卸载保留应用数据。本轮不包含 Meeting、面试辅助或影子跟读。
+
+Windows x64 构建命令为 `pnpm --filter @rt/macos dist:win`，`apps/macos` 与包名沿用共享桌面宿主的历史名称；命令准备 NSIS 安装器和 ZIP，不发布。自动检查覆盖打包后原生依赖与合成界面、设置、归档流程；构建结果、真人收音、真实系统声音和 GPU 推理分别验收。详见 [Windows 范围与朋友验收清单](docs/product/windows-candidate.md)。
+
 ## 从源码运行
 
 使用 Node.js 22 和 `package.json` 固定的 pnpm **10.33.0**：

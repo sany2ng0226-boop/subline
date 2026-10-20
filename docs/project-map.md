@@ -1,6 +1,6 @@
 # 项目地图
 
-Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator / `@rt/*`）是 pnpm workspace 单仓库。`@rt/core` 提供平台无关规则与契约，`@rt/ui` 提供三端共享界面，macOS、iOS 和 Web 宿主通过 `AppBridge` 注入平台能力。外部可见的产品行为见[product/overview.md](product/overview.md) 和 [product/experience.md](product/experience.md)。
+Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator / `@rt/*`）是 pnpm workspace 单仓库。`@rt/core` 提供平台无关规则与契约，`@rt/ui` 提供共享界面，macOS、Windows 候选版、iOS 和 Web 宿主通过 `AppBridge` 注入平台能力。外部可见的产品行为见[product/overview.md](product/overview.md) 和 [product/experience.md](product/experience.md)。
 
 ## 模块导航
 
@@ -8,7 +8,7 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 | --- | --- |
 | `packages/core` (`@rt/core`) | 领域类型、`AppBridge` 契约、设置/归档纯逻辑、模型注册表、macOS/Web 共用的实时转写管线、定稿漂移度量、供 macOS 使用的文字合句与原文上下文，以及三端共用的翻译编排；公共入口为 `packages/core/src/index.ts`。 |
 | `packages/ui` (`@rt/ui`) | 共享 Vue 3 单页界面，包含引导、主页、设置、归档和跨页状态；平台业务能力及设置、模型、归档持久化通过 `AppBridge` 访问宿主，纯界面状态可直接使用 DOM、媒体查询和 `localStorage` 等浏览器运行时能力。挂载入口为 `packages/ui/src/index.ts`，屏幕切换入口为 `packages/ui/src/App.vue`。 |
-| `apps/macos` (`@rt/macos`) | Electron 宿主：渲染层采集麦克风/系统音频，preload 暴露收紧后的 IPC，主进程管理设置、归档、模型和推理子进程；宿主入口是 `apps/macos/src/main/index.ts`，UI 适配入口是 `apps/macos/src/renderer/src/mac-bridge.ts`。 |
+| `apps/macos` (`@rt/macos`) | macOS 与 Windows 候选版共用的 Electron 桌面宿主（保留历史目录名）：渲染层采集麦克风/系统音频，preload 暴露收紧后的 IPC，主进程管理设置、归档、模型和推理子进程；宿主入口是 `apps/macos/src/main/index.ts`，UI 适配入口是 `apps/macos/src/renderer/src/mac-bridge.ts`。 |
 | `apps/web` (`@rt/web`) | 浏览器 PWA 宿主：使用 IndexedDB/Cache Storage 存储，AudioWorklet 采集，Web Worker 中运行 sherpa-onnx WASM 与本地翻译，并管理 Service Worker 外壳缓存；应用入口是 `apps/web/src/main.ts`，平台契约实现是 `apps/web/src/bridge.ts`。 |
 | `apps/ios` (`@rt/ios`) | Capacitor 宿主和 WebView 侧桥接，设置/归档使用 Preferences；应用入口是 `apps/ios/src/main.ts`，平台契约实现是 `apps/ios/src/bridge.ts`。 |
 | `apps/ios/native-plugin` | iOS 原生能力：`AVAudioEngine` 音频采集、sherpa-onnx ASR、模型下载/管理和 iOS 18+ Apple Translation；TypeScript 契约从 `definitions.ts` 导出，Swift 主入口是 `ios/RealtimeAsrPlugin.swift`。 |
@@ -48,7 +48,7 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 4. macOS 主进程在发送翻译 IPC 前通过 `apps/macos/src/main/translation/request-queue.ts` 调度请求，负责并发、等待容量、排队过期及配置变更时的等待取消；具体限制与行级降级见[翻译规则](product/experience.md#翻译规则)。翻译子进程仍负责具体推理，ASR 定稿路径不等待翻译队列完成。
 5. pending、部分译文、成功或失败事件按段 ID 回到 UI 的原文行；共享编排负责部分译文的目标字形归一化，并忽略请求结束后的迟到更新。macOS 通过翻译子进程 IPC 回传应用内及本机 API Hy-MT2 7B 的流式结果；`packages/core/src/translation/translation-stream.ts` 负责读取 OpenAI 兼容 SSE，部分结果不结束队列请求。Web 与 iOS 未订阅部分回填，保持完整结果路径。流式显示与失败契约见[翻译规则](product/experience.md#翻译规则)。
 
-- `apps/macos/src/main/translation/hy-translator.ts` 通过 node-llama-cpp 的 Metal 后端装载 GGUF；每句创建独立 session，仅使用显式原文上下文。`getLlama` 禁止运行时构建和下载原生组件。`translator.ts` 工厂路由 Hy-MT2 与 `local-translator.ts` 的 M2M-100 实现，上层 IPC 将上下文和部分结果回调传入本地实现。
+- `apps/macos/src/main/translation/hy-translator.ts` 通过 node-llama-cpp 装载 GGUF；`hy-runtime.ts` 负责 macOS Metal 及 Windows CUDA/CPU 选择和资源检查；每句创建独立 session，仅使用显式原文上下文。`getLlama` 禁止运行时构建和下载原生组件。`translator.ts` 工厂路由 Hy-MT2 与 `local-translator.ts` 的 M2M-100 实现，上层 IPC 将上下文和部分结果回调传入本地实现。
 - `apps/macos/electron-builder.yml` 将 Node 翻译子进程入口及依赖解包到 `app.asar.unpacked`，包含 arm64 Metal 原生运行时而不打包权重；纯 Node 子进程不能依赖 Electron 的 asar 读取补丁。
 
 ### 设置、模型与归档
@@ -56,7 +56,7 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 - `@rt/ui` 只持有表单和当前会话状态；设置、模型和归档持久化经 `AppBridge`。默认值、字段校验、归档摘要和排序在 `@rt/core` 复用，各宿主只选择文件、Preferences 或 IndexedDB 作为存储后端。
 - Internal 归档入口由 `packages/ui/src/screens/ArchiveLibrary.vue` 管理文件夹、筛选、改名与移动，`MainScreen.vue` 负责手动保存弹窗；内容标题提取属于 `packages/core/src/archive.ts` 的 `suggestArchiveTitle`。产品规则见[清屏与归档](product/experience.md#清屏与归档)。
 - `apps/macos/src/main/archives.ts` 保留 `archives.json` 的记录数组格式，读取旧记录不做迁移；`archive-library.ts` 单独管理 `archive-library.json` 中的文件夹及记录元数据覆盖，改名和移动不重写归档正文。归档正文与元数据各自通过原子替换落盘，UI 等待保存成功后才清屏。
-- 文件夹能力同时受 UI 的 `__INTERNAL_BUILD__`、可选 `AppBridge.getArchiveLibrary` 能力和 macOS 主进程的 Internal 应用身份或隔离预览 profile 检查约束；稳定渠道、Web 与 iOS 保留原路径。
+- 文件夹能力同时受 UI 的 `__INTERNAL_BUILD__`、可选 `AppBridge.getArchiveLibrary` 能力和桌面主进程的 Internal 应用身份、Windows 候选版或隔离预览 profile 检查约束；稳定渠道、Web 与 iOS 保留原路径。
 - `apps/macos/src/main/settings.ts` 仅对新建设置启用本地 `hy-mt2-7b`；已有设置由共享兼容逻辑读取。正式应用名为 Subline，应用标识仍为 `io.github.sany2ng0226.classroomtranslator`，独立数据目录为 `~/Library/Application Support/Classroom Translator`。
 - 模型清单、大小、语言、平台可用性和有序下载源的单一事实源是 `packages/core/src/model-registry.ts`。各宿主将文件下载到本端模型目录或 Cache Storage，再由对应推理运行时离线装载。Hy-MT2 使用 Tencent 固定 revision 的 Q4_K_M 文件，注册表声明精确字节数及 SHA-256；macOS 下载流程据此校验。
 
@@ -78,3 +78,9 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 - `apps/macos/src/main/index.ts` 的 `LEGACY_PROFILE_DIRS` 把打包后的应用名映射到旧数据目录：Subline Internal（及更早的 Realtime Translator Internal）用 `Application Support/Classroom Translator Internal`，Subline（及 Realtime Translator）用 `Application Support/Classroom Translator`，两者分离；未打包且设置 `RT_PREVIEW_PROFILE` 时改用该目录并以 Subline Preview 命名。设置、归档及 `models` 缓存随各自目录隔离。打包窗口使用 `app.getName()` 显示渠道名，并拦截页面标题更新以保持窗口标识。
 - `package-mac.mjs --preview` 构建时设置 `RT_INTERNAL_BUILD=1`，由 `apps/macos/electron.vite.config.ts` 注入 `__INTERNAL_BUILD__`。`packages/ui/src/screens/MainScreen.vue` 仅在内部构建展示主要语言下拉，复用 `saveSettings` 保存 `asr.language`，并按平台和语言校验当前模型、必要时回退 `DEFAULT_ASR_MODEL_ID`。默认稳定构建关闭此入口；入口锁定遵循录音启停和保存状态。
 - `.github/workflows/ci.yml` 在 PR、`main` 分支推送和手动触发时执行 core 单元测试、字幕身份、macOS 翻译队列与阶段延迟记账回归测试、三端类型检查，并校验 iOS 生成的模型清单未与注册表漂移。Pages 变更探测和部署均要求仓库变量 `ENABLE_PAGES=true`；未设置时仅执行质量门禁。启用后，门禁通过的 `main` 推送仅在 Web 相关变更时部署，手动触发则直接进入部署流程。
+
+### Windows 候选构建
+
+- `apps/macos/scripts/package-win.mjs` 和 `electron-builder.windows.yml` 从共享桌面宿主生成 Windows x64 NSIS/ZIP 候选；`pnpm --filter @rt/macos dist:win` 需在 Windows x64 运行，默认输出到 `apps/macos/release-windows`，不安装或发布。产品边界见 [Windows 候选版](product/windows-candidate.md)。
+- `.github/workflows/windows-candidate.yml` 使用 Windows runner 构建并保存安装器、ZIP、SHA-256 与诊断记录；`apps/macos/scripts/windows-native-smoke.mjs` 检查随包原生依赖并启动 `src/main/candidate-smoke.ts` 的合成界面、设置和归档验证。这些入口不替代真实音源或 CUDA 推理验收。
+- 桌面 `src/main/index.ts` 为 Windows 候选设置独立 userData，系统音频仅向主窗口主 frame 的有效系统音源请求授权；`src/shared/audio-source.ts` 提供平台能力判定，渲染桥接负责采集默认播放声音及释放临时视频轨。

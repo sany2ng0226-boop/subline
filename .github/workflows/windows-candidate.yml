@@ -3,6 +3,9 @@ name: Windows candidate
 on:
   push:
     branches: [codex/windows-candidate]
+    paths-ignore:
+      - 'README*'
+      - 'docs/**'
   workflow_dispatch:
 
 permissions:
@@ -35,14 +38,19 @@ jobs:
         run: pnpm --filter @rt/macos type-check
       - name: Audio, inference and subtitle regressions
         run: pnpm exec vitest run apps/macos/src/shared/audio-source.test.ts apps/macos/src/renderer/src/mac-bridge.test.ts apps/macos/src/main/translation/hy-runtime.test.ts packages/ui/src/composables/useTranscription.test.ts apps/macos/src/main/translation/request-queue.test.ts
-      - name: Package NSIS installer and portable zip
+      - name: Build the unpacked Windows candidate
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force work/windows-diagnostics | Out-Null
-          pnpm --filter @rt/macos dist:win 2>&1 | Tee-Object -FilePath work/windows-diagnostics/package.log
+          pnpm --filter @rt/macos dist:win:dir 2>&1 | Tee-Object -FilePath work/windows-diagnostics/package.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Load the packaged native runtimes on Windows
         run: pnpm --filter @rt/macos test:win-native --app-dir release-windows/win-unpacked --diagnostics ../../work/windows-diagnostics
+      - name: Create NSIS and ZIP from the verified candidate
+        shell: pwsh
+        run: |
+          pnpm --filter @rt/macos dist:win --prepackaged release-windows/win-unpacked 2>&1 | Tee-Object -FilePath work/windows-diagnostics/distribute.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Hash the distributable files
         shell: pwsh
         run: |

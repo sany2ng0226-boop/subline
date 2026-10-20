@@ -107,10 +107,10 @@ async function main() {
     assert.ok(!privateModule.test(entry), `Private module in app.asar: ${entry}`);
     assert.ok(!/\.(?:dylib|so)(?:\.\d+)*$/i.test(entry), `Foreign native library: ${entry}`);
     if (/\.(?:node|dll)$/i.test(entry)) {
-      assert.equal(asar.statFile(asarPath, entry).unpacked, true, `Native runtime trapped in app.asar: ${entry}`);
+      assert.equal(asar.statFile(asarPath, path.normalize(entry)).unpacked, true, `Native runtime trapped in app.asar: ${entry}`);
     }
   }
-  const metadata = JSON.parse(asar.extractFile(asarPath, 'package.json').toString('utf8'));
+  const metadata = JSON.parse(asar.extractFile(asarPath, path.normalize('package.json')).toString('utf8'));
   assert.equal(metadata.name, 'subline-windows-candidate');
   assert.equal(metadata.productName, 'Subline');
   check('candidate-metadata', { name: metadata.name, version: metadata.version });
@@ -126,7 +126,7 @@ async function main() {
     inspected++;
   }
   for (const entry of entries.filter(entry => /^out\/.*\.(?:c?js|html)$/i.test(entry))) {
-    const content = asar.extractFile(asarPath, entry).toString('utf8');
+    const content = asar.extractFile(asarPath, path.normalize(entry)).toString('utf8');
     assert.ok(!/Subline Interview|codex-app-server|interview-bridge|meeting-pilot/.test(content), `Private module code in ${entry}`);
   }
   check('windows-only-native-assets', { inspectedFiles: inspected, archiveEntries: entries.length });
