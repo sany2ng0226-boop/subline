@@ -1,6 +1,6 @@
 # Windows 候选版：范围与验收
 
-状态：首版范围已确认，候选实现与构建入口已加入源码；版本 `0.2.0-beta.3-windows.1`。尚未公开发布，也未完成朋友电脑的真实音源与 GPU 验收。Windows 构建结果与实机结果必须分别记录，不能从 Mac beta.2 的验收推导 Windows 可用。
+状态：版本 `0.2.0-beta.3-windows.1` 已完成 Windows 未压缩应用构建及下述自动检查。NSIS 安装器、ZIP、SHA-256 清单及工作流产物已成功生成并上传；候选未签名，尚未发布到 GitHub Release 或常规发布渠道，也未完成安装流程及朋友电脑的真实音源与 GPU 验收。Windows 自动检查与实机结果分别记录，不能从 Mac beta.2 的验收推导 Windows 可用。
 
 ## Problem / User / Context
 
@@ -26,6 +26,17 @@
 ## Non-goals
 
 不合并 Meeting、面试辅助或影子跟读；不做双人设备同步、麦克风与系统声音混音、跨设备归档同步、自动云端降级或自动更新已安装的 Mac 应用。首版不提供 Windows ARM64 安装包。
+
+## 已验证边界
+
+[Windows 候选工作流 39389617116](https://github.com/sany2ng0226-boop/subline/actions/runs/39389617116)，提交 `254ffe305da1b82b8769215f0e943af419e4abfc`。安装器及 ZIP 对应此提交；后续仅文档提交不代表重新构建产物。已通过：
+
+- 128 项 core 测试、桌面类型检查，以及 24 项音源、推理后端与字幕回归测试。
+- Windows Server 2022 runner 上的未压缩应用构建，以及同一已检查应用生成的 NSIS 安装器、ZIP、SHA-256 清单和候选/诊断产物上传。
+- Electron 42.5.0 打包后原生检查：sherpa-onnx 原生调用、node-llama-cpp CPU 绑定及 ONNX Runtime 加载。
+- 打包应用的合成界面检查、设置和归档保存、页面重载后读回及磁盘内容核对。
+
+以上未进行实际模型推理。页面重载与磁盘读回不等于完整退出应用后重启；真实麦克风、真实系统回环、CUDA 模型推理、CPU 模型降级翻译、Windows 10 和朋友硬件均未验收。NSIS 安装器及 ZIP 成功生成也不等于安装流程通过。
 
 ## Success Criteria：朋友实机清单
 

@@ -39,7 +39,7 @@ Windows 版目标为 **Windows 10/11 x64**：录音前选择麦克风或默认�
 
 候选版的设置、归档与模型独立保存在 `%APPDATA%\Subline Windows Candidate`。安装器未签名，Windows SmartScreen 可能提示未知应用；核对来源与校验值，不要全局关闭系统防护。常规卸载保留应用数据。本轮不包含 Meeting、面试辅助或影子跟读。
 
-Windows x64 构建命令为 `pnpm --filter @rt/macos dist:win`，`apps/macos` 与包名沿用共享桌面宿主的历史名称；命令准备 NSIS 安装器和 ZIP，不发布。自动检查覆盖打包后原生依赖与合成界面、设置、归档流程；构建结果、真人收音、真实系统声音和 GPU 推理分别验收。详见 [Windows 范围与朋友验收清单](docs/product/windows-candidate.md)。
+Windows x64 构建命令为 `pnpm --filter @rt/macos dist:win`，`apps/macos` 与包名沿用共享桌面宿主的历史名称；命令准备 NSIS 安装器和 ZIP，不发布。[Windows 工作流](https://github.com/sany2ng0226-boop/subline/actions/runs/39389617116) 已在 Windows Server 2022 上通过源码检查、未压缩应用构建、随包 CPU/原生绑定检查，以及合成界面、设置和归档页面重载与磁盘读回。NSIS 安装器、ZIP、SHA-256 清单及工作流产物已成功生成并上传；安装流程本身仍未验收。真实收音、系统回环、实际模型推理（含 CUDA）、完整应用重启、Windows 10 及朋友硬件仍未验收。详见 [Windows 范围与朋友验收清单](docs/product/windows-candidate.md)。
 
 ## 从源码运行
 

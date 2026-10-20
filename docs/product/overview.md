@@ -42,7 +42,7 @@ macOS 版是 Electron 应用。麦克风由渲染进程采集；系统音频通�
 
 ### Windows 候选版
 
-Windows 候选版复用 Electron 桌面宿主，目标为 Windows 10/11 x64，提供麦克风与默认系统播放声音的单一音源选择、本地识别与 Hy-MT2 翻译、手动归档和文件夹。翻译优先 CUDA，不可用时显示 CPU 降级；本地失败不会自动启用云服务。设置、归档及模型使用独立的 `%APPDATA%\Subline Windows Candidate`。目前不把构建或合成界面检查等同于真实音频、GPU 与硬件适配验收；完整约束和验收清单见 [Windows 候选版](windows-candidate.md)。上表的已发布 macOS 能力与验收结论不自动适用于 Windows。
+Windows 候选版复用 Electron 桌面宿主，目标为 Windows 10/11 x64，提供麦克风与默认系统播放声音的单一音源选择、本地识别与 Hy-MT2 翻译、手动归档和文件夹。翻译优先 CUDA，不可用时显示 CPU 降级；本地失败不会自动启用云服务。设置、归档及模型使用独立的 `%APPDATA%\Subline Windows Candidate`。已通过 Windows Server 2022 上的未压缩应用构建、随包原生绑定及合成界面/数据读回检查，NSIS 安装器、ZIP 和 SHA-256 清单已生成并上传为工作流产物；安装流程、真实音频、实际模型推理、完整应用重启及朋友硬件尚未验收。完整验证边界、约束和验收清单见 [Windows 候选版](windows-candidate.md)。上表的已发布 macOS 能力与验收结论不自动适用于 Windows。
 
 ### iOS 原生应用
 
