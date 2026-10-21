@@ -43,6 +43,7 @@ export async function loadSettings(): Promise<AppSettings> {
   applyLocale(s.nativeLang);
   applyFontSize(s.fontSize);
   applyTheme(s.theme);
+  offAlwaysOnTop ??= bridge().onAlwaysOnTopChange?.(syncAlwaysOnTop);
   // UI 层不在此主动预热翻译模型（放这里统一预热会让每次打开都重载缓存模型、弹"加载中"）；
   // 预热时机交给各平台 bridge 决定：web 启动时若翻译已开+本地引擎就预热，macOS 仅开关开启时预热。
   return s;
@@ -79,6 +80,24 @@ export function stepFontSize(delta: 1 | -1): void {
   fontSaves = fontSaves
     .then(() => saveSettings({ ...settings.value!, fontSize: next }))
     .catch((error) => console.error('[settings:font-size]', error));
+}
+
+// 主窗置顶：仅宿主实现 setAlwaysOnTop 时可用（macOS），宿主负责应用与持久化；
+// 菜单等其他入口改动时经 onAlwaysOnTopChange 同步回来。
+export const alwaysOnTopSupported = (): boolean => typeof bridge().setAlwaysOnTop === 'function';
+let offAlwaysOnTop: (() => void) | undefined;
+function syncAlwaysOnTop(on: boolean): void {
+  if (settings.value && settings.value.alwaysOnTop !== on) settings.value = { ...settings.value, alwaysOnTop: on };
+}
+export async function setAlwaysOnTop(on: boolean): Promise<void> {
+  const before = settings.value?.alwaysOnTop ?? false;
+  syncAlwaysOnTop(on);
+  try {
+    await bridge().setAlwaysOnTop?.(on);
+  } catch (error) {
+    syncAlwaysOnTop(before);
+    console.error('[settings:always-on-top]', error);
+  }
 }
 
 /** 直接设置主题偏好（持久化） */

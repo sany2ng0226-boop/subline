@@ -156,6 +156,7 @@ const messages = {
       translateTo: 'Translate into {lang}',
     },
     settings: {
+      alwaysOnTop: 'Keep window on top',
       announceCaptions: 'Read captions aloud',
       announceCaptionsHint: 'With a screen reader on, new finalized captions and translations are announced.',
       apiKey: 'API Key',
@@ -359,6 +360,7 @@ const messages = {
       translateTo: '{lang}に翻訳',
     },
     settings: {
+      alwaysOnTop: 'ウィンドウを常に手前に表示',
       announceCaptions: '字幕を読み上げる',
       announceCaptionsHint: 'スクリーンリーダー使用時、確定した字幕と翻訳を読み上げます。',
       apiKey: 'API Key',
@@ -562,6 +564,7 @@ const messages = {
       translateTo: '{lang}(으)로 번역',
     },
     settings: {
+      alwaysOnTop: '창을 항상 위에 표시',
       announceCaptions: '자막 읽어 주기',
       announceCaptionsHint: '화면 낭독기를 켜면 확정된 자막과 번역을 읽어 줍니다.',
       apiKey: 'API Key',
@@ -762,6 +765,7 @@ const messages = {
       translateTo: '翻译成{lang}',
     },
     settings: {
+      alwaysOnTop: '窗口置顶',
       announceCaptions: '朗读字幕',
       announceCaptionsHint: '开启读屏软件时，播报新定稿的字幕和译文。',
       apiKey: 'API Key',

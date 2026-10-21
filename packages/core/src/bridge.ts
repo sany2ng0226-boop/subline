@@ -81,6 +81,13 @@ export interface AppBridge {
    * 故引导只能在采集报 system-audio-permission 错误后事后进行。
    */
   openSystemAudioSettings?(): void;
+  /**
+   * Persist and apply desktop main-window pinning. UI should add a settings switch
+   * when this capability exists, and hide it on hosts such as Web/iOS where absent.
+   */
+  setAlwaysOnTop?(on: boolean): Promise<void>;
+  /** Subscribe to pinning changes (including the app menu); returns an unsubscribe function. */
+  onAlwaysOnTopChange?(cb: (on: boolean) => void): () => void;
   /** Persist unarchived JSON for crash recovery; UI throttles calls to roughly 10 seconds.
    * Web/iOS leave this unimplemented; UI falls back to localStorage.
    */

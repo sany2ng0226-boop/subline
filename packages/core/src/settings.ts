@@ -38,6 +38,7 @@ export function makeDefaults(systemLangs: string[]): AppSettings {
     nativeLang: defaultNativeLang(systemLangs),
     fontSize: 'small',
     theme: 'system',
+    alwaysOnTop: false,
     asr: { language: 'auto', model: DEFAULT_ASR_MODEL_ID },
     // 默认麦克风（全平台可用）；系统音频由支持的端（macOS 14.2+）作为可选项提供。
     audioSource: 'mic',
@@ -93,6 +94,7 @@ export function withDefaults(raw: unknown, defaults: AppSettings): AppSettings {
     nativeLang: asUiLang(s.nativeLang) ?? d.nativeLang,
     fontSize: (FONT_SIZES as unknown[]).includes(fontSize) ? (fontSize as FontSize) : d.fontSize,
     theme: s.theme === 'light' || s.theme === 'dark' ? s.theme : d.theme,
+    alwaysOnTop: typeof s.alwaysOnTop === 'boolean' ? s.alwaysOnTop : d.alwaysOnTop,
     asr: { language: asrLang, model },
     audioSource:
       s.audioSource === 'mic' || s.audioSource === 'system' ? s.audioSource : d.audioSource,

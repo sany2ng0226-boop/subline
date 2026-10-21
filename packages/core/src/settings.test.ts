@@ -172,3 +172,12 @@ describe('announceCaptions', () => {
     expect(withDefaults({ announceCaptions: true }, d).announceCaptions).toBe(true);
   });
 });
+
+describe('alwaysOnTop', () => {
+  const d = makeDefaults(['en-US']);
+  it('默认关闭，非布尔回落默认', () => {
+    expect(d.alwaysOnTop).toBe(false);
+    expect(withDefaults({ alwaysOnTop: 1 }, d).alwaysOnTop).toBe(false);
+    expect(withDefaults({ alwaysOnTop: true }, d).alwaysOnTop).toBe(true);
+  });
+});

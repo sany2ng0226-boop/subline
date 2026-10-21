@@ -4,7 +4,7 @@ import { NButton, NFormItem, NSwitch, NTooltip } from 'naive-ui';
 import { ArrowLeft, SlidersHorizontal, Mic, Languages, HardDrive } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { getAsrModel, getTranslationModel, DEFAULT_TRANSLATION_MODEL_ID } from '@rt/core';
-import { settings, saveSettings } from '../composables/useSettings';
+import { settings, saveSettings, alwaysOnTopSupported, setAlwaysOnTop } from '../composables/useSettings';
 import { bridge } from '../bridge';
 import type { SettingsFormData } from '../components/settings/form';
 import GeneralSection from '../components/settings/GeneralSection.vue';
@@ -19,6 +19,8 @@ const emit = defineEmits<{ close: [] }>();
 
 // 发布版本串（构建期注入的包版本+commit 短哈希）；宿主未提供则不展示
 const appVersion = bridge().appVersion;
+// 置顶开关：宿主不支持（Web / iOS）时不显示
+const canPin = alwaysOnTopSupported();
 
 // 左侧竖排 tab：通用 / 语音识别 / 翻译 / 模型管理，标签复用现有 i18n key。
 type Tab = 'general' | 'asr' | 'translation' | 'models';
@@ -228,6 +230,9 @@ function onDownloadConfirm(tasks: DownloadTask[]): void {
               <n-switch v-model:value="form.announceCaptions" />
             </n-form-item>
             <p class="mt-1.5 text-xs text-[var(--rt-ink-3)]">{{ t('settings.announceCaptionsHint') }}</p>
+            <n-form-item v-if="canPin" class="mt-6" :label="t('settings.alwaysOnTop')" :show-feedback="false">
+              <n-switch :value="settings?.alwaysOnTop ?? false" @update:value="setAlwaysOnTop" />
+            </n-form-item>
           </template>
           <asr-section v-else-if="tab === 'asr'" :form="form" />
           <translation-section v-else-if="tab === 'translation'" :form="form" />
