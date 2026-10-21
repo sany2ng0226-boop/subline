@@ -6,6 +6,8 @@ import { useI18n } from 'vue-i18n';
 import type { ArchiveLibrary, ArchiveRecord, ArchiveSummary } from '@rt/core';
 import ConversationLine from '../components/ConversationLine.vue';
 import ScrollArea from '../components/ScrollArea.vue';
+import UndoBar from '../components/UndoBar.vue';
+import { useArchiveDelete } from '../composables/useArchiveDelete';
 import { bridge } from '../bridge';
 import { fmtDateTime } from '../utils/datetime';
 
@@ -26,6 +28,8 @@ const visible = computed(() => items.value.filter((item) => folder.value === 'al
 const folderOptions = computed(() => [{ label: t('archive.unfiled'), value: '' }, ...library.value.folders.map((f) => ({ label: f.name, value: f.id }))]);
 const location = computed(() => folder.value === 'all' ? t('archive.all') : folderName(folder.value));
 const modalTitle = computed(() => t(`archive.${({ create: 'newFolder', folderRename: 'renameFolder', rename: 'rename', move: 'move', delete: 'delete' } as const)[modal.value ?? 'rename']}`));
+// 删除与稳定版共用：确认后先移除，8 秒内可撤销，离开本页时立即提交
+const removal = useArchiveDelete(items, { onRemoved: (id) => { if (selected.value?.id === id) selected.value = null; } });
 function folderName(id: string | null | undefined): string {
   return library.value.folders.find((f) => f.id === id)?.name ?? t('archive.unfiled');
 }
@@ -39,25 +43,27 @@ async function run(task: () => Promise<void>): Promise<void> {
 }
 function edit(kind: NonNullable<typeof modal.value>, item?: ArchiveSummary | ArchiveRecord): void {
   error.value = '';
+  removal.failed.value = false;
   target.value = item ?? null;
   name.value = kind === 'folderRename' ? folderName(folder.value) : item?.name ?? '';
   destination.value = item?.folderId ?? null;
   modal.value = kind;
 }
 async function confirm(): Promise<void> {
+  if (modal.value === 'delete') {
+    const item = items.value.find((it) => it.id === target.value?.id);
+    if (item) { removal.request(item); removal.confirm(); }
+    modal.value = null;
+    return;
+  }
   await run(async () => {
     if (modal.value === 'create') library.value = await bridge().createArchiveFolder!(name.value);
     else if (modal.value === 'folderRename' && folder.value && folder.value !== 'all') {
       library.value = await bridge().renameArchiveFolder!(folder.value, name.value);
     } else if (target.value) {
       const id = target.value.id;
-      if (modal.value === 'delete') {
-        items.value = await bridge().deleteArchive(id);
-        if (selected.value?.id === id) selected.value = null;
-      } else {
-        items.value = await bridge().updateArchive!(id, modal.value === 'move' ? { folderId: destination.value } : { name: name.value });
-        if (selected.value?.id === id) selected.value = await bridge().getArchive(id);
-      }
+      items.value = await bridge().updateArchive!(id, modal.value === 'move' ? { folderId: destination.value } : { name: name.value });
+      if (selected.value?.id === id) selected.value = await bridge().getArchive(id);
     }
     modal.value = null;
   });
@@ -84,7 +90,7 @@ onMounted(async () => {
         <n-button quaternary circle :disabled="busy" :aria-label="t('archive.move')" @click="edit('move', selected)"><template #icon><FolderInput :size="16" /></template></n-button>
       </template>
     </header>
-    <p v-if="error && !modal" role="alert" class="px-5 py-2 text-sm text-red-500">{{ error }}</p>
+    <p v-if="(error || removal.failed.value) && !modal" role="alert" class="px-5 py-2 text-sm text-red-500">{{ removal.failed.value ? t('archive.deleteFailed') : error }}</p>
     <ScrollArea v-if="selected" class="min-h-0 flex-1">
       <div class="mx-auto w-full max-w-[760px] px-5 py-5">
         <p class="mb-6 text-xs text-neutral-400">{{ folderName(selected.folderId) }} · {{ fmtDateTime(selected.createdAt) }}</p>
@@ -136,6 +142,7 @@ onMounted(async () => {
         <n-button type="primary" :loading="busy" :disabled="busy || (!['move', 'delete'].includes(modal ?? '') && !name.trim())" @click="confirm">{{ t('archive.save') }}</n-button>
       </div></template>
     </n-modal>
+    <UndoBar v-if="removal.pending.value" :message="t('archive.deleted')" @undo="removal.undo()" @dismiss="removal.flush()" />
   </div>
 </template>
 
