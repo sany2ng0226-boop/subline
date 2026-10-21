@@ -1,3 +1,4 @@
+import { createAlwaysOnTopController } from './always-on-top';
 import { createDisplaySleepBlocker } from './display-sleep';
 import { TranslationRequestQueue } from './translation/request-queue';
 import { runCandidateSmoke } from './candidate-smoke';
@@ -7,6 +8,8 @@ import { fork, type ChildProcess } from 'node:child_process';
 import {
   app,
   BrowserWindow,
+  Menu,
+  type MenuItemConstructorOptions,
   desktopCapturer,
   dialog,
   ipcMain,
@@ -253,6 +256,39 @@ const displaySleep = createDisplaySleepBlocker(powerSaveBlocker);
 // getAppPath() 在 dev 下为 apps/macos，故上溯两级到仓库根取共享 PNG。
 const APP_ICON = path.join(app.getAppPath(), '..', '..', 'assets', 'icon.png');
 
+const alwaysOnTop = createAlwaysOnTopController({
+  load: loadSettings,
+  save: saveSettings,
+  window: () => win && !win.isDestroyed() ? win : null,
+  notify: (on) => {
+    const item = Menu.getApplicationMenu()?.getMenuItemById('always-on-top');
+    if (item) item.checked = on;
+    sendToRenderer('window:always-on-top-changed', on);
+  },
+});
+
+function installMenu(): void {
+  const template: MenuItemConstructorOptions[] = [
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
+    { role: 'fileMenu' },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu', submenu: [
+      { role: 'minimize' },
+      { role: 'zoom' },
+      { type: 'separator' },
+      {
+        id: 'always-on-top', label: 'Always on Top', type: 'checkbox',
+        checked: loadSettings().alwaysOnTop,
+        click: (item) => alwaysOnTop.set(item.checked),
+      },
+      { type: 'separator' },
+      { role: 'front' },
+    ] },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow(): void {
   win = new BrowserWindow({
     width: 1100,
@@ -265,6 +301,7 @@ function createWindow(): void {
       contextIsolation: true,
     },
   });
+  alwaysOnTop.apply(loadSettings().alwaysOnTop);
   win.on('closed', () => displaySleep.stop());
   win.on('close', (event) => {
     if (leaveConfirmed || !hasUnsavedContent()) return;
@@ -798,6 +835,11 @@ ipcMain.handle('archive:update', async (_event, id: string, patch: { name?: stri
   return archiveSummaries();
 });
 
+ipcMain.handle('window:set-always-on-top', (_event, on: unknown): void => {
+  if (typeof on !== 'boolean') throw new TypeError('alwaysOnTop must be a boolean');
+  alwaysOnTop.set(on);
+});
+
 ipcMain.handle('settings:get', (): AppSettings => effectiveSettings());
 
 ipcMain.handle('settings:save', (_event, next: AppSettings): AppSettings => {
@@ -815,6 +857,7 @@ ipcMain.handle('settings:save', (_event, next: AppSettings): AppSettings => {
   const enabledTurnedOn = !prev.enabled && cur.enabled;
 
   const saved = saveSettings(next);
+  alwaysOnTop.apply(saved.alwaysOnTop);
   if (engineChanged) {
     reconfigureTranslate();
   }
@@ -890,6 +933,7 @@ app.whenReady().then(() => {
       })
       .catch(() => callback({}));
   });
+  installMenu();
   createWindow();
   if (smokeReport && win) {
     void runCandidateSmoke(win, app.getPath('userData'), smokeReport)

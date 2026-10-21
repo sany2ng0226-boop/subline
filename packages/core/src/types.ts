@@ -219,6 +219,8 @@ export interface AppSettings {
   fontSize: FontSize;
   /** 主题偏好 */
   theme: ThemePref;
+  /** Keep the desktop main window above other windows. */
+  alwaysOnTop: boolean;
   /** 识别语言与模型 */
   asr: AsrSettings;
   /** 音频采集来源 */

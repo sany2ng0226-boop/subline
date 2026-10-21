@@ -26,6 +26,8 @@ const api: ElectronApi = {
       .catch(() => false)
       .then((ok) => ipcRenderer.send('window:archive-before-close:done', id, ok));
   }),
+  setAlwaysOnTop: (on) => ipcRenderer.invoke('window:set-always-on-top', on),
+  onAlwaysOnTopChange: (cb) => subscribe('window:always-on-top-changed', cb),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   testCloud: (cfg) => ipcRenderer.invoke('translation:test-cloud', cfg),

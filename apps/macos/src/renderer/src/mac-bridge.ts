@@ -133,6 +133,8 @@ export function createMacBridge(api: ElectronApi): AppBridge {
     openSystemAudioSettings: () => api.openSystemAudioSettings?.(),
     setCloseGuard: (guard) => api.setCloseGuard?.(guard),
     onArchiveBeforeClose: (handler) => api.onArchiveBeforeClose?.(handler) ?? (() => {}),
+    setAlwaysOnTop: api.setAlwaysOnTop ? (on) => api.setAlwaysOnTop!(on) : undefined,
+    onAlwaysOnTopChange: api.onAlwaysOnTopChange ? (cb) => api.onAlwaysOnTopChange!(cb) : undefined,
     getSettings: () => api.getSettings(),
     saveSettings: (settings) => api.saveSettings(settings),
     testCloud: (cfg) => api.testCloud(cfg),

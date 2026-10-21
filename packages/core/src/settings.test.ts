@@ -43,6 +43,7 @@ describe('makeDefaults 母语推断', () => {
     expect(d.onboarded).toBe(false);
     expect(d.fontSize).toBe('medium');
     expect(d.theme).toBe('system');
+    expect(d.alwaysOnTop).toBe(false);
     expect(d.translation.enabled).toBe(false);
     expect(d.translation.engine).toBe('m2m100');
     expect(d.translation.cloud).toEqual({ baseURL: '', apiKey: '', model: '' });
@@ -96,6 +97,16 @@ describe('withDefaults 字段补齐与校验', () => {
       engine: 'cloud',
       cloud: { baseURL: 'https://api.example.com/v1', apiKey: 'k', model: 'm' },
     });
+  });
+
+  it('preserves boolean pinning and falls back for missing or invalid values', () => {
+    for (const on of [true, false]) {
+      expect(withDefaults({ alwaysOnTop: on }, d).alwaysOnTop).toBe(on);
+    }
+    for (const value of [undefined, null, 0, 1, 'true', 'false', {}, []]) {
+      expect(withDefaults({ alwaysOnTop: value }, d).alwaysOnTop).toBe(false);
+      expect(withDefaults({ alwaysOnTop: value }, { ...d, alwaysOnTop: true }).alwaysOnTop).toBe(true);
+    }
   });
 
   it('cloud 字段缺省补齐为空串', () => {
