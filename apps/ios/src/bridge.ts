@@ -18,6 +18,7 @@
 //    getMicStatus / openMicSettings / getSetupStatus / downloadAsrModels / listModels /
 //    deleteModel。无原生壳时（如纯浏览器预览）这些调用会 reject，桥接已做兜底，不会崩 UI。
 
+import { forwardRayNeoText } from './rayneo-forwarder';
 import { Preferences } from '@capacitor/preferences';
 import {
   ArchiveOperationError,
@@ -265,7 +266,7 @@ export function createIosBridge(): AppBridge {
   // → translateFinalizedSegment）也用改写后的 id，保证译文/等待动画事件回填到当前会话的正确行。
   let nextLineId = 0;
   function subscribeNative(): void {
-    void RealtimeAsr.addListener('partial', (p) => partialCb.emit(p)).catch(() => undefined);
+    void RealtimeAsr.addListener('partial', (p) => { partialCb.emit(p); void forwardRayNeoText(p.text, false); }).catch(() => undefined);
     void RealtimeAsr.addListener('segment', (seg) => {
       // Native events expose no capture epoch; receipt is the closest available endpoint.
       const line: SegmentPayload = { ...seg, id: nextLineId++ };
@@ -273,6 +274,7 @@ export function createIosBridge(): AppBridge {
       // Missing capture timestamps cannot provide a meaningful ASR latency sample.
       metrics.segment(seg.speechEndAt, Date.now());
       segmentCb.emit(line);
+      void forwardRayNeoText(line.text, true);
       void translateSegment(line);
     }).catch(() => undefined);
     void RealtimeAsr.addListener('status', (s) => {

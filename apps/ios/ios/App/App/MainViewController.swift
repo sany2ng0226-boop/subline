@@ -5,6 +5,7 @@ import Capacitor
 class MainViewController: CAPBridgeViewController {
   override open func capacitorDidLoad() {
     bridge?.registerPluginInstance(RealtimeAsrPlugin())
+    bridge?.registerPluginInstance(RayNeoPlugin())
     // RealtimeTranslate 类在所有版本都可编译，方法内部用 #available(iOS 18) 自行降级
     // （iOS<18 调用返回 unavailable，不崩溃），故无条件注册。
     bridge?.registerPluginInstance(RealtimeTranslatePlugin())

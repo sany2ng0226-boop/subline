@@ -25,6 +25,9 @@
 		A084ECDBA7D38E1E42DFC39D /* Pods_App.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */; };
 		D81ABCEA92AA1677DCA6533F /* onnxruntime.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B0206D6C3E858638F9118DF9 /* onnxruntime.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		F9BEFA2C0C91447250B6AAD1 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFA9E673B1FACB7657E2A60A /* MainViewController.swift */; };
+		A98200000000000000000001 /* RayNeoCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = A98100000000000000000001 /* RayNeoCodec.swift */; };
+		A98200000000000000000002 /* RayNeoLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = A98100000000000000000002 /* RayNeoLink.swift */; };
+		A98200000000000000000003 /* RayNeoPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A98100000000000000000003 /* RayNeoPlugin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -64,6 +67,9 @@
 		CFA9E673B1FACB7657E2A60A /* MainViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		D081CE749145DD9E4074D805 /* SherpaOnnx.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SherpaOnnx.swift; path = "../../native-plugin/ios/SherpaOnnx.swift"; sourceTree = SOURCE_ROOT; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
+		A98100000000000000000001 /* RayNeoCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RayNeoCodec.swift; path = "../../native-plugin/ios/rayneo/RayNeoCodec.swift"; sourceTree = SOURCE_ROOT; };
+		A98100000000000000000002 /* RayNeoLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RayNeoLink.swift; path = "../../native-plugin/ios/rayneo/RayNeoLink.swift"; sourceTree = SOURCE_ROOT; };
+		A98100000000000000000003 /* RayNeoPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RayNeoPlugin.swift; path = "../../native-plugin/ios/rayneo/RayNeoPlugin.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -139,6 +145,9 @@
 		E5834307BEFB946AF62CA1A4 /* RealtimeAsr */ = {
 			isa = PBXGroup;
 			children = (
+				A98100000000000000000001 /* RayNeoCodec.swift */,
+				A98100000000000000000002 /* RayNeoLink.swift */,
+				A98100000000000000000003 /* RayNeoPlugin.swift */,
 				0CA9B0BC19BA6ECBE6FD88BB /* RealtimeAsrPlugin.swift */,
 				D081CE749145DD9E4074D805 /* SherpaOnnx.swift */,
 				9F5131C936437C7216AA4AE8 /* AsrModels.swift */,
@@ -265,6 +274,9 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				C815FA0A06E147E3BDE1AC99 /* SceneDelegate.swift in Sources */,
+				A98200000000000000000001 /* RayNeoCodec.swift in Sources */,
+				A98200000000000000000002 /* RayNeoLink.swift in Sources */,
+				A98200000000000000000003 /* RayNeoPlugin.swift in Sources */,
 				864CBBF16324C1946F7E7200 /* RealtimeAsrPlugin.swift in Sources */,
 				1B83F307931ADA605C09217D /* SherpaOnnx.swift in Sources */,
 				9B9D9044DB6C3D71CBC4EA28 /* AsrModels.swift in Sources */,

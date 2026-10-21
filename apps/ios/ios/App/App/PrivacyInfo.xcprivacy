@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <!-- Optional RayNeo CoreBluetooth traffic stays between this phone and glasses.
+         Diagnostic logs (UUIDs and payload hex) use bounded process memory
+         and NSLog system logging; the plugin does not upload them.
+         Bluetooth permission text is declared in Info.plist. -->
     <key>NSPrivacyTracking</key>
     <false/>
     <key>NSPrivacyTrackingDomains</key>
