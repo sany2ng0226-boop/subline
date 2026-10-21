@@ -70,19 +70,53 @@ async function selectPrimaryLanguage(language: AsrLang): Promise<void> {
 // 仅已定稿记录才算"有内容可清"：实时 partial 是瞬时的，清它没意义（归档也只存 lines）
 const hasContent = computed(() => lines.length > 0);
 
-// 清屏按钮：点击弹下拉，选择归档或删除
-const clearOptions = computed(() => [
+// 删除是破坏性操作：危险色、放在菜单最后并与其它项隔开
+const DANGER = 'var(--rt-live)';
+const deleteOption = (disabled = false): DropdownMixedOption => ({
+  key: 'delete',
+  label: t('archive.delete'),
+  icon: () => h(Trash2, { size: 16, color: disabled ? undefined : DANGER }),
+  props: disabled ? undefined : { style: { color: DANGER } },
+  disabled,
+});
+
+// 清屏按钮：点击弹下拉，归档在主位，删除在最后
+const clearOptions = computed<DropdownMixedOption[]>(() => [
   { key: 'archive', label: t('main.archive'), icon: () => h(Archive, { size: 16 }) },
-  { key: 'delete', label: t('archive.delete'), icon: () => h(Trash2, { size: 16 }) },
+  { type: 'divider', key: 'd-clear' },
+  deleteOption(),
 ]);
 
 function onClearSelect(key: string): void {
   if (key === 'delete') {
-    deleteTranscript();
+    requestClear();
   } else {
     void openArchiveModal();
   }
 }
+
+// 清空前确认；确认后仍可在 8 秒内撤销（被删的行暂存在内存快照里）
+const clearConfirmOpen = ref(false);
+const clearCancelBtn = ref<{ $el: HTMLElement } | null>(null);
+function requestClear(): void {
+  if (hasContent.value) clearConfirmOpen.value = true;
+}
+function confirmClear(): void {
+  clearConfirmOpen.value = false;
+  deleteTranscript();
+}
+function archiveInsteadOfClear(): void {
+  clearConfirmOpen.value = false;
+  void openArchiveModal();
+}
+
+const UNDO_MS = 8000;
+let undoTimer: ReturnType<typeof setTimeout> | undefined;
+watch(canUndoDelete, (open) => {
+  clearTimeout(undoTimer);
+  if (open) undoTimer = setTimeout(dismissUndo, UNDO_MS);
+}, { immediate: true });
+onUnmounted(() => clearTimeout(undoTimer));
 
 const archiveModalOpen = ref(false);
 const archiveName = ref('');
@@ -213,7 +247,6 @@ const mobileMenuOptions = computed<DropdownMixedOption[]>(() => [
         { type: 'divider', key: 'd0' },
       ] satisfies DropdownMixedOption[])
     : []),
-  { key: 'delete', label: t('archive.delete'), icon: () => h(Trash2, { size: 16 }), disabled: !hasContent.value },
   { key: 'archive', label: t('main.archive'), icon: () => h(Archive, { size: 16 }), disabled: !hasContent.value },
   { type: 'divider', key: 'd3' },
   { key: 'view-archive', label: t('main.viewArchives'), icon: () => h(Library, { size: 16 }) },
@@ -224,6 +257,8 @@ const mobileMenuOptions = computed<DropdownMixedOption[]>(() => [
         { key: 'force-update', label: t('main.forceUpdate'), icon: () => h(RefreshCw, { size: 16 }) },
       ] satisfies DropdownMixedOption[])
     : []),
+  { type: 'divider', key: 'd5' },
+  deleteOption(!hasContent.value),
 ]);
 
 function onMobileMenuSelect(key: string): void {
@@ -235,7 +270,7 @@ function onMobileMenuSelect(key: string): void {
       void openArchiveModal();
       break;
     case 'delete':
-      deleteTranscript();
+      requestClear();
       break;
     case 'view-archive':
       emit('open-archive');
@@ -488,7 +523,7 @@ function openMicSettings(): void {
         <!-- 次要操作收进一组图标，和主操作（电平 / 语言 / 录音）之间用细分隔线拉开层级 -->
         <div class="tool-group">
           <!-- NDropdown 无 disabled 属性：无内容或录音锁定时直接渲染禁用按钮，避免仍能弹出菜单 -->
-          <n-dropdown v-if="hasContent && !headerLocked" trigger="hover" :options="clearOptions" @select="onClearSelect">
+          <n-dropdown v-if="hasContent && !headerLocked" trigger="click" :options="clearOptions" @select="onClearSelect">
             <n-button quaternary circle size="small" :aria-label="t('main.clear')">
               <template #icon><Eraser :size="17" /></template>
             </n-button>
@@ -589,7 +624,26 @@ function openMicSettings(): void {
       :target-lang="settings?.nativeLang"
     />
 
-    <!-- 删除后的撤销条：保留到撤销、关闭或下一次开始录音 -->
+    <!-- 清空确认：默认焦点在「取消」，回车不会误删 -->
+    <n-modal
+      v-model:show="clearConfirmOpen"
+      preset="card"
+      :title="t('main.clearConfirmTitle')"
+      :auto-focus="false"
+      style="width: 420px; max-width: 90vw"
+      @after-enter="clearCancelBtn?.$el.focus()"
+    >
+      <p class="text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">{{ t('main.clearConfirmBody') }}</p>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <n-button ref="clearCancelBtn" @click="clearConfirmOpen = false">{{ t('archive.cancel') }}</n-button>
+          <n-button type="error" @click="confirmClear">{{ t('main.clearConfirmOk') }}</n-button>
+          <n-button @click="archiveInsteadOfClear">{{ t('main.clearConfirmArchive') }}</n-button>
+        </div>
+      </template>
+    </n-modal>
+
+    <!-- 清空后的撤销条：8 秒后自动消失，或撤销、关闭、下一次开始录音时收起 -->
     <div v-if="canUndoDelete" class="undo-bar" role="status">
       <span>{{ t('main.deleted') }}</span>
       <button type="button" class="undo-action" @click="undoDelete">{{ t('main.undo') }}</button>
