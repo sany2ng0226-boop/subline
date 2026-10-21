@@ -135,6 +135,10 @@ export function createMacBridge(api: ElectronApi): AppBridge {
     onArchiveBeforeClose: (handler) => api.onArchiveBeforeClose?.(handler) ?? (() => {}),
     setAlwaysOnTop: api.setAlwaysOnTop ? (on) => api.setAlwaysOnTop!(on) : undefined,
     onAlwaysOnTopChange: api.onAlwaysOnTopChange ? (cb) => api.onAlwaysOnTopChange!(cb) : undefined,
+    // 崩溃暂存写进宿主的 userData；preload 未提供时留空，UI 回退 localStorage
+    saveRecovery: api.saveRecovery ? (json) => api.saveRecovery!(json) : undefined,
+    loadRecovery: api.loadRecovery ? () => api.loadRecovery!() : undefined,
+    clearRecovery: api.clearRecovery ? () => api.clearRecovery!() : undefined,
     getSettings: () => api.getSettings(),
     saveSettings: (settings) => api.saveSettings(settings),
     testCloud: (cfg) => api.testCloud(cfg),

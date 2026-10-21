@@ -79,3 +79,22 @@ describe('desktop audio lifecycle', () => {
     expect(f.close).toHaveBeenCalledOnce();
   });
 });
+
+describe('crash recovery passthrough', () => {
+  it('forwards recovery storage to the host when preload provides it', async () => {
+    const recovery = { saveRecovery: vi.fn(async () => {}), loadRecovery: vi.fn(async () => '{"v":1}'),
+      clearRecovery: vi.fn(async () => {}) };
+    const bridge = createMacBridge({ platform: 'macos', onStatus: vi.fn(() => vi.fn()), ...recovery } as unknown as ElectronApi);
+    await bridge.saveRecovery!('x');
+    expect(await bridge.loadRecovery!()).toBe('{"v":1}');
+    await bridge.clearRecovery!();
+    expect(recovery.saveRecovery).toHaveBeenCalledWith('x');
+    expect(recovery.clearRecovery).toHaveBeenCalledOnce();
+  });
+  it('leaves recovery undefined without host support so the UI falls back to localStorage', () => {
+    const bridge = createMacBridge({ platform: 'macos', onStatus: vi.fn(() => vi.fn()) } as unknown as ElectronApi);
+    expect(bridge.saveRecovery).toBeUndefined();
+    expect(bridge.loadRecovery).toBeUndefined();
+    expect(bridge.clearRecovery).toBeUndefined();
+  });
+});
