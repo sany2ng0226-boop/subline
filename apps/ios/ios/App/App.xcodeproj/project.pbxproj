@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C815FA0A06E147E3BDE1AC99 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28212D6D92584343B3CD05EA /* SceneDelegate.swift */; };
 		F2D30D5E1F5EE144ACEF4D47 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E5074EFA380606E21F5A8916 /* PrivacyInfo.xcprivacy */; };
 		1A6D4AE6D090F18410C1E3B4 /* RealtimeTranslate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24C7999A5D4CCBBBD23E16E7 /* RealtimeTranslate.swift */; };
 		1B83F307931ADA605C09217D /* SherpaOnnx.swift in Sources */ = {isa = PBXBuildFile; fileRef = D081CE749145DD9E4074D805 /* SherpaOnnx.swift */; };
@@ -41,6 +42,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		28212D6D92584343B3CD05EA /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		E5074EFA380606E21F5A8916 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		0CA9B0BC19BA6ECBE6FD88BB /* RealtimeAsrPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RealtimeAsrPlugin.swift; path = "../../native-plugin/ios/RealtimeAsrPlugin.swift"; sourceTree = SOURCE_ROOT; };
 		24C7999A5D4CCBBBD23E16E7 /* RealtimeTranslate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RealtimeTranslate.swift; path = "../../native-plugin/ios/RealtimeTranslate.swift"; sourceTree = SOURCE_ROOT; };
@@ -112,6 +114,7 @@
 			children = (
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
+				28212D6D92584343B3CD05EA /* SceneDelegate.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -261,6 +264,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
+				C815FA0A06E147E3BDE1AC99 /* SceneDelegate.swift in Sources */,
 				864CBBF16324C1946F7E7200 /* RealtimeAsrPlugin.swift in Sources */,
 				1B83F307931ADA605C09217D /* SherpaOnnx.swift in Sources */,
 				9B9D9044DB6C3D71CBC4EA28 /* AsrModels.swift in Sources */,
