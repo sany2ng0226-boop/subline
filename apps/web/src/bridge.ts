@@ -72,6 +72,7 @@ import {
   deleteTranslationModelFromCache,
 } from './translation/model-store';
 import { isIOS } from './platform';
+import { createScreenWakeLock } from './screen-wake-lock';
 
 const DB_NAME = 'realtime-translator';
 const DB_VERSION = 1;
@@ -277,8 +278,13 @@ export function createWebBridge(): AppBridge {
   // 行 id 由桥接层统一分配，跨录音会话单调递增：识别 worker 每次 start 都会重建、其内部
   // id 从 0 计数，而 UI 的行与译文回填都按 id 对应，必须全局唯一，故在此改写后再上抛。
   let nextLineId = 0;
+  const screenWakeLock = createScreenWakeLock(navigator.wakeLock, document);
   const asr = new WebAsr({
-    onStatus: (st) => statusCb.emit(st),
+    onStatus: (st) => {
+      if (st.state === 'running') screenWakeLock.start();
+      else if (st.state === 'stopped' || st.state === 'error') screenWakeLock.stop();
+      statusCb.emit(st);
+    },
     onPartial: (p) => partialCb.emit(p),
     onSegment: (seg) => {
       const line: SegmentPayload = { ...seg, id: nextLineId++ };
@@ -326,6 +332,7 @@ export function createWebBridge(): AppBridge {
       void asr.prewarm().catch(() => undefined);
     },
     async stopPipeline(): Promise<{ ok: boolean }> {
+      screenWakeLock.stop();
       return asr.stop();
     },
 

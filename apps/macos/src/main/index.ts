@@ -1,3 +1,4 @@
+import { createDisplaySleepBlocker } from './display-sleep';
 import { TranslationRequestQueue } from './translation/request-queue';
 import { runCandidateSmoke } from './candidate-smoke';
 import path from 'node:path';
@@ -9,6 +10,7 @@ import {
   desktopCapturer,
   dialog,
   ipcMain,
+  powerSaveBlocker,
   session,
   shell,
   systemPreferences,
@@ -244,6 +246,8 @@ function dirSize(dir: string): number {
 }
 
 // 应用图标：仅开发时手动设置（dev 下 Dock 默认显示 Electron 图标）；
+const displaySleep = createDisplaySleepBlocker(powerSaveBlocker);
+
 // 打包后图标由 electron-builder 写入 .app，无需也无法从 asar 取此路径。
 // 图标源已唯一化到仓库根 assets/icon.png（见 scripts/gen-icon.mjs）；
 // getAppPath() 在 dev 下为 apps/macos，故上溯两级到仓库根取共享 PNG。
@@ -261,6 +265,7 @@ function createWindow(): void {
       contextIsolation: true,
     },
   });
+  win.on('closed', () => displaySleep.stop());
   win.on('close', (event) => {
     if (leaveConfirmed || !hasUnsavedContent()) return;
     event.preventDefault();
@@ -453,6 +458,7 @@ function startAsrChild(): Promise<void> {
       // 其异步 exit 不应误报「识别进程异常退出」，也不应清掉随后新建的子进程引用。
       const isCurrent = asrChild === child;
       if (isCurrent) {
+        displaySleep.stop();
         asrChild = null;
         asrReady = null;
         asrChildConfig = null;
@@ -475,6 +481,7 @@ function startAsrChild(): Promise<void> {
 
 /** 让当前 ASR 子进程按新配置重建：同步置空引用，下次 start/prewarm 时以最新设置重新 fork。 */
 function reconfigureAsr(): void {
+  displaySleep.stop();
   asrChild?.kill();
   asrChild = null;
   asrReady = null;
@@ -525,6 +532,7 @@ ipcMain.handle('pipeline:start', async (): Promise<StartResult> => {
   translationContext.reset();
   sendToRenderer('pipeline:status', { state: 'running' });
   sessionActive = true;
+  displaySleep.start();
   return { ok: true };
 });
 
@@ -847,6 +855,7 @@ ipcMain.handle(
 );
 
 ipcMain.handle('pipeline:stop', () => {
+  displaySleep.stop();
   asrChild?.postMessage({ type: 'flush' });
   sessionActive = false;
   sendToRenderer('pipeline:status', { state: 'stopped' });
@@ -906,6 +915,8 @@ app.on('before-quit', (event) => {
     app.quit();
   });
 });
+
+app.on('will-quit', () => displaySleep.stop());
 
 app.on('window-all-closed', () => {
   asrChild?.kill();
