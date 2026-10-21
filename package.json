@@ -5,6 +5,8 @@
   "private": true,
   "packageManager": "pnpm@10.33.0",
   "scripts": {
+    "version:check": "node scripts/sync-version.mjs --check",
+    "version:sync": "node scripts/sync-version.mjs --write",
     "postinstall": "node node_modules/electron/install.js",
     "dev": "pnpm --filter @rt/macos dev",
     "build": "pnpm --filter @rt/macos build",
