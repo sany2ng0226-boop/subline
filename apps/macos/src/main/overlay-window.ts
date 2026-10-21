@@ -13,6 +13,7 @@ export interface OverlayDependencies {
   platform: string;
   readSettings(): AppSettings;
   writeSettings(settings: AppSettings): unknown;
+  canClickThrough?(): boolean;
   publish(state: OverlayState): void;
 }
 
@@ -61,7 +62,7 @@ export function createOverlayController(deps: OverlayDependencies) {
     },
     async open() {
       if (window && !window.isDestroyed()) { window.focus(); return; }
-      clickThrough = deps.readSettings().overlay?.clickThrough ?? false;
+      clickThrough = (deps.readSettings().overlay?.clickThrough ?? false) && (deps.canClickThrough?.() ?? true);
       bounds = restoredBounds();
       const target = deps.createWindow({
         ...bounds, minWidth: 360, minHeight: 72,
@@ -100,6 +101,8 @@ export function createOverlayController(deps: OverlayDependencies) {
       if (window && !window.isDestroyed()) window.close();
     },
     setClickThrough(on: boolean) {
+      // Never lock the window unless the global unlock binding is working.
+      on = on && (deps.canClickThrough?.() ?? true);
       clickThrough = on;
       window?.setIgnoreMouseEvents(on, { forward: true });
       persist();

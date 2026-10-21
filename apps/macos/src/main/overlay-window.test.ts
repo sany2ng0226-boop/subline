@@ -120,3 +120,13 @@ describe('overlay window', () => {
     expect(controller.state().visible).toBe(false);
   });
 });
+
+ it('refuses restored and requested click-through when unlock is unavailable', async () => {
+   const { controller, deps, target } = setup();
+   Object.assign(deps, { canClickThrough: () => false });
+   await controller.open();
+   expect(controller.state().clickThrough).toBe(false);
+   controller.setClickThrough(true);
+   expect(controller.state().clickThrough).toBe(false);
+   expect(target.setIgnoreMouseEvents).toHaveBeenLastCalledWith(false, { forward: true });
+ });

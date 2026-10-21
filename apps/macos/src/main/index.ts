@@ -1,3 +1,4 @@
+import { createGlobalShortcuts, dispatchOverlayShortcut } from './global-shortcuts';
 import { createOverlayController, OVERLAY_BROADCAST_CHANNELS } from './overlay-window';
 import { createGuardedRelaunch } from './guarded-relaunch';
 import { mapPermissionState, createPermissionChangeDetector, type PermissionKind, type PermissionState } from '@rt/core';
@@ -17,6 +18,7 @@ import {
   desktopCapturer,
   dialog,
   ipcMain,
+  globalShortcut,
   powerSaveBlocker,
   session,
   screen,
@@ -336,6 +338,7 @@ const overlay = createOverlayController({
   rendererFile: path.join(__dirname, '../renderer/index.html'),
   rendererUrl: process.env['ELECTRON_RENDERER_URL'],
   platform: process.platform,
+  canClickThrough: () => shortcuts.getShortcutStatus().toggleOverlay === 'ok',
   readSettings: loadSettings,
   writeSettings: saveSettings,
   publish: (state) => {
@@ -343,6 +346,18 @@ const overlay = createOverlayController({
     overlay.send('overlay:state', state);
   },
 });
+const shortcuts = createGlobalShortcuts({
+  globalShortcut, platform: process.platform, readSettings: loadSettings, writeSettings: saveSettings,
+  dispatch: (action) => dispatchOverlayShortcut(action, overlay, () => {
+    if (win && !win.isDestroyed()) win.webContents.send('shortcut:toggle-recording', 'toggleRecording');
+  }),
+  onUnlockUnavailable: () => overlay.setClickThrough(false),
+  log: (error) => console.error('Global shortcut:', error),
+});
+app.whenReady().then(() => shortcuts.start());
+ipcMain.handle('shortcut:register', (_event, action, key) => shortcuts.registerShortcut(action, key));
+ipcMain.handle('shortcut:get', () => shortcuts.getShortcuts());
+ipcMain.handle('shortcut:status', () => shortcuts.getShortcutStatus());
 ipcMain.handle('overlay:open', () => overlay.open());
 ipcMain.handle('overlay:close', () => overlay.close());
 ipcMain.on('overlay:click-through', (_event, on: unknown) => {
@@ -928,7 +943,7 @@ ipcMain.handle('settings:save', (_event, next: AppSettings): AppSettings => {
   // 主页已无翻译开关，开启改由保存触发：翻译刚从关变开也要预热（引擎未变时也是）。
   const enabledTurnedOn = !prev.enabled && cur.enabled;
 
-  const saved = saveSettings(next);
+  const saved = saveSettings({ ...next, shortcuts: shortcuts.getShortcuts() });
   alwaysOnTop.apply(saved.alwaysOnTop);
   if (engineChanged) {
     reconfigureTranslate();
@@ -1034,6 +1049,7 @@ app.on('before-quit', (event) => {
 
 let recoveryFlushed = false;
 app.on('will-quit', (event) => {
+  shortcuts.stop();
   displaySleep.stop();
   overlay.close();
   if (recoveryFlushed) return;

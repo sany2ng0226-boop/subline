@@ -3,6 +3,7 @@
 // 仅引用 @rt/core 内的领域类型与回调，保持平台无关；音频采集不在此契约内（隐藏在各宿主实现中）。
 
 import type {
+  ShortcutAction,
   SegmentPayload,
   PartialPayload,
   TranslationPayload,
@@ -58,7 +59,15 @@ export interface AppBridge {
   isOverlayWindow?(): boolean;
   openOverlay?(): Promise<void>;
   closeOverlay?(): Promise<void>;
+  /** Refuses enabling click-through without a registered toggleOverlay unlock shortcut.
+   * Observe onOverlayState for the accepted state. */
   setOverlayClickThrough?(on: boolean): void;
+  /** Desktop-only. Successful changes persist; failed changes retain the previous configuration. */
+  registerShortcut?(action: ShortcutAction, accelerator: string | null): Promise<{ ok: boolean; error?: 'conflict' | 'invalid' }>;
+  getShortcuts?(): Promise<Record<ShortcutAction, string | null>>;
+  /** Configured bindings remain available from getShortcuts even when startup registration fails. */
+  getShortcutStatus?(): Promise<Record<ShortcutAction, 'ok' | 'conflict' | 'unbound'>>;
+  onShortcut?(cb: (action: ShortcutAction) => void): () => void;
   /** Receives current state on subscription and subsequent changes in every window. */
   onOverlayState?(cb: (state: OverlayState) => void): () => void;
   /**

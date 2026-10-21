@@ -11,6 +11,10 @@ function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
 }
 
 const api: ElectronApi = {
+  registerShortcut: (action, key) => ipcRenderer.invoke('shortcut:register', action, key),
+  getShortcuts: () => ipcRenderer.invoke('shortcut:get'),
+  getShortcutStatus: () => ipcRenderer.invoke('shortcut:status'),
+  onShortcut: (cb) => subscribe('shortcut:toggle-recording', cb),
   isOverlayWindow: () => location.hash === '#overlay',
   openOverlay: () => ipcRenderer.invoke('overlay:open'),
   closeOverlay: () => ipcRenderer.invoke('overlay:close'),
