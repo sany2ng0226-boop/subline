@@ -8,6 +8,9 @@ import { setBridge } from './bridge';
 import { registerTranscriptionListeners } from './composables/useTranscription';
 import { registerModelDownloadListeners } from './composables/useModelDownloads';
 import { registerCloseGuard } from './composables/useSessionArchive';
+import { initRecovery } from './composables/useRecovery';
+import { settings } from './composables/useSettings';
+import { isOverlayWindow } from './utils/window';
 
 export { setBridge, bridge } from './bridge';
 
@@ -22,5 +25,7 @@ export function mountApp(selector: string, b: AppBridge): void {
   registerModelDownloadListeners();
   // 关闭保护跟随应用整个生命周期（离开主页去设置 / 归档页时内容仍在内存，仍需拦截退出）。
   registerCloseGuard();
+  // 崩溃暂存只归主窗管：悬浮窗收到同样的字幕，不能重复写入或弹恢复条。
+  if (!isOverlayWindow()) void initRecovery({ lang: () => settings.value?.asr.language });
   createApp(App).use(i18n).mount(selector);
 }

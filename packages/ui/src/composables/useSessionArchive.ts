@@ -14,6 +14,7 @@ import {
   hasUnsavedContent,
   lastArchivedAt,
 } from './useTranscription';
+import { persistRecoveryNow } from './useRecovery';
 
 declare const __INTERNAL_BUILD__: boolean;
 const internalBuild = typeof __INTERNAL_BUILD__ !== 'undefined' && __INTERNAL_BUILD__;
@@ -48,6 +49,8 @@ export async function archiveSession(name: string, folderId?: string | null): Pr
   await bridge().saveArchive(name.trim() || defaultArchiveName(), archiveSnapshot(), foldersEnabled() ? folderId : undefined);
   clearTranscript();
   lastArchivedAt.value = Date.now();
+  // 归档后立即清掉崩溃暂存（关窗前归档后宿主马上退出，等不到下一次写入）
+  persistRecoveryNow();
 }
 
 // 关闭确认框里选「归档并退出」：先停录（等最后一句定稿），再按默认名归档到上次使用的文件夹。

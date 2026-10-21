@@ -41,6 +41,7 @@ import {
   downloadEntry,
 } from '../composables/useModelDownloads';
 import { archiveSession, foldersEnabled as archiveFoldersEnabled, suggestArchiveName } from '../composables/useSessionArchive';
+import { recoveryOffer, restoreRecovery, discardRecovery } from '../composables/useRecovery';
 import { fmtHourMinute } from '../utils/datetime';
 import { bridge } from '../bridge';
 
@@ -586,6 +587,15 @@ function openMicSettings(): void {
       </div>
     </header>
 
+    <!-- 上次未归档内容的恢复条：非模态，不挡录音；恢复后放在当前内容之前 -->
+    <div v-if="recoveryOffer" class="recovery-bar" role="status">
+      <span class="min-w-0">{{ t('main.recoveryNotice', { n: recoveryOffer.lines.length, time: fmtHourMinute(recoveryOffer.savedAt) }) }}</span>
+      <div class="flex shrink-0 items-center gap-4">
+        <n-button text size="small" @click="discardRecovery">{{ t('main.recoveryDiscard') }}</n-button>
+        <n-button text type="primary" size="small" @click="restoreRecovery">{{ t('main.recoveryRestore') }}</n-button>
+      </div>
+    </div>
+
     <transcript-list
       :lines="lines"
       :partial="partial"
@@ -829,6 +839,17 @@ function openMicSettings(): void {
 .unsaved-btn:disabled { opacity: 0.5; cursor: default; }
 .archived-label { font-size: 12px; white-space: nowrap; color: var(--rt-ink-3); }
 
+.recovery-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--rt-line);
+  font-size: 13px;
+  color: var(--rt-ink-2);
+}
+
 .stop-notice {
   display: flex;
   align-items: center;
@@ -867,6 +888,7 @@ function openMicSettings(): void {
   .app-header { min-height: 52px; padding: 8px 12px 8px 16px; }
   /* 避开底部圆形录音按钮 */
   .undo-bar { bottom: calc(env(safe-area-inset-bottom) + 100px); }
+  .recovery-bar { padding: 10px 16px; }
   .stop-notice { margin-bottom: calc(env(safe-area-inset-bottom) + 98px); padding: 10px 16px; }
 }
 </style>

@@ -8,8 +8,9 @@ import ArchiveScreen from './screens/ArchiveScreen.vue';
 import { loadSettings, isDark } from './composables/useSettings';
 import { modelLoading } from './composables/useTranscription';
 import { bridge } from './bridge';
+import { isOverlayWindow } from './utils/window';
 
-type Screen = 'loading' | 'onboarding' | 'main' | 'settings' | 'archive';
+type Screen = 'loading' | 'onboarding' | 'main' | 'settings' | 'archive' | 'overlay';
 const screen = ref<Screen>('loading');
 
 const naiveTheme = computed(() => (isDark.value ? darkTheme : lightTheme));
@@ -45,7 +46,10 @@ async function enterMain(): Promise<void> {
 
 onMounted(async () => {
   const s = await loadSettings();
-  if (s.onboarded) {
+  // 悬浮字幕窗不走引导、不预热、不显示主屏（及其弹窗）；字幕视图另行实现。
+  if (isOverlayWindow()) {
+    screen.value = 'overlay';
+  } else if (s.onboarded) {
     await enterMain();
   } else {
     screen.value = 'onboarding';

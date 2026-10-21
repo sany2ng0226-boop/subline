@@ -250,3 +250,30 @@ export function archiveSnapshot() {
   return lines.map(line => ({ time: line.time, text: line.text,
     translation: line.translationPartial ? '' : line.translation }));
 }
+
+/** 崩溃暂存用的快照：在归档快照基础上保留每行语言 */
+export function recoverySnapshot(): RecoveredLine[] {
+  return lines.map((line) => ({ time: line.time, text: line.text,
+    translation: line.translationPartial ? '' : line.translation,
+    ...(line.lang ? { lang: line.lang } : {}) }));
+}
+
+export interface RecoveredLine { time: string; text: string; translation: string; lang?: string }
+
+// 恢复行用负 id：新会话的 segment id 从头计数，不能让迟到的译文串到旧行上
+let nextRecoveredId = -2;
+
+/** 把上次未归档的行恢复到当前内容之前 */
+export function restoreLines(saved: RecoveredLine[]): void {
+  lastArchivedAt.value = null;
+  lines.unshift(...saved.map((line): TranscriptLine => ({
+    displayId: ++nextDisplayId, id: nextRecoveredId--, time: line.time, text: line.text,
+    translation: line.translation, translating: false, failed: false,
+    ...(line.lang ? { lang: line.lang } : {}),
+  })));
+}
+
+/** 当前录音的开始时刻（epoch ms）；尚未录音时为 0 */
+export function recordingStartedAt(): number {
+  return recordStartEpoch;
+}
