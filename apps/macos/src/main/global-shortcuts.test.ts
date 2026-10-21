@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '@rt/core';
-import { createGlobalShortcuts } from './global-shortcuts';
+import { createGlobalShortcuts, dispatchShortcut } from './global-shortcuts';
 
 function setup(platform = 'darwin') {
   let settings = {} as AppSettings;
@@ -13,6 +13,20 @@ function setup(platform = 'darwin') {
 }
 
 describe('recording global shortcut', () => {
+  it('sends the plain action string on shortcut to live windows', () => {
+    const send = vi.fn();
+    const destroyedSend = vi.fn();
+    const { deps, controller } = setup();
+    deps.dispatch.mockImplementation((action) => dispatchShortcut([
+      { isDestroyed: () => false, webContents: { send } },
+      { isDestroyed: () => true, webContents: { send: destroyedSend } },
+    ], action));
+    controller.start();
+    const [, callback] = deps.globalShortcut.register.mock.calls[0] as unknown as [string, () => void];
+    callback();
+    expect(send).toHaveBeenCalledExactlyOnceWith('shortcut', 'toggleRecording');
+    expect(destroyedSend).not.toHaveBeenCalled();
+  });
   it.each([['darwin', 'Alt+Command+R'], ['win32', 'Alt+Control+R']])('registers the %s default and dispatches recording', (platform, key) => {
     const { deps, controller } = setup(platform);
     controller.start();

@@ -29,6 +29,9 @@ export default defineConfig({
     },
     resolve: {
       alias: {
+        // UI has no build step; injected workspace copies can lag behind its source.
+        '@rt/ui/styles': resolve(root, '../../packages/ui/src/styles.css'),
+        '@rt/ui': resolve(root, '../../packages/ui/src/index.ts'),
         '@': resolve(root, 'src/renderer/src'),
         '@shared': resolve(root, 'src/shared'),
       },

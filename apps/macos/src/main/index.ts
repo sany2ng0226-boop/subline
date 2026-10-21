@@ -1,5 +1,5 @@
 import type { SettingsPatch } from '@rt/core';
-import { createGlobalShortcuts } from './global-shortcuts';
+import { createGlobalShortcuts, dispatchShortcut } from './global-shortcuts';
 import { createQuitFlow, setupSingleInstance } from './quit-flow';
 import { createRecoveryStore } from './recovery-store';
 import { resolveLeaveSession } from './leave-session';
@@ -854,9 +854,7 @@ const shortcuts = createGlobalShortcuts({
   platform: process.platform,
   readSettings: loadSettings,
   dispatch: (action) => {
-    for (const window of BrowserWindow.getAllWindows()) {
-      if (!window.isDestroyed()) window.webContents.send('shortcut', action);
-    }
+    dispatchShortcut(BrowserWindow.getAllWindows(), action);
   },
   log: (error) => console.error('Global shortcut:', error),
 });
