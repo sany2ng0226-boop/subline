@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { UNDO_MS } from '../composables/useDeferredAction';
 import { computed, ref, h, watch, onUnmounted } from 'vue';
 import { NButton, NModal, NInput, NDropdown, NTooltip, NProgress, NSelect } from 'naive-ui';
 import type { DropdownMixedOption } from 'naive-ui/es/dropdown/src/interface';
@@ -96,7 +97,6 @@ function archiveInsteadOfClear(): void {
   void openArchiveModal();
 }
 
-const UNDO_MS = 8000;
 let undoTimer: ReturnType<typeof setTimeout> | undefined;
 watch(canUndoDelete, (open) => {
   clearTimeout(undoTimer);
