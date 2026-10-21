@@ -4,3 +4,4 @@
 - [web-cache-probe](web-cache-probe.md) — web 模型管理页的缓存探测红线（cache.keys 不用 cache.match）/ 列表单例缓存 / v-if 重挂载陷阱
 - [asr-eval](asr-eval.md) — ASR 识别准确率 CER 评测基建（eval-cer）的用法、用例格式、指标解读与首批发现
 - [pipeline-recant](pipeline-recant.md) — agreement 管线「模型翻供」三缺陷的定性与修复（重基/定稿择长/标点容忍对齐/停滞分流）
+- [workspace-build](workspace-build.md) — 源码型 workspace 包的应用构建解析与生产 bundle 回归门禁
