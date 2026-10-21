@@ -1,6 +1,7 @@
 import { createGlobalShortcuts } from './global-shortcuts';
 import { createQuitFlow, setupSingleInstance } from './quit-flow';
 import { createRecoveryStore } from './recovery-store';
+import { resolveLeaveSession } from './leave-session';
 import { createAlwaysOnTopController } from './always-on-top';
 import { createDisplaySleepBlocker } from './display-sleep';
 import { TranslationRequestQueue } from './translation/request-queue';
@@ -160,9 +161,7 @@ function confirmLeave(): Promise<boolean> {
       cancelId: 2,
       noLink: true,
     });
-    if (response === 2) return false;
-    if (response === 1) return true;
-    return archiveBeforeClose(target);
+    return resolveLeaveSession(response, () => archiveBeforeClose(target), () => recoveryStore.clearRecovery());
   })().finally(() => {
     leavePrompt = null;
   });
