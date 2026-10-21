@@ -96,6 +96,7 @@ export interface SetupStatus {
 
 /** 模型下载进度（ASR / 翻译共用）。并行下载时按 kind+id 归属到对应模型条目。 */
 export interface SetupProgress {
+  bytesPerSec?: number;
   /** 已下载字节 */
   loaded: number;
   /** 总字节 */

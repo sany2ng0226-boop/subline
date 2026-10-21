@@ -5,6 +5,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline as streamPipeline } from 'node:stream/promises';
 import { SILERO_VAD, getAsrModel, requiredAsrFiles, type AsrModelFile } from '@rt/core';
+import { verifyModelFile } from './model-integrity';
 import type { SetupProgress } from '../shared/types';
 
 /** 指定模型（含公共依赖 VAD）是否齐全（清单来自 @rt/core 的共享登记表）。 */
@@ -19,109 +20,135 @@ export function asrModelsReady(modelsDir: string, modelId: string): boolean {
 // 「无进展超时」而非「总时长超时」——大文件慢速下载合法，只在字节流真正停滞时触发。
 const STALL_TIMEOUT_MS = 30_000;
 
-// .part 临时文件的进程内唯一序号：即使去重失效（防御性），也不会有两路写同一个 .part 互相破坏。
-let partSeq = 0;
+type Integrity = { expectedBytes?: number; sha256?: string };
+type Progress = (loaded: number, total: number, bytesPerSec?: number) => void;
+type Sidecar = { expectedBytes: number | null; sha256: string | null; url: string; etag: string | null; lastModified: string | null };
+const sharedDownloads = new Map<string, { promise: Promise<void>; listeners: Set<Progress> }>();
 
-// 并行下载去重（键为最终落地路径）：多个 ASR 模型共享同一文件（Silero VAD，最小、每个下载都先下），
-// 只有一路真正下载，其余并发下载等它完成后按「文件是否已落地」计入，避免重复下载与并发写同一目标。
-// 条目在会话内保留（数量=曾下过的文件数，极少）；某文件已在磁盘时上层的 existsSync 先命中，不会走到这里。
-const sharedDownloads = new Map<string, Promise<void>>();
-
-/**
- * 从多个下载源按序尝试下载到 dest：每个 URL 只试一次，成功即返回，全部失败才抛出聚合错误。
- * urls 为按端分源的有序列表（macOS native 端取注册表 file.nativeUrls：自托管 GitHub Release 优先、
- * 可含 HF 上游兜底）。ASR 与翻译模型的自研下载链路共用此函数（翻译模型见 ./translation/model-downloader）。
- * 每次失败前会清理本次 .part（见 downloadFromUrl），故换源不残留半截文件；停滞/HTTP 错误均计为该源失败。
- */
-export async function downloadFile(
-  urls: string[],
-  dest: string,
-  onBytes?: (loaded: number, total: number) => void,
-  signal?: AbortSignal
+/** One writer per destination, including shared dependencies and mirror fallback. */
+export function downloadFile(
+  urls: string[], dest: string, onBytes?: Progress, signal?: AbortSignal, spec: Integrity = {}
 ): Promise<void> {
-  if (urls.length === 0) throw new Error(`无可用下载源: ${dest}`);
-  const errors: string[] = [];
-  for (const url of urls) {
-    try {
-      await downloadFromUrl(url, dest, onBytes, signal);
-      return;
-    } catch (err) {
-      // 用户取消（外部 signal aborted）：立即停止，不再尝试后续源。
-      if (signal?.aborted) throw err;
-      errors.push(`${url} → ${err instanceof Error ? err.message : String(err)}`);
-    }
+  dest = path.resolve(dest);
+  const active = sharedDownloads.get(dest);
+  if (active) {
+    if (onBytes) active.listeners.add(onBytes);
+    return active.promise;
   }
-  // 全部源耗尽：把各源失败原因聚合抛出（含停滞/HTTP 等），交给上层失败→重试 UI 接管。
-  throw new Error(`全部下载源均失败:\n${errors.join('\n')}`);
+  const listeners = new Set<Progress>(onBytes ? [onBytes] : []);
+  const promise = (async () => {
+    if (!urls.length) throw new Error(`无可用下载源: ${dest}`);
+    const errors: string[] = [];
+    for (const url of urls) {
+      try {
+        await downloadFromUrl(url, dest, (loaded, total, speed) => {
+          for (const listener of listeners) listener(loaded, total, speed);
+        }, signal, spec);
+        return;
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        errors.push(`${url} → ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    throw new Error(`全部下载源均失败:\n${errors.join('\n')}`);
+  })().finally(() => { sharedDownloads.delete(dest); });
+  sharedDownloads.set(dest, { promise, listeners });
+  return promise;
 }
 
-/**
- * 从单一 URL 流式下载到 dest（先写 .part 再原子 rename），带无进展看门狗。失败/中断时清理本次 .part。
- * 外部 signal（用户取消）与内部停滞看门狗合流：外部 abort 触发内部 controller.abort()。
- */
 async function downloadFromUrl(
-  url: string,
-  dest: string,
-  onBytes?: (loaded: number, total: number) => void,
-  signal?: AbortSignal
+  url: string, dest: string, onBytes: Progress, signal: AbortSignal | undefined, spec: Integrity
 ): Promise<void> {
-  // 无进展看门狗：字节流停滞（TCP 静默断开、无 RST）时主动 abort，避免永久挂起。
+  const part = `${dest}.part`;
+  const metadata = `${part}.json`;
+  let previous: Sidecar | undefined;
+  try { previous = JSON.parse(fs.readFileSync(metadata, 'utf8')); } catch { /* Missing metadata cannot authorize resume. */ }
+  let offset = 0;
+  if (previous && (previous.sha256 ?? undefined) === spec.sha256 && (previous.expectedBytes ?? undefined) === spec.expectedBytes
+    && (previous.url === url || !!spec.sha256)) {
+    try { offset = fs.statSync(part).size; } catch { /* New download. */ }
+  }
   const controller = new AbortController();
   let stalled = false;
   let watchdog: ReturnType<typeof setTimeout> | undefined;
   const armWatchdog = () => {
-    if (watchdog !== undefined) clearTimeout(watchdog);
-    watchdog = setTimeout(() => {
-      stalled = true;
-      controller.abort();
-    }, STALL_TIMEOUT_MS);
+    clearTimeout(watchdog);
+    watchdog = setTimeout(() => { stalled = true; controller.abort(); }, STALL_TIMEOUT_MS);
   };
-
-  // 外部取消 → 中止本次 fetch（stalled 保持 false，故不误报「下载停滞」，按 AbortError 上抛）。
-  const onExternalAbort = (): void => controller.abort();
-  if (signal) {
-    if (signal.aborted) controller.abort();
-    else signal.addEventListener('abort', onExternalAbort, { once: true });
-  }
-
-  armWatchdog(); // 连接/响应头阶段也受同一 signal 约束
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  else signal?.addEventListener('abort', abort, { once: true });
+  armWatchdog();
   try {
-    const res = await fetch(url, { signal: controller.signal }); // 自动跟随 HF/GitHub 的重定向
-    if (!res.ok || !res.body) {
-      throw new Error(`下载失败 ${res.status}: ${url}`);
+    const headers: Record<string, string> = { 'Accept-Encoding': 'identity' };
+    if (offset) {
+      headers.Range = `bytes=${offset}-`;
+      const validator = previous?.etag || previous?.lastModified;
+      if (validator) headers['If-Range'] = validator;
     }
-    const total = Number(res.headers.get('content-length')) || 0;
-    let loaded = 0;
-    const body = Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]);
-    body.on('data', (chunk: Buffer) => {
-      loaded += chunk.length;
-      armWatchdog(); // 收到新字节即重置无进展计时
-      onBytes?.(loaded, total);
-    });
-    // 先写 .part 临时文件，校验完整后原子 rename 到最终路径：中断/失败不会在最终路径
-    // 留下半截文件（模型就绪检查按最终路径的存在性判断，半截文件会被误判为就绪）。
-    // 唯一后缀避免并行下载共享文件（VAD）时并发写同一 .part 互相破坏。
-    const part = `${dest}.${partSeq++}.part`;
-    armWatchdog(); // 连接完成，为首字节到达重置一次计时
-    try {
-      await streamPipeline(body, fs.createWriteStream(part));
-      // 只把「少收」判为不完整：CDN 对文本文件可能压缩传输（content-length 为压缩后大小，
-      // fetch 自动解压导致实收字节更多）；截断的压缩流会在解压时直接报错，由上面的管道兜底。
-      if (total > 0 && loaded < total) {
-        throw new Error(`下载不完整 (${loaded}/${total} 字节): ${url}`);
+    let res = await fetch(url, { headers, signal: controller.signal });
+    const start = /^bytes (\d+)-(\d+)\/(\d+|\*)$/.exec(res.headers.get('content-range') || '');
+    const etag = res.headers.get('etag');
+    const validatorChanged = !!offset && !!etag && etag !== previous?.etag;
+    if (res.status !== 416 && ((res.status === 206 && (!offset || !start || Number(start[1]) !== offset))
+      || (res.status === 206 && validatorChanged))) {
+      await res.body?.cancel();
+      offset = 0;
+      res = await fetch(url, { headers: { 'Accept-Encoding': 'identity' }, signal: controller.signal });
+    }
+    if (res.status === 416 && offset) {
+      const completeSize = /^bytes \*\/(\d+)$/.exec(res.headers.get('content-range') || '');
+      await res.body?.cancel();
+      if (completeSize && Number(completeSize[1]) !== offset) {
+        await verifyModelFile(part, { ...spec, expectedBytes: Number(completeSize[1]) }, signal);
       }
-      fs.renameSync(part, dest);
-    } catch (err) {
-      fs.rmSync(part, { force: true });
-      throw err;
+      clearTimeout(watchdog);
+      await verifyModelFile(part, spec, signal);
+      onBytes(offset, spec.expectedBytes ?? offset, 0);
+    } else {
+      if (!res.ok || !res.body || (res.status !== 200 && res.status !== 206)) throw new Error(`下载失败 ${res.status}: ${url}`);
+      if (res.status === 200) offset = 0;
+      else if (!offset) { await res.body.cancel(); throw new Error('无效的 Content-Range'); }
+      if (!offset) fs.writeFileSync(part, '');
+      const sidecar: Sidecar = { url, etag: res.headers.get('etag'), lastModified: res.headers.get('last-modified'),
+        expectedBytes: spec.expectedBytes ?? null, sha256: spec.sha256 ?? null };
+      fs.writeFileSync(metadata, JSON.stringify(sidecar));
+      const length = Number(res.headers.get('content-length')) || 0;
+      const total = spec.expectedBytes ?? (length ? offset + length : 0);
+      let loaded = offset;
+      let tick = performance.now();
+      let pending = 0;
+      let speed = 0;
+      onBytes(loaded, total, speed);
+      const body = Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]);
+      body.on('data', (chunk: Buffer) => {
+        loaded += chunk.length;
+        pending += chunk.length;
+        const now = performance.now();
+        const elapsed = now - tick;
+        if (elapsed > 0) {
+          const alpha = 1 - Math.exp(-elapsed / 3000);
+          speed += alpha * (pending * 1000 / elapsed - speed);
+          tick = now;
+          pending = 0;
+        }
+        armWatchdog();
+        onBytes(loaded, total, speed);
+      });
+      await streamPipeline(body, fs.createWriteStream(part, { flags: offset ? 'a' : 'w' }), { signal: controller.signal });
+      if (length && loaded - offset < length) throw new Error('下载不完整');
+      clearTimeout(watchdog);
+      await verifyModelFile(part, spec, signal);
     }
+    fs.renameSync(part, dest);
+    fs.rmSync(metadata, { force: true });
   } catch (err) {
-    // 看门狗触发的 abort 转成明确的中文停滞错误；外部取消（signal aborted）不改文案，按原样上抛。
+    if (!fs.existsSync(part)) fs.rmSync(metadata, { force: true });
     if (stalled && !signal?.aborted) throw new Error('下载停滞，请检查网络后重试');
     throw err;
   } finally {
-    if (watchdog !== undefined) clearTimeout(watchdog);
-    signal?.removeEventListener('abort', onExternalAbort);
+    clearTimeout(watchdog);
+    signal?.removeEventListener('abort', abort);
   }
 }
 
@@ -152,32 +179,20 @@ export async function downloadAsrModels(
 
   let base = 0; // 已完成文件的累计实收字节
   for (const f of toDownload) {
-    // 用户取消：不再开始下一个文件（在途文件由 downloadFile 中止清理，已完成文件由 cancel 整体删除）。
+    // 用户取消：不再开始下一个文件（在途文件由 downloadFile 中止并保留部分文件，已完成文件由 cancel 整体删除）。
     if (signal?.aborted) throw new Error('下载已取消');
     const dest = localPath(f);
-    // 并行去重：另一模型已在下同一文件（VAD）→ 等它完成，已落地则按文件字节计入并跳过；
-    // 它失败（文件未落地）则本路自己下（落到下面）。
-    const inflight = sharedDownloads.get(dest);
-    if (inflight) {
-      await inflight;
-      if (fs.existsSync(dest)) {
-        base += f.approxBytes;
-        onProgress({ loaded: base, total });
-        continue;
-      }
-    }
     let last = 0;
-    // 本路负责下载：登记 promise（不抛版）供并发的其它模型等待；本路自身仍 await 原始 promise 以感知失败。
     const p = downloadFile(
       f.nativeUrls,
       dest,
-      (loaded) => {
+      (loaded, _total, bytesPerSec) => {
         last = loaded;
-        onProgress({ loaded: base + loaded, total });
+        onProgress({ loaded: base + loaded, total, bytesPerSec });
       },
-      signal
+      signal,
+      f
     );
-    sharedDownloads.set(dest, p.then(() => undefined, () => undefined));
     await p;
     base += last;
   }

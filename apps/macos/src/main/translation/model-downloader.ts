@@ -3,26 +3,13 @@
 // Transformers.js 缓存布局 `<cacheDir>/<modelId>/<dir>/<filename>`，之后翻译子进程以
 // allowRemoteModels=false 离线加载。
 import fs from 'node:fs';
-import crypto from 'node:crypto';
 import path from 'node:path';
 import { getTranslationModel, type LocalModelFile } from '@rt/core';
 import { downloadFile } from '../model-downloader';
 import { localModelCached } from './model-cache';
 import type { SetupProgress } from '../../shared/types';
 
-export async function verifyModelFile(file: string, spec: LocalModelFile, signal?: AbortSignal): Promise<void> {
-  if (spec.expectedBytes !== undefined && fs.statSync(file).size !== spec.expectedBytes) {
-    fs.rmSync(file, { force: true });
-    throw new Error('模型文件大小不符，请重试下载');
-  }
-  if (!spec.sha256) return;
-  const hash = crypto.createHash('sha256');
-  for await (const chunk of fs.createReadStream(file, { signal })) hash.update(chunk);
-  if (hash.digest('hex') !== spec.sha256) {
-    fs.rmSync(file, { force: true });
-    throw new Error('模型文件校验失败，请重试下载');
-  }
-}
+export { verifyModelFile } from '../model-integrity';
 
 /**
  * 下载并安装指定本地翻译模型：逐个下载其注册表登记的全部文件（已存在的跳过，只补缺）。
@@ -66,14 +53,14 @@ export async function downloadTranslationModel(
     await downloadFile(
       f.nativeUrls,
       localPath(f),
-      (loaded) => {
+      (loaded, _total, bytesPerSec) => {
         last = loaded;
         // 实收字节可能略超近似分母（q8 实际略大于估值）：封顶到 total，避免进度条越界。
-        onProgress({ loaded: Math.min(base + loaded, total), total });
+        onProgress({ loaded: Math.min(base + loaded, total), total, bytesPerSec });
       },
-      signal
+      signal,
+      f
     );
-    await verifyModelFile(localPath(f), f, signal);
     base += last;
   }
   // 末尾对齐 100%：各文件实收合计与近似分母有出入，收尾时把进度贴到满格。
