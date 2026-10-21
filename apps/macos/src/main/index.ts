@@ -292,6 +292,7 @@ function installMenu(): void {
 function createWindow(): void {
   win = new BrowserWindow({
     width: 1100,
+    minWidth: 420,
     height: 760,
     show: !smokeReport,
     title: app.isPackaged ? app.getName() : previewProfile ? 'Subline Preview' : 'Subline',

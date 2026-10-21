@@ -13,8 +13,9 @@
     "type-check": "pnpm --filter @rt/macos type-check",
     "dist": "pnpm --filter @rt/macos dist",
     "dist:dir": "pnpm --filter @rt/macos dist:dir",
-    "check": "pnpm --filter @rt/core test && pnpm --filter @rt/macos test-eval-corpus && pnpm --filter @rt/macos type-check && pnpm --filter @rt/web type-check && pnpm --filter @rt/ios type-check",
-    "dist:windows": "pnpm --filter @rt/macos dist:windows"
+    "check": "pnpm --filter @rt/core test && pnpm --filter @rt/macos test && pnpm --filter @rt/web test && pnpm test:ui && pnpm --filter @rt/macos test-eval-corpus && pnpm --filter @rt/macos type-check && pnpm --filter @rt/web type-check && pnpm --filter @rt/ios type-check",
+    "dist:windows": "pnpm --filter @rt/macos dist:windows",
+    "test:ui": "pnpm --filter @rt/core exec vitest run --root ../.. packages/ui/src"
   },
   "keywords": [],
   "author": "",

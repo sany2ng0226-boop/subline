@@ -29,7 +29,8 @@
     "dist:windows": "node scripts/package-win.mjs",
     "dist:win": "node scripts/package-win.mjs",
     "dist:win:dir": "node scripts/package-win.mjs --dir",
-    "test:win-native": "node scripts/windows-native-smoke.mjs"
+    "test:win-native": "node scripts/windows-native-smoke.mjs",
+    "test": "pnpm --filter @rt/core exec vitest run --root ../.. apps/macos/src/main/always-on-top.test.ts apps/macos/test/display-sleep.test.ts"
   },
   "keywords": [],
   "author": "",

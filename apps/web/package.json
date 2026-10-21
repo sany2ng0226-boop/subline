@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit -p tsconfig.json",
-    "icons": "node scripts/gen-icons.mjs"
+    "icons": "node scripts/gen-icons.mjs",
+    "test": "pnpm --filter @rt/core exec vitest run --root ../.. apps/web/src/screen-wake-lock.test.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
