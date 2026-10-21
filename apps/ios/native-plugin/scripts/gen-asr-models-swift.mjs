@@ -67,7 +67,7 @@ function fileLiteral(f, role) {
     `filename: ${swiftString(f.filename)}, ` +
     `dir: ${swiftString(f.dir)}, ` +
     `role: ${swiftString(role ?? f.role ?? '')}, ` +
-    `approxBytes: ${f.approxBytes})`
+    `approxBytes: ${f.approxBytes}, expectedBytes: ${f.expectedBytes ?? 'nil'}, sha256: ${f.sha256 ? swiftString(f.sha256) : 'nil'})`
   );
 }
 
@@ -110,6 +110,8 @@ struct AsrModelFile {
   let role: String
   /// 近似大小（字节），用于下载进度估算，非精确值。
   let approxBytes: Int
+  let expectedBytes: Int?
+  let sha256: String?
 }
 
 /// 一个可选用的 ASR 模型规格（对应 @rt/core 的 AsrModelSpec，已按平台过滤为仅含 iOS 支持者）。

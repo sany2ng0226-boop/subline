@@ -25,6 +25,7 @@
 //
 
 import Foundation
+import CryptoKit
 import AVFoundation
 import UIKit
 import Capacitor
@@ -67,6 +68,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
 
   deinit {
     NotificationCenter.default.removeObserver(self)
+    DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = false }
   }
 
   // MARK: - Tunables (mirror apps/macos/src/main/pipeline.ts intent)
@@ -105,7 +107,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   // downloadLock 保护跨线程访问；cancelDownload 置 downloadCancelled 并 cancel 在途 task 以解除阻塞。
   private let downloadLock = NSLock()
   private var downloadCancelled = false
-  private var currentDownloadTask: URLSessionDownloadTask?
+  private var currentDownloadTask: URLSessionDataTask?
 
   private var isRunning = false
   /// Tracks whether an input tap is currently installed on the engine's bus. installTap on a
@@ -172,6 +174,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
           self.notifyListeners("status", data: ["state": "running"])
           call.resolve(["ok": true])
         } catch {
+          self.stopCapture()
           let msg = error.localizedDescription
           self.notifyListeners("status", data: ["state": "error", "error": msg, "code": "asr-init-failed"])
           call.resolve(["ok": false, "error": msg, "code": "asr-init-failed"])
@@ -503,9 +506,11 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
 
     audioEngine.prepare()
     try audioEngine.start()
+    DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = true }
   }
 
   private func stopCapture() {
+    DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = false }
     // Remove the tap based on our own flag, not audioEngine.isRunning: a system interruption
     // can stop the engine while leaving the tap installed, and the next start would then crash.
     if tapInstalled {
@@ -821,7 +826,18 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
     let minBytes = file.approxBytes >= smallModelFileThreshold
       ? Int(Double(file.approxBytes) * minModelSizeFraction)
       : 1  // small files: just non-empty
-    return bytes >= minBytes
+    guard bytes >= minBytes else { return false }
+    if let expected = file.expectedBytes, bytes != expected { return false }
+    if let expectedHash = file.sha256 {
+      guard let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path)) else { return false }
+      defer { try? handle.close() }
+      var hash = SHA256()
+      do {
+        while let chunk = try handle.read(upToCount: 1024 * 1024), !chunk.isEmpty { hash.update(data: chunk) }
+      } catch { return false }
+      return hash.finalize().map { String(format: "%02x", $0) }.joined() == expectedHash.lowercased()
+    }
+    return true
   }
 
   /// Integrity precheck standing in for a real checksum: every registry file must exist and clear
@@ -870,11 +886,12 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
         continue
       }
       let baseCompleted = completedBytes
-      try downloadFile(from: file.urls, to: dest) { loadedThisFile in
+      try downloadFile(file, to: dest) { loadedThisFile, speed in
         self.notifyListeners("setupProgress", data: [
           "kind": "asr",
           "id": modelId,
           "loaded": baseCompleted + loadedThisFile,
+          "bytesPerSec": speed,
           "total": totalBytes,
         ])
       }
@@ -890,9 +907,10 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   /// Download `dest` from an ordered list of sources, trying each once until one succeeds; throws an
   /// aggregate error only if all fail. `urls` is the native-side ordered list (self-hosted GitHub
   /// Release first, optional HF upstream fallback — see @rt/core AsrModelFile.nativeUrls). Each attempt
-  /// downloads to a temp file and atomically moves on success, so a failed source leaves nothing behind.
-  private func downloadFile(from urls: [String], to dest: URL,
-                            onBytes: @escaping (Int) -> Void) throws {
+  /// retains partial data on transport failures. asrQueue serializes all destination writes (including VAD).
+  private func downloadFile(_ file: AsrModelFile, to dest: URL,
+                            onBytes: @escaping (Int, Double) -> Void) throws {
+    let urls = file.urls
     guard !urls.isEmpty else {
       throw asrError("no download source for \(dest.lastPathComponent)")
     }
@@ -901,7 +919,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
       // 用户取消：立即停止，不再尝试后续源。
       if isDownloadCancelled() { throw asrError("download cancelled") }
       do {
-        try downloadFromURL(urlString, to: dest, onBytes: onBytes)
+        try downloadFromURL(urlString, file: file, to: dest, onBytes: onBytes)
         return
       } catch {
         errors.append("\(urlString) → \(error.localizedDescription)")
@@ -919,53 +937,44 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
     return downloadCancelled
   }
 
-  /// Synchronous (on asrQueue) URLSession download from a single URL to a temp file, then atomic move.
-  /// Follows GitHub/HF redirects automatically. `onBytes` reports bytes written so far.
-  /// 把 task 暴露给 currentDownloadTask，使 cancelDownload 能从别的线程 task.cancel() 解除本函数的信号量阻塞。
-  private func downloadFromURL(_ urlString: String, to dest: URL,
-                               onBytes: @escaping (Int) -> Void) throws {
-    guard let url = URL(string: urlString) else {
-      throw asrError("invalid model URL: \(urlString)")
-    }
+  /// Blocking only on asrQueue; the URLSession delegate streams on its own serial queue.
+  private func downloadFromURL(_ urlString: String, file: AsrModelFile, to dest: URL,
+                               onBytes: @escaping (Int, Double) -> Void) throws {
+    guard let url = URL(string: urlString) else { throw asrError("invalid model URL") }
     if isDownloadCancelled() { throw asrError("download cancelled") }
-    let semaphore = DispatchSemaphore(value: 0)
-    var resultError: Error?
-
-    let delegate = DownloadProgressDelegate(onBytes: onBytes)
-    let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
-    let task = session.downloadTask(with: url) { location, response, error in
-      defer { semaphore.signal() }
-      if let error = error { resultError = error; return }
-      guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-        let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-        resultError = self.asrError("download failed (HTTP \(code)): \(urlString)")
-        return
-      }
-      guard let location = location else {
-        resultError = self.asrError("download produced no file: \(urlString)")
-        return
-      }
-      // The temp file is purged as soon as this handler returns — move it here, not later.
-      do {
-        if FileManager.default.fileExists(atPath: dest.path) {
-          try FileManager.default.removeItem(at: dest)
-        }
-        try FileManager.default.moveItem(at: location, to: dest)
-      } catch {
-        resultError = error
-      }
+    let part = URL(fileURLWithPath: dest.path + ".part")
+    let metadata = URL(fileURLWithPath: dest.path + ".part.json")
+    let delegate = ModelDownloadDelegate(part: part, metadata: metadata, source: urlString, onBytes: onBytes)
+    var request = URLRequest(url: url)
+    request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+    if delegate.offset > 0, let etag = delegate.etag {
+      request.setValue("bytes=\(delegate.offset)-", forHTTPHeaderField: "Range")
+      request.setValue(etag, forHTTPHeaderField: "If-Range")
     }
+    let config = URLSessionConfiguration.default
+    config.timeoutIntervalForRequest = 60
+    let session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
+    let task = session.dataTask(with: request)
     downloadLock.lock()
     currentDownloadTask = task
+    let cancelled = downloadCancelled
     downloadLock.unlock()
+    if cancelled { task.cancel() }
     task.resume()
-    semaphore.wait()
+    delegate.done.wait()
     downloadLock.lock()
     currentDownloadTask = nil
     downloadLock.unlock()
     session.finishTasksAndInvalidate()
-
-    if let resultError = resultError { throw resultError }
+    if let error = delegate.failure { throw error }
+    let size = (try FileManager.default.attributesOfItem(atPath: part.path)[.size] as? Int) ?? 0
+    guard (delegate.total.map { size == $0 } ?? true), fileIsIntact(file, at: part.path) else {
+      try? FileManager.default.removeItem(at: part)
+      try? FileManager.default.removeItem(at: metadata)
+      throw asrError("model verification failed: \(dest.lastPathComponent)")
+    }
+    try FileManager.default.moveItem(at: part, to: dest)
+    try? FileManager.default.removeItem(at: metadata)
   }
 
   // MARK: - Text post-processing (mirror apps/macos/src/main/pipeline.ts: cleanAsrText)
@@ -1075,18 +1084,116 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   }
 }
 
-/// Reports cumulative bytes written for a single download task.
-private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate {
-  private let onBytes: (Int) -> Void
-  init(onBytes: @escaping (Int) -> Void) { self.onBytes = onBytes }
+/// Delegate state is confined to URLSession's serial delegate queue until `done` signals.
+private final class ModelDownloadDelegate: NSObject, URLSessionDataDelegate {
+  let done = DispatchSemaphore(value: 0)
+  private(set) var failure: Error?
+  private(set) var total: Int?
+  private(set) var offset = 0
+  private(set) var etag: String?
+  private let part: URL
+  private let metadata: URL
+  private let source: String
+  private let onBytes: (Int, Double) -> Void
+  private var handle: FileHandle?
+  private var received = 0
+  private let started = ProcessInfo.processInfo.systemUptime
 
-  func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
-                  didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
-                  totalBytesExpectedToWrite: Int64) {
-    onBytes(Int(totalBytesWritten))
+  init(part: URL, metadata: URL, source: String, onBytes: @escaping (Int, Double) -> Void) {
+    self.part = part
+    self.metadata = metadata
+    self.source = source
+    self.onBytes = onBytes
+    super.init()
+    if let data = try? Data(contentsOf: metadata),
+       let saved = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+       saved["source"] as? String == source,
+       let tag = saved["etag"] as? String, !tag.hasPrefix("W/"),
+       let attrs = try? FileManager.default.attributesOfItem(atPath: part.path) {
+      offset = attrs[.size] as? Int ?? 0
+      etag = tag
+    }
   }
 
-  // Completion is handled by the downloadTask(with:completionHandler:) closure.
-  func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
-                  didFinishDownloadingTo location: URL) {}
+  private func fail(_ message: String) {
+    failure = NSError(domain: "RealtimeAsr", code: -1, userInfo: [NSLocalizedDescriptionKey: message])
+  }
+
+  func urlSession(_ session: URLSession, dataTask: URLSessionDataTask,
+                  didReceive response: URLResponse,
+                  completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+    guard let http = response as? HTTPURLResponse else {
+      fail("non-HTTP model response"); completionHandler(.cancel); return
+    }
+    let tag = http.value(forHTTPHeaderField: "ETag")
+    let range = http.value(forHTTPHeaderField: "Content-Range") ?? ""
+    if http.statusCode == 416 {
+      guard offset > 0, range.hasPrefix("bytes */"),
+            let size = Int(range.dropFirst(8)), size >= 0,
+            tag == nil || tag == etag else {
+        fail("invalid unsatisfied model range"); completionHandler(.cancel); return
+      }
+      total = size
+      completionHandler(.allow)
+      return
+    }
+    guard http.statusCode == 200 || http.statusCode == 206 else {
+      fail("model download HTTP \(http.statusCode)"); completionHandler(.cancel); return
+    }
+    if http.statusCode == 206 {
+      let fields = range.replacingOccurrences(of: "bytes ", with: "").split(separator: "/")
+      let bounds = fields.first?.split(separator: "-") ?? []
+      guard offset > 0, etag != nil, range.hasPrefix("bytes "), fields.count == 2, bounds.count == 2,
+            Int(bounds[0]) == offset, let end = Int(bounds[1]), let size = Int(fields[1]),
+            end >= offset, end < size, tag == nil || tag == etag else {
+        fail("invalid model Content-Range or ETag"); completionHandler(.cancel); return
+      }
+      total = size
+    } else {
+      offset = 0
+      total = response.expectedContentLength >= 0 ? Int(response.expectedContentLength) : nil
+    }
+    do {
+      if offset == 0 {
+        if !FileManager.default.fileExists(atPath: part.path) {
+          guard FileManager.default.createFile(atPath: part.path, contents: nil) else {
+            throw CocoaError(.fileWriteUnknown)
+          }
+        }
+        handle = try FileHandle(forWritingTo: part)
+        try handle?.truncate(atOffset: 0)
+      } else {
+        handle = try FileHandle(forWritingTo: part)
+        try handle?.seekToEnd()
+      }
+      var saved: [String: Any] = ["source": source]
+      if let tag = tag, !tag.hasPrefix("W/") { saved["etag"] = tag }
+      else if http.statusCode == 206, let etag = etag { saved["etag"] = etag }
+      try JSONSerialization.data(withJSONObject: saved).write(to: metadata, options: .atomic)
+      onBytes(offset, 0)
+      completionHandler(.allow)
+    } catch {
+      failure = error
+      completionHandler(.cancel)
+    }
+  }
+
+  func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+    // A 416 body is an error document, never model bytes.
+    guard let handle = handle, failure == nil else { return }
+    do {
+      try handle.write(contentsOf: data)
+      received += data.count
+      onBytes(offset + received, Double(received) / max(0.001, ProcessInfo.processInfo.systemUptime - started))
+    } catch {
+      failure = error
+      dataTask.cancel()
+    }
+  }
+
+  func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    do { try handle?.close() } catch { if failure == nil { failure = error } }
+    if failure == nil { failure = error }
+    done.signal()
+  }
 }
