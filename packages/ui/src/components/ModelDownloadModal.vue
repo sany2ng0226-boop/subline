@@ -36,7 +36,7 @@ function onCancel(): void {
     :mask-closable="false"
     :close-on-esc="false"
   >
-    <p class="mb-3 text-sm text-[var(--rt-ink-3)]">{{ t('download.desc') }}</p>
+    <p class="mb-3 text-sm text-[var(--rt-ink-3)]">{{ t(tasks.some((task) => task.kind === 'translation') ? 'download.translationDesc' : 'download.desc') }}</p>
     <ul class="mb-2 space-y-1.5">
       <li
         v-for="(task, i) in tasks"

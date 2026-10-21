@@ -12,6 +12,7 @@ import AsrSection from '../components/settings/AsrSection.vue';
 import TranslationSection from '../components/settings/TranslationSection.vue';
 import ModelsSection from '../components/settings/ModelsSection.vue';
 import ModelDownloadModal from '../components/ModelDownloadModal.vue';
+import { missingTranslationDownload } from '../composables/translationDownload';
 import { type DownloadTask, startDownloads } from '../composables/useModelDownloads';
 
 const { t } = useI18n();
@@ -136,18 +137,11 @@ watch(
     const spec = getTranslationModel(form.translationModel);
     if (!spec) return;
     await saveChain;
-    const getStatus = bridge().getTranslationSetupStatus;
-    if (getStatus && bridge().downloadTranslationModel) {
-      try {
-        const { ready } = await getStatus(spec.id);
-        if (!ready) {
-          offerDownload([
-            { kind: 'translation', modelId: spec.id, nameKey: spec.nameKey, sizeBytes: spec.approxDownloadBytes },
-          ]);
-        }
-      } catch {
-        /* 查询失败：不弹窗；缺模型会在点击录音时按需下载 */
-      }
+    try {
+      const tasks = await missingTranslationDownload(spec.id);
+      if (form.translationMode === 'local' && form.translationModel === spec.id) offerDownload(tasks);
+    } catch {
+      /* 查询失败：留到点击录音时按需下载 */
     }
   },
 );

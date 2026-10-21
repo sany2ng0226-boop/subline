@@ -109,6 +109,13 @@ describe('withDefaults 字段补齐与校验', () => {
     }
   });
 
+  it('keeps transcription-only defaults without overriding saved translation preferences', () => {
+    expect(makeDefaults(['zh']).translation.enabled).toBe(false);
+    for (const enabled of [true, false]) {
+      expect(withDefaults({ translation: { enabled, engine: 'hy-mt2-7b' } }, d).translation.enabled).toBe(enabled);
+    }
+  });
+
   it('cloud 字段缺省补齐为空串', () => {
     const s = withDefaults({ translation: { engine: 'cloud' } }, d);
     expect(s.translation.cloud).toEqual({ baseURL: '', apiKey: '', model: '' });

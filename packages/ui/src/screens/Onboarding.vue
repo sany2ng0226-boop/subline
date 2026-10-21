@@ -6,7 +6,6 @@ import {
   UI_LANGS,
   asrModelsFor,
   getAsrModel,
-  getTranslationModel,
   translationModelsFor,
   DEFAULT_ASR_MODEL_ID,
   DEFAULT_TRANSLATION_MODEL_ID,
@@ -62,14 +61,10 @@ const translationOptions = computed(() => {
     : [{ label: t('settings.engineLocal'), value: DEFAULT_TRANSLATION_MODEL_ID as string }];
   return [{ label: t('onboarding.noTranslation'), value: 'none' }, ...local];
 });
-const initialTranslation = current.translation.enabled && current.translation.engine !== 'cloud'
-  ? current.translation.engine : 'none';
-const translation = ref<string>(
-  translationOptions.value.some((o) => o.value === initialTranslation) ? initialTranslation : 'none',
-);
+const translation = ref<string>('none');
 
-// 选好的模型在后台下载（体积已在选项里标明），不挡进入主屏；没下完时点录音会进入等待态。
-async function queueDownloads(asrId: string, translationId: string | null): Promise<void> {
+// 引导只自动下载识别模型；翻译模型留到用户确认后下载。
+async function queueDownloads(asrId: string): Promise<void> {
   const tasks: DownloadTask[] = [];
   try {
     const spec = getAsrModel(asrId);
@@ -79,27 +74,17 @@ async function queueDownloads(asrId: string, translationId: string | null): Prom
   } catch {
     /* 查询失败：留到点录音时按需下载 */
   }
-  const trSpec = translationId ? getTranslationModel(translationId) : undefined;
-  const getTrStatus = bridge().getTranslationSetupStatus;
-  if (trSpec && getTrStatus && bridge().downloadTranslationModel) {
-    try {
-      if (!(await getTrStatus(trSpec.id)).ready) {
-        tasks.push({ kind: 'translation', modelId: trSpec.id, nameKey: trSpec.nameKey, sizeBytes: trSpec.approxDownloadBytes });
-      }
-    } catch {
-      /* 同上 */
-    }
-  }
   startDownloads(tasks);
 }
 
 async function start(): Promise<void> {
   const asrId = recommendedAsrModel(asrLanguage.value);
   const enabled = translation.value !== 'none';
-  // 没有本机选项时（如只能云端的端）不改动翻译设置
-  const translationSettings = translationOptions.value.length
-    ? { ...current.translation, enabled, engine: enabled ? translation.value as typeof current.translation.engine : current.translation.engine }
-    : current.translation;
+  const translationSettings = {
+    ...current.translation,
+    enabled,
+    engine: enabled ? translation.value as typeof current.translation.engine : current.translation.engine,
+  };
   await saveSettings({
     ...current,
     onboarded: true,
@@ -109,7 +94,7 @@ async function start(): Promise<void> {
     asr: { language: asrLanguage.value, model: asrId },
     translation: translationSettings,
   });
-  void queueDownloads(asrId, translationSettings.enabled && translationSettings.engine !== 'cloud' ? translationSettings.engine : null);
+  void queueDownloads(asrId);
   emit('done');
 }
 </script>

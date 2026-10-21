@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, h, watch, onUnmounted } from 'vue';
-import { NButton, NModal, NInput, NDropdown, NTooltip, NProgress, NSelect } from 'naive-ui';
+import { NButton, NModal, NInput, NDropdown, NTooltip, NProgress, NSelect, NSwitch } from 'naive-ui';
 import type { DropdownMixedOption } from 'naive-ui/es/dropdown/src/interface';
 import { Settings, Trash2, Archive, Library, Eraser, LoaderCircle, TriangleAlert, MoreHorizontal, Mic, MonitorSpeaker, Square, RefreshCw, X, AArrowDown, AArrowUp, Sun, Moon, SunMoon } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { getAsrModel, getTranslationModel, UI_LANGS, asrModelsFor, DEFAULT_ASR_MODEL_ID, type AsrLang, type ArchiveLibrary } from '@rt/core';
+import { missingTranslationDownload } from '../composables/translationDownload';
 import { LANG_LABELS } from '../components/settings/form';
 import { settings, saveSettings, stepFontSize, fontAtMin, fontAtMax, cycleTheme, themePref } from '../composables/useSettings';
 import {
@@ -163,9 +164,27 @@ watch(recording, (live, wasLive) => {
 });
 const showStopNotice = computed(() => stopNoticeOpen.value && hasContent.value && !recording.value);
 
-// 是否开启翻译：现由设置里的「翻译方式」决定（选了模型即启用），主页不再有独立开关。
-// 仍需此值让转写列表决定是否显示「翻译中」等待动画。
+// 主页与设置共享翻译开关。
 const translateOn = computed<boolean>(() => settings.value?.translation.enabled ?? false);
+const translationSaving = ref(false);
+const translationDownloadOpen = ref(false);
+const translationDownloadTasks = ref<DownloadTask[]>([]);
+async function toggleTranslation(enabled: boolean): Promise<void> {
+  if (!settings.value || translationSaving.value) return;
+  translationSaving.value = true;
+  try {
+    const base = settings.value;
+    await saveSettings({ ...base, translation: { ...base.translation, enabled } });
+    if (enabled) {
+      translationDownloadTasks.value = await missingTranslationDownload(base.translation.engine);
+      translationDownloadOpen.value = translationDownloadTasks.value.length > 0;
+    }
+  } catch (error) {
+    console.error('[main:translation]', error);
+  } finally {
+    translationSaving.value = false;
+  }
+}
 const windowsHost = bridge().platform === 'windows';
 // 麦克风被拒：按端说明去哪里开启；宿主能打开设置时才给「打开设置」按钮（Web 打不开）
 const micDeniedDesc = micDeniedDescKey(bridge().platform);
@@ -551,6 +570,16 @@ function openMicSettings(): void {
         {{ translationNotice || t('status.localPrivate') }}
       </n-tooltip>
 
+      <n-switch
+        :value="translateOn"
+        :disabled="translationSaving || recording || recordBusy || awaitingRecord || downloadModalOpen"
+        :aria-label="t('settings.translationSection')"
+        @update:value="toggleTranslation"
+      >
+        <template #checked>{{ t('settings.translationSection') }}</template>
+        <template #unchecked>{{ t('settings.translationSection') }}</template>
+      </n-switch>
+
       <!-- 窄屏隐藏，改用下方「...」菜单与底部圆形录音按钮 -->
       <div class="flex items-center gap-3 max-sm:hidden">
         <!-- 次要操作收进一组图标，和主操作（电平 / 语言 / 录音）之间用细分隔线拉开层级 -->
@@ -816,6 +845,11 @@ function openMicSettings(): void {
       </template>
     </n-modal>
 
+    <model-download-modal
+      v-model:show="translationDownloadOpen"
+      :tasks="translationDownloadTasks"
+      @confirm="startDownloads"
+    />
     <!-- 录音前的按需模型下载确认弹窗：确认后转后台下载 + 进等待态，取消则不录音 -->
     <model-download-modal
       v-model:show="downloadModalOpen"

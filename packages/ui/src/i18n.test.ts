@@ -11,3 +11,10 @@ it('every locale defines the same message keys', () => {
   const reference = keys(messages.en);
   for (const locale of ['ja', 'ko', 'zh']) expect(keys(messages[locale]), locale).toEqual(reference);
 });
+
+
+it.each(['zh', 'en', 'ja', 'ko'] as const)('warns about translation model size in %s', (locale) => {
+  const message = i18n.global.getLocaleMessage(locale).download.translationDesc;
+  expect(message).toContain('4.5 GB');
+  expect(message).toContain('Hy-MT2 7B');
+});
