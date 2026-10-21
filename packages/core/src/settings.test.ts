@@ -41,7 +41,7 @@ describe('makeDefaults 母语推断', () => {
   it('默认关闭翻译、引擎为本地 m2m100、云端三项留空', () => {
     const d = makeDefaults([]);
     expect(d.onboarded).toBe(false);
-    expect(d.fontSize).toBe('medium');
+    expect(d.fontSize).toBe('small');
     expect(d.theme).toBe('system');
     expect(d.alwaysOnTop).toBe(false);
     expect(d.translation.enabled).toBe(false);
@@ -64,7 +64,7 @@ describe('withDefaults 字段补齐与校验', () => {
       d,
     );
     expect(s.nativeLang).toBe(d.nativeLang);
-    expect(s.fontSize).toBe('medium');
+    expect(s.fontSize).toBe('small');
     expect(s.theme).toBe('system');
     expect(s.audioSource).toBe('mic');
   });
@@ -147,5 +147,64 @@ describe('withDefaults 字段补齐与校验', () => {
       const s = withDefaults({ asr: { language: 'zh', model: 'paraformer-zh' } }, d);
       expect(s.asr).toEqual({ language: 'zh', model: 'paraformer-zh' });
     });
+  });
+});
+
+describe('v2 settings migration', () => {
+  const d = makeDefaults([]);
+  it.each([
+    [undefined, 'small', 'xs'], [1, 'medium', 'small'], [0, 'large', 'large'],
+    [2, 'small', 'small'], [2, 'medium', 'medium'], [3, 'small', 'small'],
+  ])('version %s migrates %s to %s', (settingsVersion, fontSize, expected) => {
+    const normalized = withDefaults({ settingsVersion, fontSize }, d);
+    expect(normalized.fontSize).toBe(expected);
+    expect(normalized.settingsVersion).toBe(2);
+    expect(withDefaults(normalized, d)).toEqual(normalized);
+  });
+
+  it.each(['xs', 'small', 'medium', 'large', 'xl'])('preserves v2 font %s', (fontSize) => {
+    expect(withDefaults({ settingsVersion: 2, fontSize }, d).fontSize).toBe(fontSize);
+  });
+
+  it('round trips optional preferences through JSON and normalization', () => {
+    const raw = {
+      ...d, uiScale: 1.15, contrast: 'system', alwaysOnTop: true,
+      overlay: { fontDelta: -2.5, bounds: { x: -100, y: 0, width: 640, height: 120 }, clickThrough: true },
+      shortcuts: { toggleOverlay: 'Alt+Command+F', toggleRecording: null },
+    };
+    expect(withDefaults(JSON.parse(JSON.stringify(raw)), d)).toEqual(raw);
+    for (const uiScale of [1, 1.15, 1.3]) {
+      expect(withDefaults({ uiScale }, d).uiScale).toBe(uiScale);
+    }
+    for (const contrast of ['standard', 'more', 'system']) {
+      expect(withDefaults({ contrast }, d).contrast).toBe(contrast);
+    }
+  });
+
+  it('rejects malformed values without coercion', () => {
+    for (const raw of [null, [], true, 42, 'settings']) {
+      expect(withDefaults(raw, d)).toEqual(d);
+    }
+    const s = withDefaults({
+      settingsVersion: '2', fontSize: 'medium', uiScale: '1.15', contrast: 'high',
+      overlay: { fontDelta: Infinity, clickThrough: 1, bounds: { x: 0, y: 0, width: -1, height: 120 } },
+      shortcuts: { toggleOverlay: '', toggleRecording: 5, toggleClickThrough: null, unknown: 'X' },
+      translation: { cloud: { baseURL: {}, apiKey: 5, model: true } },
+    }, d);
+    expect(s.settingsVersion).toBe(2);
+    expect(s.fontSize).toBe('small');
+    expect(s.uiScale).toBe(1);
+    expect(s.contrast).toBe('standard');
+    expect(s.overlay).toEqual({ fontDelta: 0, clickThrough: false });
+    expect(s.shortcuts).toEqual({ toggleClickThrough: null });
+    expect(s.translation.cloud).toEqual(d.translation.cloud);
+    for (const value of [null, [], 'bad', 3]) {
+      const normalized = withDefaults({ overlay: value, shortcuts: value }, d);
+      expect(normalized.overlay).toBeUndefined();
+      expect(normalized.shortcuts).toBeUndefined();
+    }
+    for (const value of [NaN, Infinity, '0', null]) {
+      expect(withDefaults({ overlay: { fontDelta: value } }, d).overlay?.fontDelta).toBe(0);
+    }
   });
 });
