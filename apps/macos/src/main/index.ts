@@ -341,7 +341,7 @@ const overlay = createOverlayController({
   rendererFile: path.join(__dirname, '../renderer/index.html'),
   rendererUrl: process.env['ELECTRON_RENDERER_URL'],
   platform: process.platform,
-  canClickThrough: () => shortcuts.getShortcutStatus().toggleOverlay === 'ok',
+  canClickThrough: () => shortcuts.getOverlayUnlockShortcut() !== null,
   readSettings: loadSettings,
   writeSettings: saveSettings,
   publish: (state) => {
@@ -363,9 +363,8 @@ ipcMain.handle('shortcut:get', () => shortcuts.getShortcuts());
 ipcMain.handle('shortcut:status', () => shortcuts.getShortcutStatus());
 ipcMain.handle('overlay:open', () => overlay.open());
 ipcMain.handle('overlay:close', () => overlay.close());
-ipcMain.on('overlay:click-through', (_event, on: unknown) => {
-  if (typeof on === 'boolean') overlay.setClickThrough(on);
-});
+ipcMain.handle('overlay:click-through', (_event, on: boolean) => overlay.setClickThrough(on));
+ipcMain.handle('overlay:unlock-shortcut', () => shortcuts.getOverlayUnlockShortcut());
 ipcMain.on('overlay:subscribe', (event) => event.sender.send('overlay:state', overlay.state()));
 
 let metricsSession = 0;

@@ -28,6 +28,8 @@ import type {
   ArchiveRecord,
 } from './types';
 
+export type OverlayClickThroughResult = { ok: true } | { ok: false; error: 'no-unlock-shortcut' };
+
 export interface OverlayState {
   visible: boolean;
   clickThrough: boolean;
@@ -62,9 +64,12 @@ export interface AppBridge {
   isOverlayWindow?(): boolean;
   openOverlay?(): Promise<void>;
   closeOverlay?(): Promise<void>;
-  /** Refuses enabling click-through without a registered toggleOverlay unlock shortcut.
-   * Observe onOverlayState for the accepted state. */
-  setOverlayClickThrough?(on: boolean): void;
+  /** Enabling requires a working unlock shortcut; refusal resolves with no-unlock-shortcut.
+   * Disabling always succeeds. Observe onOverlayState for subsequent state changes. */
+  setOverlayClickThrough?(on: boolean): Promise<OverlayClickThroughResult>;
+  /** Currently registered, working accelerator that unlocks click-through.
+   * Prefers toggleClickThrough, then toggleOverlay; null when neither is registered. */
+  getOverlayUnlockShortcut?(): Promise<string | null>;
   /** Desktop-only. Successful changes persist; failed changes retain the previous configuration. */
   registerShortcut?(action: ShortcutAction, accelerator: string | null): Promise<{ ok: boolean; error?: 'conflict' | 'invalid' }>;
   getShortcuts?(): Promise<Record<ShortcutAction, string | null>>;

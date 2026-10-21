@@ -148,6 +148,7 @@ export function createMacBridge(api: ElectronApi): AppBridge {
     openOverlay: () => api.openOverlay!(),
     closeOverlay: () => api.closeOverlay!(),
     setOverlayClickThrough: (on) => api.setOverlayClickThrough!(on),
+    getOverlayUnlockShortcut: () => api.getOverlayUnlockShortcut!(),
     onOverlayState: (cb) => api.onOverlayState!(cb),
     getSettings: () => api.getSettings(),
     saveSettings: (settings) => api.saveSettings(settings),

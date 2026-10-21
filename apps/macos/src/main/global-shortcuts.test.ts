@@ -74,6 +74,32 @@ describe('global shortcuts', () => {
     expect(controller.getShortcutStatus().toggleOverlay).toBe('unbound');
     expect(deps.readSettings().shortcuts?.toggleOverlay).toBeNull();
   });
+  it('reports only working unlock bindings, preferring click-through and clearing on stop', () => {
+    const { controller } = setup('darwin', { toggleClickThrough: 'Ctrl+X' });
+    expect(controller.getOverlayUnlockShortcut()).toBeNull();
+    controller.start();
+    expect(controller.getOverlayUnlockShortcut()).toBe('Ctrl+X');
+    controller.registerShortcut('toggleClickThrough', null);
+    expect(controller.getOverlayUnlockShortcut()).toBe('Alt+Command+F');
+    controller.registerShortcut('toggleOverlay', null);
+    expect(controller.getOverlayUnlockShortcut()).toBeNull();
+    controller.stop();
+    expect(controller.getOverlayUnlockShortcut()).toBeNull();
+  });
+  it('allows click-through alone to unlock and ignores failed preferred registrations', () => {
+    const only = setup('darwin', { toggleOverlay: null, toggleClickThrough: 'Ctrl+X' });
+    only.controller.start();
+    expect(only.controller.getOverlayUnlockShortcut()).toBe('Ctrl+X');
+    expect(only.deps.onUnlockUnavailable).not.toHaveBeenCalled();
+    only.controller.registerShortcut('toggleClickThrough', null);
+    expect(only.deps.onUnlockUnavailable).toHaveBeenCalledOnce();
+    const failed = setup('darwin', { toggleClickThrough: 'Ctrl+X' });
+    failed.deps.globalShortcut.register.mockImplementation(key => key !== 'Ctrl+X');
+    failed.controller.start();
+    expect(failed.controller.getOverlayUnlockShortcut()).toBe('Alt+Command+F');
+    failed.controller.registerShortcut('toggleOverlay', null);
+    expect(failed.controller.getOverlayUnlockShortcut()).toBeNull();
+  });
   it('normalizes modifier ordering, aliases and key names', () => {
     expect(acceleratorKey('Shift+CommandOrControl+Escape', 'win32')).toBe(acceleratorKey('Control+Shift+Esc', 'win32'));
     expect(acceleratorKey('Alt+Plus', 'darwin')).not.toBeNull();

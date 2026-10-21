@@ -43,7 +43,7 @@ describe('overlay window', () => {
     expect(deps.createWindow).toHaveBeenCalledWith(expect.objectContaining({
       x: 180, y: 680, width: 640, height: 120,
       frame: false, transparent: true, alwaysOnTop: true, hasShadow: false,
-      resizable: true, skipTaskbar: true, focusable: true,
+      resizable: false, skipTaskbar: true, focusable: true,
       webPreferences: { preload: '/preload.js', contextIsolation: true },
     }));
     expect(target.loadFile).toHaveBeenCalledWith('/index.html', { hash: 'overlay' });
@@ -63,9 +63,9 @@ describe('overlay window', () => {
   });
 
   it('clamps partially visible bounds and falls back for disconnected displays', async () => {
-    const partial = setup('darwin', { x: 900, y: 750, width: 640, height: 120 });
+    const partial = setup('darwin', { x: 900, y: 750, width: 900, height: 400 });
     await partial.controller.open();
-    expect(partial.deps.createWindow).toHaveBeenCalledWith(expect.objectContaining({ x: 360, y: 680 }));
+    expect(partial.deps.createWindow).toHaveBeenCalledWith(expect.objectContaining({ x: 360, y: 680, width: 640, height: 120 }));
     const disconnected = setup('darwin', { x: -3000, y: 0, width: 640, height: 120 });
     await disconnected.controller.open();
     expect(disconnected.deps.createWindow).toHaveBeenCalledWith(expect.objectContaining({ x: 180, y: 680 }));
@@ -81,7 +81,7 @@ describe('overlay window', () => {
     vi.advanceTimersByTime(250);
     expect(deps.writeSettings).toHaveBeenCalledTimes(1);
     expect(settings().overlay!.fontDelta).toBe(2);
-    expect(settings().overlay!.bounds).toEqual(target.getBounds());
+    expect(settings().overlay!.bounds).toEqual({ x: 12, y: 20, width: 640, height: 120 });
     controller.setClickThrough(false);
     expect(target.setIgnoreMouseEvents).toHaveBeenLastCalledWith(false, { forward: true });
     expect(settings().overlay!.clickThrough).toBe(false);
@@ -126,7 +126,8 @@ describe('overlay window', () => {
    Object.assign(deps, { canClickThrough: () => false });
    await controller.open();
    expect(controller.state().clickThrough).toBe(false);
-   controller.setClickThrough(true);
+   expect(controller.setClickThrough(true)).toEqual({ ok: false, error: 'no-unlock-shortcut' });
+   expect(controller.setClickThrough(false)).toEqual({ ok: true });
    expect(controller.state().clickThrough).toBe(false);
    expect(target.setIgnoreMouseEvents).toHaveBeenLastCalledWith(false, { forward: true });
  });

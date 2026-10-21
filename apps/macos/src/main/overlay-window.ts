@@ -1,5 +1,5 @@
 import type { BrowserWindow, BrowserWindowConstructorOptions, Rectangle, WebContents } from 'electron';
-import type { AppSettings, OverlayState } from '@rt/core';
+import type { AppSettings, OverlayState, OverlayClickThroughResult } from '@rt/core';
 
 export interface OverlayDependencies {
   createWindow(options: BrowserWindowConstructorOptions): BrowserWindow;
@@ -42,12 +42,13 @@ export function createOverlayController(deps: OverlayDependencies) {
     });
   }
   function restoredBounds(): Rectangle {
-    const saved = deps.readSettings().overlay?.bounds;
+    const position = deps.readSettings().overlay?.bounds;
+    const saved = position ? { x: position.x, y: position.y, width: 640, height: 120 } : undefined;
     const area = saved ? deps.screen.getDisplayMatching(saved).workArea : deps.screen.getPrimaryDisplay().workArea;
     const intersects = saved && saved.x < area.x + area.width && saved.x + saved.width > area.x
       && saved.y < area.y + area.height && saved.y + saved.height > area.y;
-    const width = Math.min(intersects ? saved.width : 640, area.width);
-    const height = Math.min(intersects ? saved.height : 120, area.height);
+    const width = 640;
+    const height = 120;
     return {
       width, height,
       x: intersects ? Math.max(area.x, Math.min(saved.x, area.x + area.width - width)) : Math.round(area.x + (area.width - width) / 2),
@@ -65,9 +66,9 @@ export function createOverlayController(deps: OverlayDependencies) {
       clickThrough = (deps.readSettings().overlay?.clickThrough ?? false) && (deps.canClickThrough?.() ?? true);
       bounds = restoredBounds();
       const target = deps.createWindow({
-        ...bounds, minWidth: 360, minHeight: 72,
+        ...bounds,
         frame: false, transparent: true, alwaysOnTop: true, hasShadow: false,
-        resizable: true, skipTaskbar: true, focusable: true,
+        resizable: false, skipTaskbar: true, focusable: true,
         webPreferences: { preload: deps.preload, contextIsolation: true },
       });
       window = target;
@@ -75,7 +76,8 @@ export function createOverlayController(deps: OverlayDependencies) {
       target.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       target.setIgnoreMouseEvents(clickThrough, { forward: true });
       const changed = () => {
-        bounds = target.getBounds();
+        const { x, y } = target.getBounds();
+        bounds = { x, y, width: 640, height: 120 };
         clearTimeout(timer);
         timer = setTimeout(persist, 250);
         publish();
@@ -100,13 +102,14 @@ export function createOverlayController(deps: OverlayDependencies) {
     close() {
       if (window && !window.isDestroyed()) window.close();
     },
-    setClickThrough(on: boolean) {
+    setClickThrough(on: boolean): OverlayClickThroughResult {
       // Never lock the window unless the global unlock binding is working.
-      on = on && (deps.canClickThrough?.() ?? true);
+      if (on && !(deps.canClickThrough?.() ?? true)) return { ok: false, error: 'no-unlock-shortcut' };
       clickThrough = on;
       window?.setIgnoreMouseEvents(on, { forward: true });
       persist();
       publish();
+      return { ok: true };
     },
   };
 }

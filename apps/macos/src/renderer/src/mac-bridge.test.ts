@@ -79,3 +79,16 @@ describe('desktop audio lifecycle', () => {
     expect(f.close).toHaveBeenCalledOnce();
   });
 });
+
+describe('overlay bridge', () => {
+  it('forwards asynchronous click-through outcomes and the working unlock accelerator', async () => {
+    const setOverlayClickThrough = vi.fn().mockResolvedValueOnce({ ok: false, error: 'no-unlock-shortcut' }).mockResolvedValueOnce({ ok: true });
+    const getOverlayUnlockShortcut = vi.fn().mockResolvedValueOnce('Ctrl+X').mockResolvedValueOnce(null);
+    const bridge = createMacBridge({ setOverlayClickThrough, getOverlayUnlockShortcut } as unknown as ElectronApi);
+    expect(await bridge.setOverlayClickThrough!(true)).toEqual({ ok: false, error: 'no-unlock-shortcut' });
+    expect(await bridge.setOverlayClickThrough!(false)).toEqual({ ok: true });
+    expect(setOverlayClickThrough.mock.calls).toEqual([[true], [false]]);
+    expect(await bridge.getOverlayUnlockShortcut!()).toBe('Ctrl+X');
+    expect(await bridge.getOverlayUnlockShortcut!()).toBeNull();
+  });
+});

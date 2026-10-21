@@ -18,7 +18,8 @@ const api: ElectronApi = {
   isOverlayWindow: () => location.hash === '#overlay',
   openOverlay: () => ipcRenderer.invoke('overlay:open'),
   closeOverlay: () => ipcRenderer.invoke('overlay:close'),
-  setOverlayClickThrough: (on) => ipcRenderer.send('overlay:click-through', on),
+  setOverlayClickThrough: (on) => ipcRenderer.invoke('overlay:click-through', on),
+  getOverlayUnlockShortcut: () => ipcRenderer.invoke('overlay:unlock-shortcut'),
   onOverlayState: (cb) => {
     const unsubscribe = subscribe<import('@rt/core').OverlayState>('overlay:state', cb);
     ipcRenderer.send('overlay:subscribe');

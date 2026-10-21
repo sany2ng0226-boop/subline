@@ -36,7 +36,9 @@ export function createGlobalShortcuts(deps: Dependencies) {
   const config: Map = { toggleOverlay: `Alt+${modifier}+F`, toggleRecording: `Alt+${modifier}+R`, toggleClickThrough: null };
   const status: Status = { toggleOverlay: 'unbound', toggleRecording: 'unbound', toggleClickThrough: 'unbound' };
   const safe = (fn: () => void) => { try { fn(); } catch (error) { deps.log(error); } };
-  const enforce = () => { if (status.toggleOverlay !== 'ok') safe(deps.onUnlockUnavailable); };
+  const getOverlayUnlockShortcut = (): string | null => status.toggleClickThrough === 'ok' ? config.toggleClickThrough
+    : status.toggleOverlay === 'ok' ? config.toggleOverlay : null;
+  const enforce = () => { if (getOverlayUnlockShortcut() === null) safe(deps.onUnlockUnavailable); };
   function bind(action: ShortcutAction, key: string): boolean {
     try {
       return deps.globalShortcut.register(key, () => {
@@ -45,6 +47,7 @@ export function createGlobalShortcuts(deps: Dependencies) {
     } catch (error) { deps.log(error); return false; }
   }
   return {
+    getOverlayUnlockShortcut,
     getShortcuts: (): Map => ({ ...config }),
     getShortcutStatus: (): Status => ({ ...status }),
     start() {
@@ -79,7 +82,11 @@ export function createGlobalShortcuts(deps: Dependencies) {
       enforce();
       return { ok: true };
     },
-    stop() { safe(() => deps.globalShortcut.unregisterAll()); },
+    stop() {
+      safe(() => deps.globalShortcut.unregisterAll());
+      for (const action of actions) status[action] = 'unbound';
+      enforce();
+    },
   };
 }
 
