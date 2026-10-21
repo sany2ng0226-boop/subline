@@ -1,3 +1,4 @@
+import { createQuitFlow, setupSingleInstance } from './quit-flow';
 import { createAlwaysOnTopController } from './always-on-top';
 import { createDisplaySleepBlocker } from './display-sleep';
 import { TranslationRequestQueue } from './translation/request-queue';
@@ -13,6 +14,7 @@ import {
   type MenuItemConstructorOptions,
   desktopCapturer,
   dialog,
+  globalShortcut,
   ipcMain,
   powerSaveBlocker,
   session,
@@ -113,8 +115,7 @@ const TRANSLATION_CACHE_DIR = path.join(MODELS_DIR, 'transformers');
 let win: BrowserWindow | null = null;
 // 渲染层在正在录音或有未归档内容时设置；关窗 / ⌘Q 前据此确认，避免一键丢掉整节课。
 let closeGuard: CloseGuard | null = null;
-// 用户已在确认框选择退出（或归档完成）：之后的 close / before-quit 直接放行，不再重复弹框。
-let leaveConfirmed = false;
+// Coalesce native dialogs; the quit controller owns the confirmed/committed state.
 let leavePrompt: Promise<boolean> | null = null;
 let archiveRequestId = 0;
 // 停录需等 ASR 收尾最后一句，归档再写盘；超时视为失败，窗口保持打开。
@@ -312,15 +313,7 @@ function createWindow(): void {
   });
   alwaysOnTop.apply(loadSettings().alwaysOnTop);
   win.on('closed', () => displaySleep.stop());
-  win.on('close', (event) => {
-    if (leaveConfirmed || !hasUnsavedContent()) return;
-    event.preventDefault();
-    void confirmLeave().then((ok) => {
-      if (!ok) return;
-      leaveConfirmed = true;
-      win?.close();
-    });
-  });
+  win.on('close', (event) => quitFlow.handle(event));
   win.on('page-title-updated', (event) => {
     if (app.isPackaged) event.preventDefault();
   });
@@ -914,7 +907,38 @@ ipcMain.handle('pipeline:stop', () => {
   return { ok: true };
 });
 
+const isPrimaryInstance = setupSingleInstance({
+  skip: process.argv.includes('--candidate-smoke') || !!process.env['RT_PREVIEW_PROFILE'],
+  requestLock: () => app.requestSingleInstanceLock(),
+  quit: () => app.quit(),
+  onSecondInstance: (callback) => { app.on('second-instance', callback); },
+  whenReady: () => app.whenReady(),
+  window: () => win,
+  createWindow,
+});
+
+const quitFlow = createQuitFlow({
+  hasUnsavedContent,
+  confirmLeave,
+  cleanup: () => {
+    // Attempt every release even if one native resource has already gone away.
+    for (const release of [
+      () => asrChild?.kill(),
+      () => translateChild?.proc.kill(),
+      () => globalShortcut.unregisterAll(),
+      () => displaySleep.stop(),
+    ]) {
+      try { release(); } catch (error) { console.error('Quit cleanup failed', error); }
+    }
+    asrChild = null;
+    translateChild = null;
+  },
+  quit: () => app.quit(),
+  exit: (code) => app.exit(code),
+});
+
 app.whenReady().then(() => {
+  if (!isPrimaryInstance) return;
   // macOS dev：Dock 默认显示 Electron 图标，手动替换；打包后用 .app 内置图标
   if (!app.isPackaged && process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(APP_ICON);
@@ -943,7 +967,7 @@ app.whenReady().then(() => {
       .catch(() => callback({}));
   });
   installMenu();
-  createWindow();
+  if (!win || win.isDestroyed()) createWindow();
   if (smokeReport && win) {
     void runCandidateSmoke(win, app.getPath('userData'), smokeReport)
       .then((ok) => app.exit(ok ? 0 : 1))
@@ -958,21 +982,12 @@ app.whenReady().then(() => {
   }
 });
 
-// ⌘Q / 菜单退出 / Dock 退出：有未归档内容时先确认，确认后再走正常退出。
+// A rejected second instance must never enter the unsaved-content confirmation flow.
 app.on('before-quit', (event) => {
-  if (leaveConfirmed || !hasUnsavedContent()) return;
-  event.preventDefault();
-  void confirmLeave().then((ok) => {
-    if (!ok) return;
-    leaveConfirmed = true;
-    app.quit();
-  });
+  if (isPrimaryInstance) quitFlow.handle(event);
 });
-
-app.on('will-quit', () => displaySleep.stop());
-
-app.on('window-all-closed', () => {
-  asrChild?.kill();
-  translateChild?.proc.kill();
-  app.quit();
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+  displaySleep.stop();
 });
+app.on('window-all-closed', () => quitFlow.windowsClosed());
