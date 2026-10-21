@@ -28,6 +28,7 @@ import {
   listSummaries,
   makeArchiveId,
   CloudTranslator,
+  MetricsAggregator,
   availableTranslationModels,
   localTranslationSupported,
   DEFAULT_TRANSLATION_MODEL_ID,
@@ -42,6 +43,7 @@ import {
 } from '@rt/core';
 import type {
   AppBridge,
+  PipelineMetrics,
   AppSettings,
   ArchiveLine,
   ArchiveRecord,
@@ -133,6 +135,86 @@ export function createWebBridge(): AppBridge {
   //    翻译开关就是 cachedSettings.translation.enabled，改后即时生效并落盘，不再另存一份布尔。 ——
   let cachedSettings: AppSettings | null = null;
 
+  const metrics = new MetricsAggregator();
+  const metricsCb = createCallbackHub<PipelineMetrics>();
+  let metricsTimer: ReturnType<typeof setInterval> | undefined;
+  let metricsSession = 0;
+  let cloudRttMs: number | undefined;
+  let cloudDegraded = false;
+  let cloudGeneration = 0;
+  let cloudConfigKey: string | undefined;
+
+  function syncCloudMetricsConfig(settings: AppSettings): void {
+    const { engine, enabled, cloud } = settings.translation;
+    const key = JSON.stringify([engine, enabled, cloud.baseURL]);
+    if (key !== cloudConfigKey) {
+      cloudConfigKey = key;
+      cloudGeneration++;
+      cloudRttMs = undefined;
+      cloudDegraded = false;
+    }
+  }
+
+  // Cloud RTT is the full translation request duration, including server inference.
+  function emitMetrics(): void {
+    if (metricsTimer === undefined) return;
+    const cloud = cachedSettings?.translation.enabled && cachedSettings.translation.engine === 'cloud';
+    metricsCb.emit({
+      ...metrics.snapshot(),
+      network: !navigator.onLine ? 'offline' : cloud && cloudDegraded ? 'degraded' : 'online',
+      engine: cloud ? 'cloud' : 'local',
+      ...(cloud && cloudRttMs !== undefined ? { cloudRttMs } : {}),
+    });
+  }
+
+  function stopMetrics(): void {
+    if (metricsTimer !== undefined) clearInterval(metricsTimer);
+    metricsTimer = undefined;
+    window.removeEventListener('online', emitMetrics);
+    window.removeEventListener('offline', emitMetrics);
+  }
+
+  function startMetrics(): void {
+    if (metricsTimer !== undefined) return;
+    metricsTimer = setInterval(emitMetrics, 1000);
+    window.addEventListener('online', emitMetrics);
+    window.addEventListener('offline', emitMetrics);
+  }
+
+  function emitTranslationMetrics(payload: TranslationPayload, session: number): void {
+    if (session === metricsSession) {
+      const id = String(payload.id);
+      if (payload.pending) metrics.requested(id, payload.requestedAt ?? Date.now());
+      else if (!payload.partial) {
+        if (payload.requestedAt !== undefined) metrics.requested(id, payload.requestedAt);
+        metrics.completed(id, Date.now(), payload.failed);
+      }
+    }
+    translationCb.emit(payload);
+  }
+
+  async function translateCloud(
+    config: CloudTranslationConfig,
+    text: string,
+    options: { source: string; target: string },
+    session: number,
+  ): Promise<string> {
+    const generation = cloudGeneration;
+    const startedAt = Date.now();
+    try {
+      const result = await new CloudTranslator(config).translate(text, options);
+      if (session === metricsSession && generation === cloudGeneration) {
+        cloudRttMs = Date.now() - startedAt;
+        cloudDegraded = false;
+      }
+      return result;
+    } catch (error) {
+      if (session === metricsSession && generation === cloudGeneration) cloudDegraded = true;
+      throw error;
+    }
+  }
+
+
   // —— 本地翻译器（懒建，缓存模型实例，首次翻译触发下载）。按当前引擎对应的 spec 建：
   //    引擎变化（切换本地模型）时丢弃旧实例、按新 spec 重建，保证保存路径与翻译热路径一致。 ——
   let localTranslator: WebLocalTranslator | null = null;
@@ -208,12 +290,14 @@ export function createWebBridge(): AppBridge {
       raw = null;
     }
     cachedSettings = applyPlatformConstraints(withDefaults(raw, defaults));
+    syncCloudMetricsConfig(cachedSettings);
     return cachedSettings;
   }
 
   // 写设置：补齐/校验后落盘并刷新缓存。所有写入路径（保存设置、切翻译开关）都走这里。
   async function writeSettings(next: AppSettings): Promise<AppSettings> {
     cachedSettings = applyPlatformConstraints(withDefaults(next, makeDefaults([])));
+    syncCloudMetricsConfig(cachedSettings);
     await (await db()).put(KV_STORE, cachedSettings, SETTINGS_KEY);
     return cachedSettings;
   }
@@ -244,6 +328,7 @@ export function createWebBridge(): AppBridge {
   //      编排（是否翻 / pending / 字形归一化 / 错误上报）统一在 @rt/core.translateFinalizedSegment，
   //      三端一致；这里只注入引擎调用：云端 CloudTranslator 或本地 WebLocalTranslator。 ----
   async function translateSegment(seg: SegmentPayload): Promise<void> {
+    const session = metricsSession;
     const s = cachedSettings ?? (await readSettingsOnce());
     await translateFinalizedSegment({
       // 规划用 spec 按当前引擎查表；云端/未知回落默认本地模型（skip/script/toScript 判定与模型无关，
@@ -257,10 +342,10 @@ export function createWebBridge(): AppBridge {
       translate: (req) => {
         if (s.translation.engine === 'cloud') {
           // 云端传母语 app 语言键（zh-Hant 等），让 LLM 直接产出对应字形。
-          return new CloudTranslator(s.translation.cloud).translate(req.text, {
+          return translateCloud(s.translation.cloud, req.text, {
             source: req.source,
             target: req.targetLang,
-          });
+          }, session);
         }
         // 本地 target 同样传 app 语言键：translate 内部按 langs 条目映射模型码并做字形归一化。
         // 模型已由下载链路落盘、装载走 warmUp 上报状态，翻译热路径不再关心加载进度。
@@ -269,7 +354,7 @@ export function createWebBridge(): AppBridge {
           target: req.targetLang,
         });
       },
-      emitTranslation: (p) => translationCb.emit(p),
+      emitTranslation: (p) => emitTranslationMetrics(p, session),
     });
   }
 
@@ -280,14 +365,16 @@ export function createWebBridge(): AppBridge {
   const screenWakeLock = createScreenWakeLock(navigator.wakeLock, document);
   const asr = new WebAsr({
     onStatus: (st) => {
-      if (st.state === 'running') screenWakeLock.start();
-      else if (st.state === 'stopped' || st.state === 'error') screenWakeLock.stop();
+      if (st.state === 'running') { screenWakeLock.start(); startMetrics(); }
+      else if (st.state === 'stopped' || st.state === 'error') { screenWakeLock.stop(); stopMetrics(); }
       statusCb.emit(st);
     },
     onPartial: (p) => partialCb.emit(p),
     onSegment: (seg) => {
       // Older worker adapters omit endpoint metadata; retain it when available.
       const line: SegmentPayload = { ...seg, id: nextLineId++, speechEndAt: seg.speechEndAt ?? Date.now() };
+      // Missing capture timestamps cannot provide a meaningful ASR latency sample.
+      metrics.segment(seg.speechEndAt, Date.now());
       segmentCb.emit(line);
       void translateSegment(line);
     },
@@ -341,9 +428,20 @@ export function createWebBridge(): AppBridge {
     // ===== ASR 管线 =====
     async startPipeline(): Promise<StartResult> {
       // 请求麦克风 + 建 AudioWorklet 采音，帧送 sherpa worker 实时识别。
+      metricsSession++;
+      metrics.reset();
+      cloudRttMs = undefined;
+      cloudDegraded = false;
       resetReverseTranslationContext(reverseCtx); // 外语历史只在本次会话内有效
       syncAsrConfig();
-      return asr.start();
+      try {
+        const result = await asr.start();
+        if (!result.ok) stopMetrics();
+        return result;
+      } catch (error) {
+        stopMetrics();
+        throw error;
+      }
     },
     prewarmPipeline(): void {
       // 进主界面即后台装载 ASR 模型（不触麦克风）：fire-and-forget，失败静默（预热内部已处理并解禁按钮）。
@@ -351,6 +449,7 @@ export function createWebBridge(): AppBridge {
       void asr.prewarm().catch(() => undefined);
     },
     async stopPipeline(): Promise<{ ok: boolean }> {
+      stopMetrics();
       screenWakeLock.stop();
       return asr.stop();
     },
@@ -630,6 +729,9 @@ export function createWebBridge(): AppBridge {
     },
     onStatus(cb: (status: StatusPayload) => void): (() => void) {
       return statusCb.on(cb);
+    },
+    onMetrics(cb: (metrics: PipelineMetrics) => void): (() => void) {
+      return metricsCb.on(cb);
     },
     onTranslationStatus(cb: (status: TranslationStatusPayload) => void): (() => void) {
       return translationStatusCb.on(cb);

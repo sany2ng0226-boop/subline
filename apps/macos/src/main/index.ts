@@ -5,6 +5,7 @@ import { mapPermissionState, createPermissionChangeDetector, type PermissionKind
 import { createRecoveryStore } from './recovery-store';
 import { createAlwaysOnTopController } from './always-on-top';
 import { createDisplaySleepBlocker } from './display-sleep';
+import { createMetricsController } from './metrics';
 import { TranslationRequestQueue } from './translation/request-queue';
 import { runCandidateSmoke } from './candidate-smoke';
 import path from 'node:path';
@@ -18,6 +19,7 @@ import {
   desktopCapturer,
   dialog,
   ipcMain,
+  net,
   globalShortcut,
   powerSaveBlocker,
   session,
@@ -310,7 +312,8 @@ function createWindow(): void {
     },
   });
   alwaysOnTop.apply(loadSettings().alwaysOnTop);
-  win.on('closed', () => { displaySleep.stop(); overlay.close(); });
+  win.webContents.on('render-process-gone', () => metrics.stop());
+  win.on('closed', () => { metrics.stop(); displaySleep.stop(); overlay.close(); });
   win.on('close', (event) => {
     if (leaveConfirmed || !hasUnsavedContent()) return;
     event.preventDefault();
@@ -365,8 +368,16 @@ ipcMain.on('overlay:click-through', (_event, on: unknown) => {
 });
 ipcMain.on('overlay:subscribe', (event) => event.sender.send('overlay:state', overlay.state()));
 
+let metricsSession = 0;
+const metrics = createMetricsController({
+  settings: () => loadSettings().translation,
+  online: () => net.isOnline(),
+  fetch: (...args) => fetch(...args),
+  publish: (payload) => sendToRenderer('pipeline:metrics', payload),
+});
+
 function sendToRenderer(channel: string, payload: unknown): void {
-  if (OVERLAY_BROADCAST_CHANNELS.has(channel)) overlay.send(channel, payload);
+  if (channel === 'pipeline:metrics' || OVERLAY_BROADCAST_CHANNELS.has(channel)) overlay.send(channel, payload);
   if (win && !win.isDestroyed()) {
     win.webContents.send(channel, payload);
   }
@@ -477,6 +488,7 @@ function reconfigureTranslate(): void {
  *  编排（是否翻 / pending / 字形归一化 / 错误上报）统一在 @rt/core.translateFinalizedSegment，
  *  与 web/iOS 一致；这里注入的引擎是翻译子进程消息协议的 Promise 封装。 */
 function translateSegment(segment: SegmentPayload): void {
+  const session = metricsSession;
   const settings = loadSettings();
   // 规划用 spec 按当前引擎查表；云端/未知引擎回落默认本地模型（planTranslation 的 skip/script/toScript
   // 判定与本地模型无关，云端路径只用 targetLang 而非 targetCode，故回落不影响云端译文）。
@@ -492,7 +504,16 @@ function translateSegment(segment: SegmentPayload): void {
     reverse: reverseCtx,
     context: ['cloud', 'hy-mt2-7b'].includes(settings.translation.engine) ? translationContext : undefined,
     translate: requestTranslate,
-    emitTranslation: (p) => sendToRenderer('pipeline:translation', p),
+    emitTranslation: (p) => {
+      if (sessionActive && session === metricsSession) {
+        if (p.pending) metrics.aggregator.requested(String(p.id), p.requestedAt ?? Date.now());
+        else if (!p.partial) {
+          if (p.requestedAt !== undefined) metrics.aggregator.requested(String(p.id), p.requestedAt);
+          metrics.aggregator.completed(String(p.id), Date.now(), p.failed);
+        }
+      }
+      sendToRenderer('pipeline:translation', p);
+    },
   });
 }
 
@@ -515,6 +536,7 @@ function startAsrChild(): Promise<void> {
         case 'segment': {
           // 行 id 改写为主进程计数器的值：UI 上屏与译文回填都以它对应
           const payload: SegmentPayload = { ...m.payload, id: nextLineId++ };
+          metrics.aggregator.segment(payload.speechEndAt, Date.now());
           sendToRenderer('pipeline:segment', payload); // 原文立即上屏
           translateSegment(payload); // 译文异步回填
           break;
@@ -523,6 +545,7 @@ function startAsrChild(): Promise<void> {
           sendToRenderer('pipeline:partial', m.payload);
           break;
         case 'error':
+          metrics.stop();
           sendToRenderer('pipeline:status', { state: 'error', error: m.message, code: 'asr-init-failed' });
           if (!settled) {
             // 初始化阶段就出错：销毁子进程，让 exit 清空引用，下次 start 可重新 fork 恢复
@@ -538,6 +561,7 @@ function startAsrChild(): Promise<void> {
       // 其异步 exit 不应误报「识别进程异常退出」，也不应清掉随后新建的子进程引用。
       const isCurrent = asrChild === child;
       if (isCurrent) {
+        metrics.stop();
         displaySleep.stop();
         asrChild = null;
         asrReady = null;
@@ -561,6 +585,7 @@ function startAsrChild(): Promise<void> {
 
 /** 让当前 ASR 子进程按新配置重建：同步置空引用，下次 start/prewarm 时以最新设置重新 fork。 */
 function reconfigureAsr(): void {
+  metrics.stop();
   displaySleep.stop();
   asrChild?.kill();
   asrChild = null;
@@ -612,6 +637,8 @@ ipcMain.handle('pipeline:start', async (): Promise<StartResult> => {
   translationContext.reset();
   sendToRenderer('pipeline:status', { state: 'running' });
   sessionActive = true;
+  metricsSession++;
+  metrics.start();
   displaySleep.start();
   return { ok: true };
 });
@@ -985,6 +1012,7 @@ ipcMain.handle(
 );
 
 ipcMain.handle('pipeline:stop', () => {
+  metrics.stop();
   displaySleep.stop();
   asrChild?.postMessage({ type: 'flush' });
   sessionActive = false;
@@ -1049,6 +1077,7 @@ app.on('before-quit', (event) => {
 
 let recoveryFlushed = false;
 app.on('will-quit', (event) => {
+  metrics.stop();
   shortcuts.stop();
   displaySleep.stop();
   overlay.close();

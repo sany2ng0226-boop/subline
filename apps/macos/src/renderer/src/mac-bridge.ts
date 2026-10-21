@@ -100,6 +100,7 @@ export function createMacBridge(api: ElectronApi): AppBridge {
 
   return {
     onAudioLevel(cb) { levelListeners.add(cb); return () => { levelListeners.delete(cb); }; },
+    onMetrics: api.onMetrics ? (cb) => api.onMetrics!(cb) : undefined,
     platform: api.platform,
     audioSources: api.audioSources,
     // 构建期注入的发布版本串；define 缺失的环境（如单测导入）下不暴露

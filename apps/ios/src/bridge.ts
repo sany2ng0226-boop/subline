@@ -27,6 +27,7 @@ import {
   listSummaries,
   makeArchiveId,
   CloudTranslator,
+  MetricsAggregator,
   M2M100_SPEC,
   translateFinalizedSegment,
   createReverseTranslationContext,
@@ -37,6 +38,7 @@ import {
 } from '@rt/core';
 import type {
   AppBridge,
+  PipelineMetrics,
   AppSettings,
   ArchiveLine,
   ArchiveRecord,
@@ -83,6 +85,87 @@ export function createIosBridge(): AppBridge {
   //    翻译开关就是 cachedSettings.translation.enabled，改后即时生效并落盘，不再另存一份布尔。 ——
   let cachedSettings: AppSettings | null = null;
 
+  const metrics = new MetricsAggregator();
+  const metricsCb = createCallbackHub<PipelineMetrics>();
+  let metricsTimer: ReturnType<typeof setInterval> | undefined;
+  let metricsSession = 0;
+  let cloudRttMs: number | undefined;
+  let cloudDegraded = false;
+  let cloudGeneration = 0;
+  let cloudConfigKey: string | undefined;
+
+  function syncCloudMetricsConfig(settings: AppSettings): void {
+    const { engine, enabled, cloud } = settings.translation;
+    const key = JSON.stringify([engine, enabled, cloud.baseURL]);
+    if (key !== cloudConfigKey) {
+      cloudConfigKey = key;
+      cloudGeneration++;
+      cloudRttMs = undefined;
+      cloudDegraded = false;
+    }
+  }
+
+  // WebView connectivity uses the browser signal, not native NWPathMonitor.
+  // Cloud RTT is the full translation request duration, including server inference.
+  function emitMetrics(): void {
+    if (metricsTimer === undefined) return;
+    const cloud = cachedSettings?.translation.enabled && cachedSettings.translation.engine === 'cloud';
+    metricsCb.emit({
+      ...metrics.snapshot(),
+      network: !navigator.onLine ? 'offline' : cloud && cloudDegraded ? 'degraded' : 'online',
+      engine: cloud ? 'cloud' : 'local',
+      ...(cloud && cloudRttMs !== undefined ? { cloudRttMs } : {}),
+    });
+  }
+
+  function stopMetrics(): void {
+    if (metricsTimer !== undefined) clearInterval(metricsTimer);
+    metricsTimer = undefined;
+    window.removeEventListener('online', emitMetrics);
+    window.removeEventListener('offline', emitMetrics);
+  }
+
+  function startMetrics(): void {
+    if (metricsTimer !== undefined) return;
+    metricsTimer = setInterval(emitMetrics, 1000);
+    window.addEventListener('online', emitMetrics);
+    window.addEventListener('offline', emitMetrics);
+  }
+
+  function emitTranslationMetrics(payload: TranslationPayload, session: number): void {
+    if (session === metricsSession) {
+      const id = String(payload.id);
+      if (payload.pending) metrics.requested(id, payload.requestedAt ?? Date.now());
+      else if (!payload.partial) {
+        if (payload.requestedAt !== undefined) metrics.requested(id, payload.requestedAt);
+        metrics.completed(id, Date.now(), payload.failed);
+      }
+    }
+    translationCb.emit(payload);
+  }
+
+  async function translateCloud(
+    config: CloudTranslationConfig,
+    text: string,
+    options: { source: string; target: string },
+    session: number,
+  ): Promise<string> {
+    const generation = cloudGeneration;
+    const startedAt = Date.now();
+    try {
+      const result = await new CloudTranslator(config).translate(text, options);
+      if (session === metricsSession && generation === cloudGeneration) {
+        cloudRttMs = Date.now() - startedAt;
+        cloudDegraded = false;
+      }
+      return result;
+    } catch (error) {
+      if (session === metricsSession && generation === cloudGeneration) cloudDegraded = true;
+      throw error;
+    }
+  }
+
+
   // ---- 持久化：设置 ----
   async function readSettings(): Promise<AppSettings> {
     const defaults = makeDefaults(navigator.languages ? [...navigator.languages] : []);
@@ -96,12 +179,14 @@ export function createIosBridge(): AppBridge {
       }
     }
     cachedSettings = applyPlatformConstraints(withDefaults(raw, defaults));
+    syncCloudMetricsConfig(cachedSettings);
     return cachedSettings;
   }
 
   // 写设置：补齐/校验后落盘并刷新缓存。所有写入路径（保存设置、切翻译开关）都走这里。
   async function writeSettings(next: AppSettings): Promise<AppSettings> {
     cachedSettings = applyPlatformConstraints(withDefaults(next, makeDefaults([])));
+    syncCloudMetricsConfig(cachedSettings);
     await Preferences.set({ key: SETTINGS_KEY, value: JSON.stringify(cachedSettings) });
     return cachedSettings;
   }
@@ -138,6 +223,7 @@ export function createIosBridge(): AppBridge {
   //      编排（是否翻 / pending / 字形归一化 / 错误上报）统一在 @rt/core.translateFinalizedSegment，
   //      三端一致；这里只注入引擎调用：设备端 Apple Translation（iOS 18+）或云端 CloudTranslator。 ----
   async function translateSegment(seg: SegmentPayload): Promise<void> {
+    const session = metricsSession;
     const s = cachedSettings ?? (await readSettingsOnce());
     await translateFinalizedSegment({
       spec: M2M100_SPEC,
@@ -163,12 +249,12 @@ export function createIosBridge(): AppBridge {
           return r.text;
         }
         // 云端传母语 app 语言键（en/ja/ko/zh），让 LLM 直接产出母语文本。
-        return new CloudTranslator(s.translation.cloud).translate(req.text, {
+        return translateCloud(s.translation.cloud, req.text, {
           source: req.source,
           target: req.targetLang,
-        });
+        }, session);
       },
-      emitTranslation: (p) => translationCb.emit(p),
+      emitTranslation: (p) => emitTranslationMetrics(p, session),
     });
   }
 
@@ -184,10 +270,16 @@ export function createIosBridge(): AppBridge {
       // Native events expose no capture epoch; receipt is the closest available endpoint.
       const line: SegmentPayload = { ...seg, id: nextLineId++ };
       line.speechEndAt ??= Date.now();
+      // Missing capture timestamps cannot provide a meaningful ASR latency sample.
+      metrics.segment(seg.speechEndAt, Date.now());
       segmentCb.emit(line);
       void translateSegment(line);
     }).catch(() => undefined);
-    void RealtimeAsr.addListener('status', (s) => statusCb.emit(s)).catch(() => undefined);
+    void RealtimeAsr.addListener('status', (s) => {
+      if (s.state === 'running') startMetrics();
+      else if (s.state === 'stopped' || s.state === 'error') stopMetrics();
+      statusCb.emit(s);
+    }).catch(() => undefined);
     void RealtimeAsr.addListener('setupProgress', (p) => setupProgressCb.emit(p)).catch(
       () => undefined,
     );
@@ -219,11 +311,17 @@ export function createIosBridge(): AppBridge {
 
     // ===== ASR 管线（原生）=====
     async startPipeline(): Promise<StartResult> {
+      metricsSession++;
+      metrics.reset();
+      cloudRttMs = undefined;
+      cloudDegraded = false;
       resetReverseTranslationContext(reverseCtx); // 外语历史只在本次会话内有效
       try {
         const r = await RealtimeAsr.start(await currentAsrOptions());
+        if (!r.ok) stopMetrics();
         return { ok: r.ok, error: r.error };
       } catch (e) {
+        stopMetrics();
         return { ok: false, error: e instanceof Error ? e.message : String(e) };
       }
     },
@@ -236,6 +334,7 @@ export function createIosBridge(): AppBridge {
         .catch(() => statusCb.emit({ state: 'stopped' }));
     },
     async stopPipeline(): Promise<{ ok: boolean }> {
+      stopMetrics();
       try {
         return await RealtimeAsr.stop();
       } catch {
@@ -391,6 +490,9 @@ export function createIosBridge(): AppBridge {
     },
     onStatus(cb: (status: StatusPayload) => void): (() => void) {
       return statusCb.on(cb);
+    },
+    onMetrics(cb: (metrics: PipelineMetrics) => void): (() => void) {
+      return metricsCb.on(cb);
     },
     onTranslationStatus(cb: (status: TranslationStatusPayload) => void): (() => void) {
       return translationStatusCb.on(cb);

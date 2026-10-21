@@ -3,6 +3,7 @@
 // 仅引用 @rt/core 内的领域类型与回调，保持平台无关；音频采集不在此契约内（隐藏在各宿主实现中）。
 
 import type {
+  PipelineMetrics,
   ShortcutAction,
   SegmentPayload,
   PartialPayload,
@@ -53,6 +54,8 @@ export interface CloseGuard {
 export interface AppBridge {
   /** 运行平台标识；UI 据此按平台过滤可用模型、决定音源开关等。 */
   platform: Platform;
+  /** Session metrics every second while recording; unsubscribe stops this listener. */
+  onMetrics?(cb: (metrics: PipelineMetrics) => void): () => void;
   /** Desktop overlay uses the same renderer/preload with #overlay.
    * UI should render OverlayScreen when location.hash === '#overlay'.
    */

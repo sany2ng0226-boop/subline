@@ -70,6 +70,7 @@ const api: ElectronApi = {
   listArchives: () => ipcRenderer.invoke('archive:list'),
   getArchive: (id) => ipcRenderer.invoke('archive:get', id),
   deleteArchive: (id) => ipcRenderer.invoke('archive:delete', id),
+  onMetrics: (cb) => subscribe('pipeline:metrics', cb),
   onSegment: (cb) => subscribe('pipeline:segment', cb),
   onPartial: (cb) => subscribe('pipeline:partial', cb),
   onTranslation: (cb) => subscribe('pipeline:translation', cb),

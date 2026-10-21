@@ -76,6 +76,15 @@ export interface StartResult {
   code?: PipelineErrorCode;
 }
 
+export interface PipelineMetrics {
+  asrLatencyMs?: number;
+  translateLatencyMs?: number;
+  queueDepth?: number;
+  network?: 'online' | 'offline' | 'degraded';
+  cloudRttMs?: number;
+  engine?: 'local' | 'cloud';
+}
+
 /**
  * 翻译引擎的装载状态（把已下载的本地模型载入内存，或云端引擎的懒初始化）。
  * 仅表达 loading/ready/error，不带下载字节进度——下载进度走 onSetupProgress（与 ASR 一致），
@@ -85,7 +94,8 @@ export interface TranslationStatusPayload {
   state: 'loading' | 'ready' | 'error';
   error?: string;
   backend?: 'cuda' | 'cpu' | 'metal';
-  notice?: string;
+  /** fallback-local is reserved for an actual cloud-to-local switch; other text describes local GPU/CPU notices. */
+  notice?: 'fallback-local' | (string & {});
   memory?: { ramTotalBytes: number; ramFreeBytes: number; vramTotalBytes?: number; vramFreeBytes?: number };
 }
 
