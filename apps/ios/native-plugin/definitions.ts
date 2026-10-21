@@ -5,6 +5,8 @@
 
 import type { PluginListenerHandle } from '@capacitor/core';
 import type {
+  PermissionKind,
+  PermissionState,
   SegmentPayload,
   PartialPayload,
   StatusPayload,
@@ -14,6 +16,7 @@ import type {
 
 /** 插件向 JS 发的事件名 → 事件载荷类型 */
 export interface RealtimeAsrEventMap {
+  permissionChange: { kind: PermissionKind; state: PermissionState };
   /** 实时部分识别结果（说话过程中持续更新；text 为空表示清除） */
   partial: PartialPayload;
   /** 一段最终确定的识别结果 */
@@ -72,9 +75,11 @@ export interface RealtimeAsrPlugin {
   cancelDownload(options: { id: string }): Promise<{ ok: boolean }>;
 
   /** 查询麦克风权限状态（映射到 @rt/core 的 MicPermission）。 */
-  getMicStatus(): Promise<{ status: string }>;
+  getMicStatus(): Promise<{ state: PermissionState; status: PermissionState }>;
+  openPermissionSettings(): Promise<void>;
 
   /** 打开系统设置（iOS 应用设置页，供用户授予麦克风权限）。 */
+  /** @deprecated Use openPermissionSettings. */
   openMicSettings(): Promise<void>;
 
   /** 订阅插件事件，返回可用于反注册的句柄。 */

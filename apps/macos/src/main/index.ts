@@ -1,3 +1,5 @@
+import { createGuardedRelaunch } from './guarded-relaunch';
+import { mapPermissionState, createPermissionChangeDetector, type PermissionKind, type PermissionState } from '@rt/core';
 import { createRecoveryStore } from './recovery-store';
 import { createAlwaysOnTopController } from './always-on-top';
 import { createDisplaySleepBlocker } from './display-sleep';
@@ -598,34 +600,67 @@ ipcMain.on('pipeline:prewarm', () => {
 });
 
 // 麦克风权限：渲染层在请求权限前先查状态，自行决定是否弹说明弹窗
-ipcMain.handle('mic:get-status', (): MicPermission =>
-  process.platform === 'darwin' ? systemPreferences.getMediaAccessStatus('microphone') : 'granted'
-);
+function getPermission(kind: PermissionKind): PermissionState {
+  if (process.platform !== 'darwin') return 'unknown';
+  try {
+    return mapPermissionState(systemPreferences.getMediaAccessStatus(
+      kind === 'microphone' ? 'microphone' : 'screen',
+    ));
+  } catch {
+    return 'unknown';
+  }
+}
 
-ipcMain.on('mic:open-settings', () => {
+function openPermissionSettings(kind: PermissionKind): void {
+  if (kind !== 'microphone' && kind !== 'systemAudio') return;
   if (process.platform === 'darwin') {
+    const pane = kind === 'microphone' ? 'Microphone' : 'ScreenCapture';
     void shell.openExternal(
-      'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
+      `x-apple.systempreferences:com.apple.preference.security?Privacy_${pane}`,
     );
   } else if (process.platform === 'win32') {
-    void shell.openExternal('ms-settings:privacy-microphone');
+    void shell.openExternal(kind === 'microphone' ? 'ms-settings:privacy-microphone' : 'ms-settings:sound');
   }
+}
+
+ipcMain.handle('mic:get-status', (): MicPermission =>
+  process.platform === 'darwin' ? getPermission('microphone') : 'granted',
+);
+ipcMain.handle('permission:get', (_event, kind: PermissionKind) =>
+  kind === 'microphone' || kind === 'systemAudio' ? getPermission(kind) : 'unknown',
+);
+ipcMain.on('permission:open-settings', (_event, kind: PermissionKind) => openPermissionSettings(kind));
+ipcMain.on('mic:open-settings', () => openPermissionSettings('microphone'));
+ipcMain.on('system-audio:open-settings', () => openPermissionSettings('systemAudio'));
+
+app.whenReady().then(() => {
+  const changed = createPermissionChangeDetector({
+    microphone: getPermission('microphone'),
+    systemAudio: getPermission('systemAudio'),
+  });
+  app.on('browser-window-focus', () => {
+    for (const kind of ['microphone', 'systemAudio'] as const) {
+      const state = getPermission(kind);
+      if (changed(kind, state)) sendToRenderer('permission:change', { kind, state });
+    }
+  });
+});
+
+const guardedRelaunch = createGuardedRelaunch({
+  confirm: () => leaveConfirmed || !hasUnsavedContent() ? Promise.resolve(true) : confirmLeave(),
+  flush: () => recoveryStore.flush(),
+  proceed: () => {
+    leaveConfirmed = true;
+    app.relaunch();
+    app.exit(0);
+  },
+});
+ipcMain.on('app:relaunch', () => {
+  if (process.platform === 'darwin') void guardedRelaunch().catch(console.error);
 });
 
 ipcMain.on('window:close-guard', (_event, guard: CloseGuard | null) => {
   closeGuard = guard;
-});
-
-// 系统音频录制权限被拒后的引导：打开「屏幕与系统音频录制」隐私页
-// （ScreenCapture 锚点即该合并页，含「仅录制系统音频」分栏）。
-ipcMain.on('system-audio:open-settings', () => {
-  if (process.platform === 'darwin') {
-    void shell.openExternal(
-      'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
-    );
-  } else if (process.platform === 'win32') {
-    void shell.openExternal('ms-settings:sound');
-  }
 });
 
 ipcMain.handle('setup:get-status', (_event, modelId: string): SetupStatus => ({

@@ -1,3 +1,4 @@
+import { mapPermissionState, createPermissionChangeDetector, type PermissionKind, type PermissionState as AppPermissionState } from '@rt/core';
 // 浏览器 PWA 平台桥接：实现 @rt/core 的 AppBridge，注入给 @rt/ui。
 // 镜像 apps/ios/src/bridge.ts 的结构，但全部用浏览器原生能力：
 //
@@ -48,7 +49,6 @@ import type {
   CloudTranslationConfig,
   LocalModelSpec,
   StartResult,
-  MicPermission,
   ModelInfo,
   ModelKind,
   SetupStatus,
@@ -302,12 +302,31 @@ export function createWebBridge(): AppBridge {
     }
   }
 
-  // ---- MicPermission 归一化（Permissions API 的字符串 → @rt/core 联合类型） ----
-  // 浏览器只有 granted/denied/prompt；prompt 对应「尚未决定」。
-  function asMicPermission(state: PermissionState): MicPermission {
-    if (state === 'granted') return 'granted';
-    if (state === 'denied') return 'denied';
-    return 'not-determined'; // 'prompt'
+  const permissionCallbacks = new Set<(kind: PermissionKind, state: AppPermissionState) => void>();
+  const permissionChanged = createPermissionChangeDetector({
+    microphone: 'unknown', systemAudio: 'unknown',
+  });
+  let micPermission: PermissionStatus | undefined;
+  let permissionQuery: Promise<AppPermissionState> | undefined;
+  async function getPermission(kind: PermissionKind): Promise<AppPermissionState> {
+    if (kind !== 'microphone') return 'unknown';
+    permissionQuery ??= (async () => {
+      try {
+        micPermission ??= await navigator.permissions.query({ name: 'microphone' as PermissionName });
+        micPermission.onchange = () => {
+          const state = mapPermissionState(micPermission?.state);
+          if (permissionChanged('microphone', state)) {
+            for (const cb of permissionCallbacks) cb('microphone', state);
+          }
+        };
+        const state = mapPermissionState(micPermission.state);
+        permissionChanged('microphone', state);
+        return state;
+      } catch {
+        return 'unknown';
+      }
+    })().finally(() => { permissionQuery = undefined; });
+    return permissionQuery;
   }
 
   const api: AppBridge = {
@@ -337,18 +356,13 @@ export function createWebBridge(): AppBridge {
     },
 
     // ===== 麦克风权限（Permissions API） =====
-    async getMicStatus(): Promise<MicPermission> {
-      try {
-        // 'microphone' 不在标准 PermissionName 联合里，浏览器实际支持，断言绕过类型。
-        const status = await navigator.permissions.query({
-          name: 'microphone' as PermissionName,
-        });
-        return asMicPermission(status.state);
-      } catch {
-        // 不支持 Permissions API（如部分 Safari 版本）：未知，UI 会照常尝试 getUserMedia。
-        return 'unknown';
-      }
+    getPermission,
+    onPermissionChange(cb) {
+      permissionCallbacks.add(cb);
+      void getPermission('microphone');
+      return () => { permissionCallbacks.delete(cb); };
     },
+    getMicStatus: () => getPermission('microphone'),
     openMicSettings(): void {
       // 浏览器无法以编程方式打开系统/站点设置；空实现（UI 已对 web 做引导文案）。
     },

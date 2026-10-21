@@ -251,8 +251,22 @@ export function createIosBridge(): AppBridge {
         return 'unknown';
       }
     },
+    getPermission: async (kind) => kind === 'microphone' ? api.getMicStatus() : 'unknown',
+    onPermissionChange(cb) {
+      let disposed = false;
+      const handle = RealtimeAsr.addListener('permissionChange', ({ kind, state }) => {
+        if (!disposed) cb(kind, state);
+      }).catch(() => undefined);
+      return () => {
+        disposed = true;
+        void handle.then((listener) => listener?.remove());
+      };
+    },
+    openPermissionSettings(kind): void {
+      if (kind === 'microphone') void RealtimeAsr.openPermissionSettings().catch(() => undefined);
+    },
     openMicSettings(): void {
-      void RealtimeAsr.openMicSettings().catch(() => undefined);
+      api.openPermissionSettings?.('microphone');
     },
 
     // ===== 设置（Preferences）=====

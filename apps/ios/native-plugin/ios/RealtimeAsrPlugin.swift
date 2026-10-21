@@ -44,6 +44,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
     CAPPluginMethod(name: "deleteModel", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name: "cancelDownload", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name: "getMicStatus", returnType: CAPPluginReturnPromise),
+    CAPPluginMethod(name: "openPermissionSettings", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name: "openMicSettings", returnType: CAPPluginReturnPromise),
   ]
 
@@ -52,7 +53,10 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   /// (e.g. headphones unplugged) and a media-services reset all stop the engine out of
   /// band; without handling them the UI would stay stuck "running" while capture is dead.
   override public func load() {
+    lastMicPermission = currentMicPermission()
     let center = NotificationCenter.default
+    center.addObserver(self, selector: #selector(handleDidBecomeActive),
+                       name: UIApplication.didBecomeActiveNotification, object: nil)
     center.addObserver(self, selector: #selector(handleInterruption(_:)),
                        name: AVAudioSession.interruptionNotification, object: nil)
     center.addObserver(self, selector: #selector(handleRouteChange(_:)),
@@ -400,13 +404,27 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
     }
   }
 
-  /// Map AVAudioSession record permission to the JS MicPermission strings.
+  private var lastMicPermission: String = "unknown"
+
+  @objc private func handleDidBecomeActive() {
+    let state = currentMicPermission()
+    guard state != lastMicPermission else { return }
+    lastMicPermission = state
+    notifyListeners("permissionChange", data: ["kind": "microphone", "state": state])
+  }
+
+  /// Map native permissions to the shared PermissionState enum.
   @objc func getMicStatus(_ call: CAPPluginCall) {
-    call.resolve(["status": currentMicPermission()])
+    let state = currentMicPermission()
+    call.resolve(["state": state, "status": state])
   }
 
   /// Open the app's iOS Settings page so the user can grant microphone access.
   @objc func openMicSettings(_ call: CAPPluginCall) {
+    openPermissionSettings(call)
+  }
+
+  @objc func openPermissionSettings(_ call: CAPPluginCall) {
     DispatchQueue.main.async {
       if let url = URL(string: UIApplication.openSettingsURLString) {
         UIApplication.shared.open(url)

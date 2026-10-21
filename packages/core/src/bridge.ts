@@ -10,6 +10,8 @@ import type {
   TranslationStatusPayload,
   StartResult,
   MicPermission,
+  PermissionKind,
+  PermissionState,
   Platform,
   AudioSource,
   ModelInfo,
@@ -71,15 +73,15 @@ export interface AppBridge {
    * 设置页据此展示；缺省时不展示。
    */
   appVersion?: string;
+  getPermission?(kind: PermissionKind): Promise<PermissionState>;
+  onPermissionChange?(cb: (kind: PermissionKind, state: PermissionState) => void): () => void;
+  openPermissionSettings?(kind: PermissionKind): void;
+  relaunchApp?(): void;
   /** 查询麦克风权限状态（用于在请求权限前先弹说明） */
   getMicStatus(): Promise<MicPermission>;
-  /** 打开系统设置的麦克风隐私页（macOS） */
+  /** @deprecated Use openPermissionSettings("microphone"). */
   openMicSettings(): void;
-  /**
-   * 打开系统设置的「屏幕与系统音频录制」隐私页（macOS，系统音频录制权限被拒时引导）。
-   * 仅提供系统音频采集的端实现；系统音频权限状态无法查询（CoreAudio Tap 无查询 API），
-   * 故引导只能在采集报 system-audio-permission 错误后事后进行。
-   */
+  /** @deprecated Use openPermissionSettings("systemAudio"). */
   openSystemAudioSettings?(): void;
   /**
    * Persist and apply desktop main-window pinning. UI should add a settings switch

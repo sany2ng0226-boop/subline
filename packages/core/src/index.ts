@@ -26,3 +26,5 @@ export { audioLevel } from './audio-level';
 export { translationPrompt } from "./translation/cloud-translator";
 
 export * from './archive-errors';
+
+export * from './permissions';

@@ -128,9 +128,13 @@ export function createMacBridge(api: ElectronApi): AppBridge {
 
     // ===== 以下全部直通 window.api =====
     prewarmPipeline: () => api.prewarmPipeline(),
+    getPermission: api.getPermission,
+    onPermissionChange: api.onPermissionChange,
+    openPermissionSettings: api.openPermissionSettings,
+    relaunchApp: api.relaunchApp,
     getMicStatus: () => api.getMicStatus(),
-    openMicSettings: () => api.openMicSettings(),
-    openSystemAudioSettings: () => api.openSystemAudioSettings?.(),
+    openMicSettings: () => api.openPermissionSettings?.('microphone'),
+    openSystemAudioSettings: () => api.openPermissionSettings?.('systemAudio'),
     setCloseGuard: (guard) => api.setCloseGuard?.(guard),
     onArchiveBeforeClose: (handler) => api.onArchiveBeforeClose?.(handler) ?? (() => {}),
     setAlwaysOnTop: api.setAlwaysOnTop ? (on) => api.setAlwaysOnTop!(on) : undefined,

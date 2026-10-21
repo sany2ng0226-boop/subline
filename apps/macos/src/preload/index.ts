@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import type { PermissionKind, PermissionState } from '@rt/core';
 import type { ElectronApi } from '../shared/types';
 import { availableAudioSources } from '../shared/audio-source';
 
@@ -17,9 +18,15 @@ const api: ElectronApi = {
   prewarmPipeline: () => ipcRenderer.send('pipeline:prewarm'),
   stopPipeline: () => ipcRenderer.invoke('pipeline:stop'),
   sendAudio: (samples) => ipcRenderer.send('pipeline:audio', samples),
+  getPermission: (kind) => ipcRenderer.invoke('permission:get', kind),
+  onPermissionChange: (cb) => subscribe<{ kind: PermissionKind; state: PermissionState }>(
+    'permission:change', ({ kind, state }) => cb(kind, state),
+  ),
+  openPermissionSettings: (kind) => ipcRenderer.send('permission:open-settings', kind),
+  ...(process.platform === 'darwin' ? { relaunchApp: () => ipcRenderer.send('app:relaunch') } : {}),
   getMicStatus: () => ipcRenderer.invoke('mic:get-status'),
-  openMicSettings: () => ipcRenderer.send('mic:open-settings'),
-  openSystemAudioSettings: () => ipcRenderer.send('system-audio:open-settings'),
+  openMicSettings: () => ipcRenderer.send('permission:open-settings', 'microphone'),
+  openSystemAudioSettings: () => ipcRenderer.send('permission:open-settings', 'systemAudio'),
   setCloseGuard: (guard) => ipcRenderer.send('window:close-guard', guard),
   onArchiveBeforeClose: (handler) => subscribe<number>('window:archive-before-close', (id) => {
     void handler()

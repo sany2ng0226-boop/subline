@@ -161,7 +161,9 @@ export type AudioSource = 'mic' | 'system';
 export type ThemePref = 'light' | 'dark' | 'system';
 
 /** 麦克风权限状态（macOS systemPreferences.getMediaAccessStatus） */
-export type MicPermission = 'granted' | 'denied' | 'restricted' | 'not-determined' | 'unknown';
+export type PermissionKind = 'microphone' | 'systemAudio';
+export type PermissionState = 'granted' | 'denied' | 'restricted' | 'not-determined' | 'unknown';
+export type MicPermission = PermissionState;
 
 /** 模型类别：识别模型 / 翻译模型。 */
 export type ModelKind = 'asr' | 'translation';
