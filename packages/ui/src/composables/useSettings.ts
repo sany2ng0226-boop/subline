@@ -63,6 +63,31 @@ export async function saveSettings(next: AppSettings): Promise<AppSettings> {
   return saved;
 }
 
+// 字号档位从小到大，A−/A+ 每次移动一档
+const FONT_TIERS: SettingsFontSize[] = ['xs', 'small', 'medium', 'large', 'xl'];
+
+/** 当前字号是否已到最小 / 最大档 */
+export const fontAtMin = computed(() => settings.value?.fontSize === FONT_TIERS[0]);
+export const fontAtMax = computed(() => settings.value?.fontSize === FONT_TIERS[FONT_TIERS.length - 1]);
+
+// 连点 A−/A+ 时串行保存，避免并发写把档位回退
+let fontSaves: Promise<unknown> = Promise.resolve();
+
+/** 字幕字号升降一档：立即生效并持久化（录音中可用） */
+export function stepFontSize(delta: 1 | -1): void {
+  const s = settings.value;
+  if (!s) return;
+  const index = FONT_TIERS.indexOf(s.fontSize);
+  if (index < 0) return;
+  const next = FONT_TIERS[Math.min(FONT_TIERS.length - 1, Math.max(0, index + delta))];
+  if (next === s.fontSize) return;
+  settings.value = { ...s, fontSize: next };
+  applyFontSize(next);
+  fontSaves = fontSaves
+    .then(() => saveSettings({ ...settings.value!, fontSize: next }))
+    .catch((error) => console.error('[settings:font-size]', error));
+}
+
 /** 直接设置主题偏好（持久化） */
 export function setTheme(pref: ThemePref): void {
   if (!settings.value || settings.value.theme === pref) return;

@@ -2,11 +2,11 @@
 import { computed, ref, h, watch, onUnmounted } from 'vue';
 import { NButton, NModal, NInput, NDropdown, NTooltip, NProgress, NSelect } from 'naive-ui';
 import type { DropdownMixedOption } from 'naive-ui/es/dropdown/src/interface';
-import { Settings, Trash2, Archive, Library, Eraser, LoaderCircle, TriangleAlert, MoreHorizontal, Mic, MonitorSpeaker, Square, RefreshCw, X } from '@lucide/vue';
+import { Settings, Trash2, Archive, Library, Eraser, LoaderCircle, TriangleAlert, MoreHorizontal, Mic, MonitorSpeaker, Square, RefreshCw, X, AArrowDown, AArrowUp, Sun, Moon, SunMoon } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { getAsrModel, getTranslationModel, UI_LANGS, asrModelsFor, DEFAULT_ASR_MODEL_ID, type AsrLang, type ArchiveLibrary } from '@rt/core';
 import { LANG_LABELS } from '../components/settings/form';
-import { settings, saveSettings } from '../composables/useSettings';
+import { settings, saveSettings, stepFontSize, fontAtMin, fontAtMax, cycleTheme, themePref } from '../composables/useSettings';
 import {
   lines,
   partial,
@@ -186,8 +186,17 @@ const loadingSummary = computed(() =>
   loadingItems.value.length > 1 ? t('status.preparing') : (loadingItems.value[0] ?? ''),
 );
 
-// 录音进行中（含启停在途）：顶栏除录音按钮外全部禁用，避免录音过程中误操作打断会话
+// 录音进行中（含启停在途）：会打断会话的操作（音源、识别语言、清空、归档、进设置 / 归档页）全部禁用；
+// 只改显示的字号与主题不打断会话，录音中仍可用。
 const headerLocked = computed(() => recording.value || recordBusy.value || languageSaving.value || archiveSaving.value);
+// 被锁按钮的提示里说明原因
+function lockedTip(label: string): string {
+  return headerLocked.value && recording.value ? `${label} · ${t('main.lockedWhileRecording')}` : label;
+}
+
+const THEME_ICON = { light: Sun, dark: Moon, system: SunMoon } as const;
+const THEME_LABEL = { light: 'main.themeLight', dark: 'main.themeDark', system: 'main.themeSystem' } as const;
+const themeTitle = computed(() => `${t('main.theme')}: ${t(THEME_LABEL[themePref.value])}`);
 
 // 音源开关：仅当桥接声明支持系统音频时才显示（macOS）。切换即持久化。
 const supportsSystemAudio = bridge().audioSources?.includes('system') ?? false;
@@ -202,6 +211,10 @@ function toggleAudioSource(): void {
 
 // 移动端「...」溢出菜单（翻译开/关已移至设置的「翻译方式」，此处不再有翻译项）
 const mobileMenuOptions = computed<DropdownMixedOption[]>(() => [
+  { key: 'font-smaller', label: t('main.fontSmaller'), icon: () => h(AArrowDown, { size: 16 }), disabled: fontAtMin.value },
+  { key: 'font-larger', label: t('main.fontLarger'), icon: () => h(AArrowUp, { size: 16 }), disabled: fontAtMax.value },
+  { key: 'theme', label: themeTitle.value, icon: () => h(THEME_ICON[themePref.value], { size: 16 }) },
+  { type: 'divider', key: 'd-view' },
   ...(supportsSystemAudio
     ? ([
         {
@@ -213,22 +226,31 @@ const mobileMenuOptions = computed<DropdownMixedOption[]>(() => [
         { type: 'divider', key: 'd0' },
       ] satisfies DropdownMixedOption[])
     : []),
-  { key: 'archive', label: t('main.archive'), icon: () => h(Archive, { size: 16 }), disabled: !hasContent.value },
+  { key: 'archive', label: t('main.archive'), icon: () => h(Archive, { size: 16 }), disabled: !hasContent.value || headerLocked.value },
   { type: 'divider', key: 'd3' },
-  { key: 'view-archive', label: t('main.viewArchives'), icon: () => h(Library, { size: 16 }) },
-  { key: 'settings', label: t('main.settings'), icon: () => h(Settings, { size: 16 }) },
+  { key: 'view-archive', label: t('main.viewArchives'), icon: () => h(Library, { size: 16 }), disabled: headerLocked.value },
+  { key: 'settings', label: t('main.settings'), icon: () => h(Settings, { size: 16 }), disabled: headerLocked.value },
   ...(canForceUpdate
     ? ([
         { type: 'divider', key: 'd4' },
-        { key: 'force-update', label: t('main.forceUpdate'), icon: () => h(RefreshCw, { size: 16 }) },
+        { key: 'force-update', label: t('main.forceUpdate'), icon: () => h(RefreshCw, { size: 16 }), disabled: headerLocked.value },
       ] satisfies DropdownMixedOption[])
     : []),
   { type: 'divider', key: 'd5' },
-  deleteOption(!hasContent.value),
+  deleteOption(!hasContent.value || headerLocked.value),
 ]);
 
 function onMobileMenuSelect(key: string): void {
   switch (key) {
+    case 'font-smaller':
+      stepFontSize(-1);
+      break;
+    case 'font-larger':
+      stepFontSize(1);
+      break;
+    case 'theme':
+      cycleTheme();
+      break;
     case 'audio-source':
       toggleAudioSource();
       break;
@@ -489,13 +511,39 @@ function openMicSettings(): void {
       <div class="flex items-center gap-3 max-sm:hidden">
         <!-- 次要操作收进一组图标，和主操作（电平 / 语言 / 录音）之间用细分隔线拉开层级 -->
         <div class="tool-group">
+          <!-- 字号与主题只改显示，录音中仍可用 -->
+          <n-tooltip>
+            <template #trigger>
+              <n-button quaternary circle size="small" :disabled="fontAtMin" :aria-label="t('main.fontSmaller')" @click="stepFontSize(-1)">
+                <template #icon><AArrowDown :size="17" /></template>
+              </n-button>
+            </template>
+            {{ t('main.fontSmaller') }}
+          </n-tooltip>
+          <n-tooltip>
+            <template #trigger>
+              <n-button quaternary circle size="small" :disabled="fontAtMax" :aria-label="t('main.fontLarger')" @click="stepFontSize(1)">
+                <template #icon><AArrowUp :size="17" /></template>
+              </n-button>
+            </template>
+            {{ t('main.fontLarger') }}
+          </n-tooltip>
+          <n-tooltip>
+            <template #trigger>
+              <n-button quaternary circle size="small" :aria-label="themeTitle" @click="cycleTheme">
+                <template #icon><component :is="THEME_ICON[themePref]" :size="17" /></template>
+              </n-button>
+            </template>
+            {{ themeTitle }}
+          </n-tooltip>
+          <span class="header-divider mx-1.5" aria-hidden="true" />
           <n-tooltip>
             <template #trigger>
               <n-button quaternary circle size="small" :disabled="!hasContent || headerLocked" :aria-label="t('main.archive')" @click="openArchiveModal">
                 <template #icon><Archive :size="17" /></template>
               </n-button>
             </template>
-            {{ t('main.archive') }}
+            {{ lockedTip(t('main.archive')) }}
           </n-tooltip>
           <!-- 橡皮擦只表示清空：点击弹确认框，确认后 8 秒内可撤销 -->
           <n-tooltip>
@@ -504,7 +552,7 @@ function openMicSettings(): void {
                 <template #icon><Eraser :size="17" /></template>
               </n-button>
             </template>
-            {{ t('main.clear') }}
+            {{ lockedTip(t('main.clear')) }}
           </n-tooltip>
           <n-tooltip>
             <template #trigger>
@@ -512,7 +560,7 @@ function openMicSettings(): void {
                 <template #icon><Library :size="17" /></template>
               </n-button>
             </template>
-            {{ t('main.viewArchives') }}
+            {{ lockedTip(t('main.viewArchives')) }}
           </n-tooltip>
           <n-tooltip>
             <template #trigger>
@@ -520,7 +568,7 @@ function openMicSettings(): void {
                 <template #icon><Settings :size="17" /></template>
               </n-button>
             </template>
-            {{ t('main.settings') }}
+            {{ lockedTip(t('main.settings')) }}
           </n-tooltip>
           <!-- 音源开关：仅桥接支持系统音频时显示，图标即当前音源，点击切换 -->
           <n-tooltip v-if="supportsSystemAudio">
@@ -538,7 +586,7 @@ function openMicSettings(): void {
                 </template>
               </n-button>
             </template>
-            {{ audioSourceTitle }}
+            {{ lockedTip(audioSourceTitle) }}
           </n-tooltip>
         </div>
         <span class="header-divider" aria-hidden="true" />
@@ -569,9 +617,8 @@ function openMicSettings(): void {
       <!-- sm:hidden 放在外层 div：Naive 运行时注入的 .n-button{display:inline-flex} 会盖过
            直接加在按钮上的 sm:hidden，故由普通 div 承载响应式隐藏（桌面 ≥640px 隐藏整组）。 -->
       <div class="sm:hidden">
-        <!-- NDropdown 无 disabled 属性：录音锁定时直接渲染禁用按钮，避免仍能弹出菜单 -->
+        <!-- 录音中菜单仍可打开（字号、主题），会打断会话的项逐个禁用 -->
         <n-dropdown
-          v-if="!headerLocked"
           trigger="click"
           placement="bottom-end"
           :options="mobileMenuOptions"
@@ -581,9 +628,6 @@ function openMicSettings(): void {
             <template #icon><MoreHorizontal :size="20" /></template>
           </n-button>
         </n-dropdown>
-        <n-button v-else quaternary circle disabled :aria-label="t('main.menu')">
-          <template #icon><MoreHorizontal :size="20" /></template>
-        </n-button>
       </div>
     </header>
 
