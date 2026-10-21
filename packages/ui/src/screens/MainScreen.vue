@@ -66,7 +66,7 @@ async function selectPrimaryLanguage(language: AsrLang): Promise<void> {
   languageSaving.value = true;
   try {
     const compatible = asrModelsFor(language, bridge().platform).some((model) => model.id === current.asr.model);
-    await saveSettings({ ...current, asr: { language, model: compatible ? current.asr.model : DEFAULT_ASR_MODEL_ID } });
+    await saveSettings({ asr: { language, model: compatible ? current.asr.model : DEFAULT_ASR_MODEL_ID } });
   } catch (error) {
     console.error('[settings:primary-language]', error);
   } finally {
@@ -174,7 +174,7 @@ async function toggleTranslation(enabled: boolean): Promise<void> {
   translationSaving.value = true;
   try {
     const base = settings.value;
-    await saveSettings({ ...base, translation: { ...base.translation, enabled } });
+    await saveSettings({ translation: { enabled } });
     if (enabled) {
       translationDownloadTasks.value = await missingTranslationDownload(base.translation.engine);
       translationDownloadOpen.value = translationDownloadTasks.value.length > 0;
@@ -266,7 +266,7 @@ const audioSourceTitle = computed(() =>
 function toggleAudioSource(): void {
   const s = settings.value;
   if (!s || headerLocked.value) return;
-  void saveSettings({ ...s, audioSource: s.audioSource === 'system' ? 'mic' : 'system' });
+  void saveSettings({ audioSource: s.audioSource === 'system' ? 'mic' : 'system' });
 }
 
 // 移动端「...」溢出菜单（翻译开/关已移至设置的「翻译方式」，此处不再有翻译项）

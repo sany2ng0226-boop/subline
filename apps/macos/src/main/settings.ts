@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { app, safeStorage } from 'electron';
-import { makeDefaults, withDefaults } from '@rt/core';
+import { makeDefaults, withDefaults, mergeSettings, type SettingsPatch } from '@rt/core';
 import type { AppSettings } from '../shared/types';
 
 /** 按系统偏好语言生成默认设置（电子环境下读取系统语言） */
@@ -83,8 +83,8 @@ export function loadSettings(): AppSettings {
   return cached;
 }
 
-export function saveSettings(next: AppSettings): AppSettings {
-  cached = withDefaults(next, defaults());
+export function saveSettings(next: SettingsPatch): AppSettings {
+  cached = mergeSettings(loadSettings(), next);
   try {
     // 先写 .tmp 再原子 rename：进程中途退出不会留下半截 JSON 损坏设置
     const file = settingsFile();

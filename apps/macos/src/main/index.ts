@@ -1,3 +1,4 @@
+import type { SettingsPatch } from '@rt/core';
 import { createGlobalShortcuts } from './global-shortcuts';
 import { createQuitFlow, setupSingleInstance } from './quit-flow';
 import { createRecoveryStore } from './recovery-store';
@@ -862,9 +863,10 @@ const shortcuts = createGlobalShortcuts({
 
 ipcMain.handle('settings:get', (): AppSettings => effectiveSettings());
 
-ipcMain.handle('settings:save', (_event, next: AppSettings): AppSettings => {
+ipcMain.handle('settings:save', (_event, next: SettingsPatch): AppSettings => {
   const prev = loadSettings().translation;
-  const cur = next.translation;
+  const saved = saveSettings(next);
+  const cur = saved.translation;
   // 只有翻译引擎/云端配置变了才需要重建翻译器；
   // 改主题/字体/母语不应触动翻译器（否则会误触发模型重新加载）
   const engineChanged =
@@ -876,7 +878,6 @@ ipcMain.handle('settings:save', (_event, next: AppSettings): AppSettings => {
   // 主页已无翻译开关，开启改由保存触发：翻译刚从关变开也要预热（引擎未变时也是）。
   const enabledTurnedOn = !prev.enabled && cur.enabled;
 
-  const saved = saveSettings(next);
   shortcuts.start();
   alwaysOnTop.apply(saved.alwaysOnTop);
   if (engineChanged) {

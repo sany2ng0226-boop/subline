@@ -1,3 +1,4 @@
+import { mergeSettings, type SettingsPatch } from '@rt/core';
 import { ref, computed } from 'vue';
 import { i18n } from '../i18n';
 import { bridge } from '../bridge';
@@ -54,23 +55,24 @@ export async function loadSettings(): Promise<AppSettings> {
 
 let settingsSaves: Promise<unknown> = Promise.resolve();
 
-/** 持久化整份设置，并重新应用语言/字体/主题 */
-export function saveSettings(next: AppSettings): Promise<AppSettings> {
-  const patch = Object.fromEntries(
-    Object.entries(next).filter(([key, value]) =>
-      JSON.stringify(value) !== JSON.stringify(settings.value?.[key as keyof AppSettings])),
-  );
-  settings.value = { ...settings.value, ...next };
-  applyLocale(next.nativeLang);
-  applyFontSize(next.fontSize);
-  applyTheme(next.theme);
+/** Queue explicit patches; never infer intent by comparing a stale full snapshot. */
+export function saveSettings(next: SettingsPatch): Promise<AppSettings> {
+  const patch: SettingsPatch = JSON.parse(JSON.stringify(next));
+  const optimistic = mergeSettings(settings.value!, patch);
+  settings.value = optimistic;
+  const applied = settings.value;
+  applyLocale(optimistic.nativeLang);
+  applyFontSize(optimistic.fontSize);
+  applyTheme(optimistic.theme);
   const save = settingsSaves.then(async () => {
-    // 在执行时合并最新设置，并去掉 Electron IPC 无法克隆的 Vue Proxy。
-    const plain: AppSettings = JSON.parse(JSON.stringify({ ...settings.value, ...patch }));
-    const saved = await bridge().saveSettings(plain);
-    // 宿主可能返回旧快照，不能覆盖保存期间发生的本地修改。
-    settings.value = { ...saved, ...settings.value };
-    return settings.value;
+    const saved = await bridge().saveSettings(patch);
+    if (settings.value === applied) {
+      settings.value = saved;
+      applyLocale(saved.nativeLang);
+      applyFontSize(saved.fontSize);
+      applyTheme(saved.theme);
+    }
+    return settings.value!;
   });
   settingsSaves = save.catch(() => {});
   return save;
@@ -91,7 +93,7 @@ export function stepFontSize(delta: 1 | -1): void {
   if (index < 0) return;
   const next = FONT_TIERS[Math.min(FONT_TIERS.length - 1, Math.max(0, index + delta))];
   if (next === s.fontSize) return;
-  void saveSettings({ ...s, fontSize: next })
+  void saveSettings({ fontSize: next })
     .catch((error) => console.error('[settings:font-size]', error));
 }
 
@@ -116,7 +118,7 @@ export async function setAlwaysOnTop(on: boolean): Promise<void> {
 /** 直接设置主题偏好（持久化） */
 export function setTheme(pref: ThemePref): void {
   if (!settings.value || settings.value.theme === pref) return;
-  void saveSettings({ ...settings.value, theme: pref });
+  void saveSettings({ theme: pref });
 }
 
 /** 顶栏单按钮轮替：浅 → 深 → 跟随系统 */

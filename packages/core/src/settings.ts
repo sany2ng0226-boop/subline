@@ -157,3 +157,20 @@ function normalizeShortcuts(value: unknown): AppSettings['shortcuts'] {
   }
   return shortcuts;
 }
+
+/** A save carries only the fields the caller intends to change. */
+export type SettingsPatch = { [K in keyof AppSettings]?: AppSettings[K] extends object
+  ? { [P in keyof AppSettings[K]]?: AppSettings[K][P] extends object
+    ? Partial<AppSettings[K][P]> : AppSettings[K][P] } : AppSettings[K] };
+
+/** Merge before validation so omitted nested fields keep their latest values. */
+export function mergeSettings(current: AppSettings, patch: SettingsPatch): AppSettings {
+  return withDefaults({
+    ...current, ...patch,
+    asr: { ...current.asr, ...patch.asr },
+    translation: { ...current.translation, ...patch.translation,
+      cloud: { ...current.translation.cloud, ...patch.translation?.cloud } },
+    ...(patch.overlay ? { overlay: { ...current.overlay, ...patch.overlay } } : {}),
+    ...(patch.shortcuts ? { shortcuts: { ...current.shortcuts, ...patch.shortcuts } } : {}),
+  }, current);
+}

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { readFileSync } = vi.hoisted(() => ({ readFileSync: vi.fn() }));
+const { readFileSync, writeFileSync, renameSync } = vi.hoisted(() => ({ readFileSync: vi.fn(), writeFileSync: vi.fn(), renameSync: vi.fn() }));
 
-vi.mock('node:fs', () => ({ default: { readFileSync } }));
+vi.mock('node:fs', () => ({ default: { readFileSync, writeFileSync, renameSync } }));
 vi.mock('electron', () => ({
   app: {
     getPreferredSystemLanguages: () => ['ja-JP'],
@@ -39,3 +39,16 @@ describe('macOS settings defaults', () => {
     expect(loadSettings().translation.enabled).toBe(enabled);
   });
 });
+
+ it('merges partial saves onto the latest persisted nested settings', async () => {
+  readFileSync.mockReturnValue(JSON.stringify({ settingsVersion: 2, theme: 'dark',
+    translation: { cloud: { baseURL: 'https://example.test', model: 'custom' } } }));
+  const { saveSettings } = await import('./settings');
+  saveSettings({ fontSize: 'xl' });
+  saveSettings({ translation: { enabled: true, cloud: { model: 'new-model' } } });
+  const saved = saveSettings({ theme: 'light' });
+  expect(saved).toMatchObject({ fontSize: 'xl', theme: 'light', translation: {
+    enabled: true, cloud: { baseURL: 'https://example.test', model: 'new-model' } } });
+  expect(JSON.parse(writeFileSync.mock.calls.at(-1)![1])).toEqual(saved);
+  expect(renameSync).toHaveBeenCalled();
+ });

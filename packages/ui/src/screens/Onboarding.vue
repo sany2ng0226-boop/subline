@@ -86,7 +86,6 @@ async function start(): Promise<void> {
     engine: enabled ? translation.value as typeof current.translation.engine : current.translation.engine,
   };
   await saveSettings({
-    ...current,
     onboarded: true,
     nativeLang: form.nativeLang,
     fontSize: form.fontSize,

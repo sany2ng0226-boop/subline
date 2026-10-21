@@ -22,5 +22,8 @@
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vue-tsc": "catalog:"
+  },
+  "scripts": {
+    "test": "vitest run"
   }
 }

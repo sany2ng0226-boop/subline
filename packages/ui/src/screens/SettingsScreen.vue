@@ -55,39 +55,32 @@ const form = reactive<SettingsFormData>({
 const downloadModalOpen = ref(false);
 const downloadTasks = ref<DownloadTask[]>([]);
 
-// 自动保存串行化：把每次保存追加到 promise 链尾，避免并发写互相覆盖。
-// 基底读保存时刻的 settings.value（每次保存后更新）而非打开时快照，
-// 否则多次保存的会话里「无 → 本地 → 无」会把引擎记忆回退成打开时的旧值。
-let saveChain: Promise<unknown> = Promise.resolve();
+// Compare against the form's last submission, not live settings changed by other controls.
+let submitted = JSON.parse(JSON.stringify(form));
+function changedFields(next: Record<string, any>, before: Record<string, any>): Record<string, any> {
+  const patch: Record<string, any> = {};
+  for (const key of Object.keys(next)) {
+    if (JSON.stringify(next[key]) === JSON.stringify(before[key])) continue;
+    patch[key] = next[key] && typeof next[key] === 'object'
+      ? changedFields(next[key], before[key] ?? {}) : next[key];
+  }
+  return patch;
+}
 function persist(): Promise<unknown> {
-  // 链头吞掉上一次保存的失败：单次落盘失败（磁盘/IPC/IndexedDB 异常）不毒化整条链，
-  // 后续修改仍能继续尝试保存；失败本身在链尾记录（不再向 await 方抛出，等待方只关心顺序）。
-  saveChain = saveChain.catch(() => undefined).then(() => {
-    const base = settings.value!;
-    // 三态映射回持久化：无 → enabled=false（引擎保留原值）；云端 → engine='cloud'；本地 → engine=所选模型 id。
-    const enabled = form.translationMode !== 'none';
-    const engine =
-      form.translationMode === 'none'
-        ? base.translation.engine
-        : form.translationMode === 'cloud'
-          ? 'cloud'
-          : form.translationModel;
-    // saveSettings 内部会重新应用语言/字体/主题，故设置页无需任何 preview 调用。
-    return saveSettings({
-      ...base,
-      nativeLang: form.nativeLang,
-      fontSize: form.fontSize,
-      theme: form.theme,
-      announceCaptions: form.announceCaptions,
-      asr: { ...form.asr },
-      translation: { ...base.translation, enabled, engine, cloud: { ...form.cloud } },
-    });
-  });
-  // 失败在链尾记录并吞掉：await 本链的下载检查等只依赖「保存已按序完成」，不消费失败。
-  saveChain = saveChain.catch((err) => {
-    console.error('[settings:save]', err);
-  });
-  return saveChain;
+  const snapshot = JSON.parse(JSON.stringify(form));
+  const changed = changedFields(snapshot, submitted);
+  submitted = snapshot;
+  const { translationMode, translationModel, cloud, ...patch } = changed;
+  const translation: Record<string, any> = {};
+  if (translationMode !== undefined || translationModel !== undefined) {
+    translation.enabled = snapshot.translationMode !== 'none';
+    if (snapshot.translationMode !== 'none') {
+      translation.engine = snapshot.translationMode === 'cloud' ? 'cloud' : snapshot.translationModel;
+    }
+  }
+  if (cloud) translation.cloud = cloud;
+  return saveSettings({ ...patch, ...(Object.keys(translation).length ? { translation } : {}) })
+    .catch((err) => console.error('[settings:save]', err));
 }
 
 // 保存通道 a：选择器类字段变化即刻落盘（含即时的语言/字体/主题预览）。

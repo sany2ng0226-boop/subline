@@ -22,6 +22,7 @@ import { Preferences } from '@capacitor/preferences';
 import {
   makeDefaults,
   withDefaults,
+  mergeSettings,
   listSummaries,
   makeArchiveId,
   CloudTranslator,
@@ -36,6 +37,7 @@ import {
 import type {
   AppBridge,
   AppSettings,
+  SettingsPatch,
   ArchiveLine,
   ArchiveRecord,
   ArchiveSummary,
@@ -97,17 +99,24 @@ export function createIosBridge(): AppBridge {
     return cachedSettings;
   }
 
-  // 写设置：补齐/校验后落盘并刷新缓存。所有写入路径（保存设置、切翻译开关）都走这里。
-  async function writeSettings(next: AppSettings): Promise<AppSettings> {
-    cachedSettings = applyPlatformConstraints(withDefaults(next, makeDefaults([])));
-    await Preferences.set({ key: SETTINGS_KEY, value: JSON.stringify(cachedSettings) });
-    return cachedSettings;
+  let settingsSaveQueue: Promise<unknown> = Promise.resolve();
+  function writeSettings(patch: SettingsPatch): Promise<AppSettings> {
+    const queuedPatch: SettingsPatch = JSON.parse(JSON.stringify(patch));
+    const operation = settingsSaveQueue.then(async () => {
+      const current = await readSettingsOnce();
+      const saved = applyPlatformConstraints(mergeSettings(current, queuedPatch));
+      await Preferences.set({ key: SETTINGS_KEY, value: JSON.stringify(saved) });
+      cachedSettings = saved;
+      return saved;
+    });
+    settingsSaveQueue = operation.catch(() => undefined);
+    return operation;
   }
 
-  // 首次读取去重：启动预读与 UI 首次 getSettings() 并发触发，共享同一次 Preferences 读；
-  // 读完即释放，之后再调用会重新读盘（保存后仍能拿到最新值）。
+  // Keep the initialized cache authoritative so an overlapping read cannot restore stale disk state.
   let readInFlight: Promise<AppSettings> | null = null;
   function readSettingsOnce(): Promise<AppSettings> {
+    if (cachedSettings) return Promise.resolve(cachedSettings);
     if (!readInFlight) {
       readInFlight = readSettings().finally(() => {
         readInFlight = null;
@@ -256,9 +265,9 @@ export function createIosBridge(): AppBridge {
 
     // ===== 设置（Preferences）=====
     getSettings(): Promise<AppSettings> {
-      return readSettingsOnce();
+      return settingsSaveQueue.then(() => readSettingsOnce());
     },
-    saveSettings(settings: AppSettings): Promise<AppSettings> {
+    saveSettings(settings: SettingsPatch): Promise<AppSettings> {
       return writeSettings(settings);
     },
     async testCloud(cfg: CloudTranslationConfig): Promise<{ ok: boolean; error?: string }> {

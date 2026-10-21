@@ -22,6 +22,7 @@ import { openDB, type IDBPDatabase } from 'idb';
 import {
   makeDefaults,
   withDefaults,
+  mergeSettings,
   listSummaries,
   makeArchiveId,
   CloudTranslator,
@@ -40,6 +41,7 @@ import {
 import type {
   AppBridge,
   AppSettings,
+  SettingsPatch,
   ArchiveLine,
   ArchiveRecord,
   ArchiveSummary,
@@ -211,17 +213,24 @@ export function createWebBridge(): AppBridge {
     return cachedSettings;
   }
 
-  // 写设置：补齐/校验后落盘并刷新缓存。所有写入路径（保存设置、切翻译开关）都走这里。
-  async function writeSettings(next: AppSettings): Promise<AppSettings> {
-    cachedSettings = applyPlatformConstraints(withDefaults(next, makeDefaults([])));
-    await (await db()).put(KV_STORE, cachedSettings, SETTINGS_KEY);
-    return cachedSettings;
+  let settingsSaveQueue: Promise<unknown> = Promise.resolve();
+  function writeSettings(patch: SettingsPatch): Promise<AppSettings> {
+    const queuedPatch: SettingsPatch = JSON.parse(JSON.stringify(patch));
+    const operation = settingsSaveQueue.then(async () => {
+      const current = await readSettingsOnce();
+      const saved = applyPlatformConstraints(mergeSettings(current, queuedPatch));
+      await (await db()).put(KV_STORE, saved, SETTINGS_KEY);
+      cachedSettings = saved;
+      return saved;
+    });
+    settingsSaveQueue = operation.catch(() => undefined);
+    return operation;
   }
 
-  // 首次读取去重：启动预读与 UI 首次 getSettings() 并发触发，共享同一次 IndexedDB 读；
-  // 读完即释放，之后再调用会重新读盘（保存后仍能拿到最新值）。
+  // Keep the initialized cache authoritative so an overlapping read cannot restore stale disk state.
   let readInFlight: Promise<AppSettings> | null = null;
   function readSettingsOnce(): Promise<AppSettings> {
+    if (cachedSettings) return Promise.resolve(cachedSettings);
     if (!readInFlight) {
       readInFlight = readSettings().finally(() => {
         readInFlight = null;
@@ -357,9 +366,9 @@ export function createWebBridge(): AppBridge {
 
     // ===== 设置（IndexedDB） =====
     getSettings(): Promise<AppSettings> {
-      return readSettingsOnce();
+      return settingsSaveQueue.then(() => readSettingsOnce());
     },
-    async saveSettings(settings: AppSettings): Promise<AppSettings> {
+    async saveSettings(settings: SettingsPatch): Promise<AppSettings> {
       const saved = await writeSettings(settings);
       // 开启本地翻译时：仅当模型已缓存才在此自动预热（warmUp 幂等），让第一句不再等装载。
       // 未缓存则不在此启动下载——下载改由翻译模型下载页驱动（含蜂窝确认），否则蜂窝确认形同虚设。

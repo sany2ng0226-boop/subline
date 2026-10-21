@@ -1,3 +1,4 @@
+import type { SettingsPatch } from './settings';
 // 平台无关的 UI ←→ 平台桥接契约。
 // 渲染层（@rt/ui）只依赖此接口，由各宿主（Electron 渲染层 / iOS Capacitor 等）注入实现。
 // 仅引用 @rt/core 内的领域类型与回调，保持平台无关；音频采集不在此契约内（隐藏在各宿主实现中）。
@@ -99,7 +100,7 @@ export interface AppBridge {
   /** Remove crash recovery after archiving/discarding. Web/iOS use localStorage. */
   clearRecovery?(): Promise<void>;
   getSettings(): Promise<AppSettings>;
-  saveSettings(settings: AppSettings): Promise<AppSettings>;
+  saveSettings(settings: SettingsPatch): Promise<AppSettings>;
   /**
    * 测试云端翻译配置是否可用：真实打一次最小请求，验证端点 / 密钥 / 模型。ok=false 时带 error。
    * Web / iOS 在 JS 内直接 fetch；macOS 在主进程用 Node fetch（preload 处收紧为必选实现）。
