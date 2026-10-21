@@ -21,7 +21,7 @@ defineProps<{
 <template>
   <div class="mb-3.5 flex gap-3">
     <div
-      class="w-12 shrink-0 whitespace-nowrap pt-[3px] text-[11px] tabular-nums text-neutral-400 dark:text-neutral-500"
+      class="w-12 shrink-0 whitespace-nowrap pt-[3px] text-[11px] tabular-nums text-[var(--rt-ink-3)]"
     >
       {{ time }}
     </div>
@@ -39,12 +39,12 @@ defineProps<{
         :class="[
           'mt-1 border-l-2 pl-2.5 text-[length:calc(var(--transcript-size)-1px)] leading-relaxed',
           failed && !translation && !translating
-            ? 'border-red-400/70 text-red-500/80'
-            : 'border-blue-500 text-neutral-500 dark:text-neutral-400',
+            ? 'border-[var(--rt-live)] text-[var(--rt-live)]'
+            : 'border-[var(--rt-accent)] text-[var(--rt-ink-3)]',
         ]"
       >
         <template v-if="translation">{{ translation }}</template>
-        <TranslatingDots v-else-if="translating" class="text-blue-500/70" />
+        <TranslatingDots v-else-if="translating" class="text-[var(--rt-accent)]" />
         <!-- 失败标记：有原始错误时用 tooltip 悬停展示，无错误详情则仅显示标记 -->
         <n-tooltip v-else-if="failedDetail">
           <template #trigger>

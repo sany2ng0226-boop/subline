@@ -91,10 +91,10 @@ onMounted(async () => {
         <n-button quaternary circle :disabled="busy" :aria-label="t('archive.move')" @click="edit('move', selected)"><template #icon><FolderInput :size="16" /></template></n-button>
       </template>
     </header>
-    <p v-if="(error || removal.failed.value) && !modal" role="alert" class="px-5 py-2 text-sm text-red-500">{{ removal.failed.value ? t('archive.deleteFailed') : error }}</p>
+    <p v-if="(error || removal.failed.value) && !modal" role="alert" class="px-5 py-2 text-sm text-[var(--rt-live)]">{{ removal.failed.value ? t('archive.deleteFailed') : error }}</p>
     <ScrollArea v-if="selected" class="min-h-0 flex-1">
       <div class="mx-auto w-full max-w-[760px] px-5 py-5">
-        <p class="mb-6 text-xs text-neutral-400">{{ folderName(selected.folderId) }} · {{ fmtDateTime(selected.createdAt) }}</p>
+        <p class="mb-6 text-xs text-[var(--rt-ink-3)]">{{ folderName(selected.folderId) }} · {{ fmtDateTime(selected.createdAt) }}</p>
         <ConversationLine v-for="(line, i) in selected.lines" :key="i" :time="line.time" :text="line.text" :translation="line.translation" />
       </div>
     </ScrollArea>
@@ -104,7 +104,7 @@ onMounted(async () => {
           <button v-for="entry in [{ id: 'all', name: t('archive.all') }, { id: null, name: t('archive.unfiled') }, ...library.folders]" :key="entry.id ?? 'unfiled'"
             class="folder-row" :class="{ active: folder === entry.id }" :aria-current="folder === entry.id ? 'page' : undefined" @click="folder = entry.id">
             <Folder :size="15" class="shrink-0" /><span class="truncate">{{ entry.name }}</span>
-            <span class="ml-auto text-xs text-neutral-400">{{ items.filter((it) => entry.id === 'all' || (it.folderId ?? null) === entry.id).length }}</span>
+            <span class="ml-auto text-xs text-[var(--rt-ink-3)]">{{ items.filter((it) => entry.id === 'all' || (it.folderId ?? null) === entry.id).length }}</span>
           </button>
         </nav>
         <n-button class="mt-3" quaternary size="small" :disabled="busy || loading" @click="edit('create')"><template #icon><FolderPlus :size="15" /></template>{{ t('archive.newFolder') }}</n-button>
@@ -115,13 +115,13 @@ onMounted(async () => {
             <span class="min-w-0 truncate">{{ location }}</span>
             <n-button v-if="folder && folder !== 'all'" quaternary circle size="tiny" :disabled="busy" :aria-label="t('archive.renameFolder')" @click="edit('folderRename')"><template #icon><Pencil :size="13" /></template></n-button>
           </div>
-          <p v-if="!loading && !visible.length" class="mt-16 text-center text-sm text-neutral-400">{{ t('archive.empty') }}</p>
+          <p v-if="!loading && !visible.length" class="mt-16 text-center text-sm text-[var(--rt-ink-3)]">{{ t('archive.empty') }}</p>
           <ul>
             <li v-for="item in visible" :key="item.id" class="border-b border-neutral-200 py-3 dark:border-[#2b2c33]">
               <button class="block w-full min-w-0 cursor-pointer text-left" :disabled="busy" @click="open(item.id)">
                 <div class="truncate text-[15px] font-medium">{{ item.name }}</div>
-                <div class="mt-1 text-xs text-neutral-400">{{ fmtDateTime(item.createdAt) }} · {{ folderName(item.folderId) }}</div>
-                <div class="mt-1 truncate text-xs text-neutral-500">{{ item.lastLine }}</div>
+                <div class="mt-1 text-xs text-[var(--rt-ink-3)]">{{ fmtDateTime(item.createdAt) }} · {{ folderName(item.folderId) }}</div>
+                <div class="mt-1 truncate text-xs text-[var(--rt-ink-3)]">{{ item.lastLine }}</div>
               </button>
               <div class="mt-1 flex justify-end gap-1">
                 <n-button quaternary size="tiny" :disabled="busy" @click="edit('rename', item)">{{ t('archive.rename') }}</n-button>
@@ -137,7 +137,7 @@ onMounted(async () => {
       <n-select v-if="modal === 'move'" :value="destination ?? ''" :options="folderOptions" :disabled="busy" :aria-label="t('archive.folder')" @update:value="destination = $event || null" />
       <p v-else-if="modal === 'delete'" class="break-words">{{ t('archive.confirmDelete', { name: target?.name }) }}</p>
       <n-input v-else v-model:value="name" autofocus :maxlength="120" :disabled="busy" :aria-label="modalTitle" @keydown.enter="name.trim() && !busy && confirm()" />
-      <p v-if="error" role="alert" class="mt-2 text-sm text-red-500">{{ error }}</p>
+      <p v-if="error" role="alert" class="mt-2 text-sm text-[var(--rt-live)]">{{ error }}</p>
       <template #footer><div class="flex justify-end gap-2">
         <n-button :disabled="busy" @click="modal = null">{{ t('archive.cancel') }}</n-button>
         <n-button type="primary" :loading="busy" :disabled="busy || (!['move', 'delete'].includes(modal ?? '') && !name.trim())" @click="confirm">{{ t('archive.save') }}</n-button>
@@ -150,5 +150,5 @@ onMounted(async () => {
 <style scoped>
 .folder-row { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 8px; border-radius: 7px; text-align: left; font-size: 13px; cursor: pointer; }
 .folder-row:hover { background: rgb(128 128 128 / 8%); }
-.folder-row.active { background: rgb(88 120 180 / 12%); color: #5276b0; }
+.folder-row.active { background: var(--rt-accent-soft); color: var(--rt-accent); }
 </style>

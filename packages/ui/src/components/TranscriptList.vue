@@ -151,7 +151,8 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
   line-height: 1.6;
   color: var(--rt-accent-ink);
 }
-.is-partial { opacity: 0.72; }
+/* 流式译文：与背景混色而非 opacity，旧行里也不会再叠一层变浅 */
+.is-partial { color: color-mix(in srgb, var(--rt-accent-ink) 85%, var(--rt-bg)); }
 .tr-dots { color: var(--rt-accent); }
 .tr-failed { color: var(--rt-live); font-size: 0.85em; }
 

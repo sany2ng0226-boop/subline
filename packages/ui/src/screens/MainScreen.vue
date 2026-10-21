@@ -738,14 +738,14 @@ function openMicSettings(): void {
       :close-on-esc="!archiveSaving"
       style="width: 420px; max-width: 90vw"
     >
-      <div class="mb-1.5 text-xs text-neutral-500 dark:text-neutral-400">{{ t('archive.nameLabel') }}</div>
+      <div class="mb-1.5 text-xs text-[var(--rt-ink-3)]">{{ t('archive.nameLabel') }}</div>
       <n-input v-model:value="archiveName" autofocus :disabled="archiveSaving" :maxlength="120" @keydown.enter="confirmArchive" />
-      <p v-if="foldersEnabled" class="mt-1 text-xs text-neutral-400">{{ t('archive.autoTitle') }}</p>
+      <p v-if="foldersEnabled" class="mt-1 text-xs text-[var(--rt-ink-3)]">{{ t('archive.autoTitle') }}</p>
       <template v-if="foldersEnabled">
-        <div class="mb-1.5 mt-4 text-xs text-neutral-500">{{ t('archive.folder') }}</div>
+        <div class="mb-1.5 mt-4 text-xs text-[var(--rt-ink-3)]">{{ t('archive.folder') }}</div>
         <n-select :value="archiveFolder ?? ''" :options="archiveFolderOptions" :disabled="archiveSaving" :aria-label="t('archive.folder')" @update:value="archiveFolder = $event || null" />
       </template>
-      <p v-if="archiveError" role="alert" class="mt-2 text-sm text-red-500">{{ archiveError }}</p>
+      <p v-if="archiveError" role="alert" class="mt-2 text-sm text-[var(--rt-live)]">{{ archiveError }}</p>
       <template #footer>
         <div class="flex justify-end gap-2">
           <n-button :disabled="archiveSaving" @click="archiveModalOpen = false">{{ t('archive.cancel') }}</n-button>
@@ -815,13 +815,13 @@ function openMicSettings(): void {
       :mask-closable="false"
       :close-on-esc="false"
     >
-      <p class="mb-3 text-sm text-neutral-500 dark:text-neutral-400">{{ t('download.recordWaitDesc') }}</p>
+      <p class="mb-3 text-sm text-[var(--rt-ink-3)]">{{ t('download.recordWaitDesc') }}</p>
       <div v-for="task in pendingTasks" :key="`${task.kind}:${task.modelId}`" class="mb-3">
         <div class="mb-1 flex items-center justify-between gap-2 text-sm">
           <span class="min-w-0 truncate">{{ awaitTaskName(task) }}</span>
           <span
             v-if="!awaitTaskIndeterminate(task)"
-            class="shrink-0 tabular-nums text-neutral-500 dark:text-neutral-400"
+            class="shrink-0 tabular-nums text-[var(--rt-ink-3)]"
           >{{ awaitTaskPercent(task) }}%</span>
         </div>
         <n-progress
@@ -842,7 +842,7 @@ function openMicSettings(): void {
       <template #trigger>
         <button
           class="fixed left-1/2 z-20 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full shadow-lg transition-colors disabled:opacity-40 sm:hidden"
-          :class="recording ? 'bg-[var(--rt-live)] text-white' : 'bg-[var(--rt-ink)] text-[var(--rt-bg)]'"
+          :class="recording ? 'bg-[var(--rt-live-solid)] text-white' : 'bg-[var(--rt-ink)] text-[var(--rt-bg)]'"
           :style="{ bottom: 'calc(env(safe-area-inset-bottom) + 22px)' }"
           :disabled="preparing || recordBusy || awaitingRecord"
           :aria-label="recording ? t('main.stop') : t('main.start')"
@@ -900,7 +900,7 @@ function openMicSettings(): void {
   background: var(--rt-live);
   transition: border-radius 0.25s var(--rt-ease), background-color 0.25s ease;
 }
-.record-btn.is-live { color: #fff; background: var(--rt-live); }
+.record-btn.is-live { color: #fff; background: var(--rt-live-solid); }
 .record-btn.is-live .record-glyph { border-radius: 2px; background: #fff; }
 
 .unsaved-btn {
