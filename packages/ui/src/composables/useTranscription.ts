@@ -83,7 +83,8 @@ export function registerTranscriptionListeners(): void {
     } else draftLine.value = null;
   });
   bridge().onTranslation((tr) => {
-    const line = lines.find((l) => l.id === tr.id);
+    // 撤销窗口内被删除的行仍接收译文，撤销恢复后不会卡在「翻译中」。
+    const line = lines.find((l) => l.id === tr.id) ?? clearedLines.find((l) => l.id === tr.id);
     if (!line) return;
     if (tr.partial) {
       line.translation = tr.text;
@@ -146,7 +147,7 @@ export function registerTranscriptionListeners(): void {
       translationLoading.value = false;
       translationError.value = true;
       // 翻译失败（含子进程崩溃）：结束所有仍在等待的译文动画，避免永久转圈
-      for (const l of lines) {
+      for (const l of [...lines, ...clearedLines]) {
         l.translating = false;
         if (l.translationPartial) { l.translation = ''; l.translationPartial = false; l.failed = true; }
       }
@@ -158,6 +159,7 @@ export function registerTranscriptionListeners(): void {
 }
 
 export async function startRecording(): Promise<void> {
+  dismissUndo(); // 新会话开始后不再允许把旧内容撤销回来，避免新旧行交错
   errorText.value = '';
   errorCode.value = null;
   // 桥接内部负责音频采集（macOS 渲染层用 AudioWorklet，iOS 原生采麦），UI 不感知平台细节。
@@ -191,9 +193,37 @@ export function toggleRecording(): void {
   });
 }
 
-/** 清空转写历史 */
+/** 清空转写历史（归档成功后调用；不可撤销） */
 export function clearTranscript(): void {
+  dismissUndo();
   lines.splice(0, lines.length);
+  resetDraft();
+}
+
+// 主页「删除」可撤销：被删的行暂存在内存里，直到撤销、开始新录音或再次清空。
+let clearedLines: TranscriptLine[] = [];
+export const canUndoDelete = ref(false);
+
+/** 删除主页内容，但保留一次撤销机会 */
+export function deleteTranscript(): void {
+  clearedLines = lines.splice(0, lines.length);
+  resetDraft();
+  canUndoDelete.value = clearedLines.length > 0;
+}
+
+/** 撤销最近一次删除 */
+export function undoDelete(): void {
+  if (!canUndoDelete.value || lines.length) return;
+  lines.push(...clearedLines);
+  dismissUndo();
+}
+
+export function dismissUndo(): void {
+  clearedLines = [];
+  canUndoDelete.value = false;
+}
+
+function resetDraft(): void {
   partial.value = '';
   stablePartial.value = undefined;
   draftLine.value = null;
