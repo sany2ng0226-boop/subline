@@ -10,6 +10,7 @@ function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
 }
 
 const api: ElectronApi = {
+  onShortcut: (cb) => subscribe('shortcut', cb),
   platform: process.platform === 'win32' ? 'windows' : 'macos',
   // 系统音频采集要求 macOS 14.2+；不满足时仅暴露麦克风（与主进程的音源收敛判定共用逻辑）。
   audioSources: availableAudioSources(process.getSystemVersion(), process.platform),

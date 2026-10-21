@@ -1,3 +1,4 @@
+import { createGlobalShortcuts } from './global-shortcuts';
 import { createQuitFlow, setupSingleInstance } from './quit-flow';
 import { createRecoveryStore } from './recovery-store';
 import { createAlwaysOnTopController } from './always-on-top';
@@ -848,6 +849,18 @@ ipcMain.handle('recovery:save', (_event, json: string) => recoveryStore.saveReco
 ipcMain.handle('recovery:load', () => recoveryStore.loadRecovery());
 ipcMain.handle('recovery:clear', () => recoveryStore.clearRecovery());
 
+const shortcuts = createGlobalShortcuts({
+  globalShortcut,
+  platform: process.platform,
+  readSettings: loadSettings,
+  dispatch: (action) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send('shortcut', action);
+    }
+  },
+  log: (error) => console.error('Global shortcut:', error),
+});
+
 ipcMain.handle('settings:get', (): AppSettings => effectiveSettings());
 
 ipcMain.handle('settings:save', (_event, next: AppSettings): AppSettings => {
@@ -865,6 +878,7 @@ ipcMain.handle('settings:save', (_event, next: AppSettings): AppSettings => {
   const enabledTurnedOn = !prev.enabled && cur.enabled;
 
   const saved = saveSettings(next);
+  shortcuts.start();
   alwaysOnTop.apply(saved.alwaysOnTop);
   if (engineChanged) {
     reconfigureTranslate();
@@ -945,6 +959,7 @@ const quitFlow = createQuitFlow({
 
 app.whenReady().then(() => {
   if (!isPrimaryInstance) return;
+  shortcuts.start();
   // macOS dev：Dock 默认显示 Electron 图标，手动替换；打包后用 .app 内置图标
   if (!app.isPackaged && process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(APP_ICON);
