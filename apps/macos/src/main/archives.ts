@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
-import { listSummaries, makeArchiveId } from '@rt/core';
+import { ArchiveOperationError, listSummaries, makeArchiveId } from '@rt/core';
 import type { ArchiveLine, ArchiveRecord, ArchiveSummary } from '../shared/types';
 
 let cached: ArchiveRecord[] | null = null;
@@ -20,25 +20,17 @@ function load(): ArchiveRecord[] {
   let raw: string;
   try {
     raw = fs.readFileSync(file, 'utf8');
-  } catch {
-    // 文件不存在（首次运行等）：直接从空列表开始，不做备份
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     cached = [];
     return cached;
   }
-  try {
-    const parsed = JSON.parse(raw);
-    cached = Array.isArray(parsed) ? (parsed as ArchiveRecord[]) : [];
-  } catch (err) {
-    // 解析失败：把损坏文件改名保留（archives.json.corrupt-<时间戳>），避免下次保存无声
-    // 覆盖导致归档永久丢失；随后从空列表开始。
-    try {
-      fs.renameSync(file, `${file}.corrupt-${Date.now()}`);
-    } catch (renameErr) {
-      console.error('备份损坏归档文件失败:', (renameErr as Error).message);
-    }
-    console.error('归档文件解析失败:', (err as Error).message);
-    cached = [];
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed) || parsed.some((record) => !record || typeof record.id !== 'string'
+    || typeof record.name !== 'string' || typeof record.createdAt !== 'number' || !Array.isArray(record.lines))) {
+    throw new ArchiveOperationError('load', 'invalid', 'Invalid archive store; original file preserved');
   }
+  cached = parsed as ArchiveRecord[];
   return cached;
 }
 
@@ -67,8 +59,10 @@ export function listArchives(): ArchiveSummary[] {
 }
 
 /** 取完整记录（含对话内容），用于详情查看 */
-export function getArchive(id: string): ArchiveRecord | null {
-  return load().find((r) => r.id === id) ?? null;
+export function getArchive(id: string): ArchiveRecord {
+  const record = load().find((r) => r.id === id);
+  if (!record) throw new ArchiveOperationError('open', 'not-found', 'Archive not found', id);
+  return record;
 }
 
 let mutationChain: Promise<unknown> = Promise.resolve();
@@ -94,5 +88,10 @@ export function saveArchive(name: string, lines: ArchiveLine[], createdAt: numbe
 }
 
 export function deleteArchive(id: string): Promise<ArchiveSummary[]> {
-  return mutate((records) => records.filter((r) => r.id !== id));
+  return mutate((records) => {
+    if (!records.some((record) => record.id === id)) {
+      throw new ArchiveOperationError('delete', 'not-found', 'Archive not found', id);
+    }
+    return records.filter((r) => r.id !== id);
+  });
 }

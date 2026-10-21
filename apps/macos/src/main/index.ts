@@ -46,7 +46,7 @@ import { loadSettings, saveSettings } from './settings';
 import { asrModelsReady, downloadAsrModels } from './model-downloader';
 import { listArchives, getArchive, saveArchive, deleteArchive } from './archives';
 import { ArchiveLibraryStore } from './archive-library';
-import { listSummaries, suggestArchiveTitle } from '@rt/core';
+import { ArchiveOperationError, encodeArchiveOperationError, listSummaries, suggestArchiveTitle } from '@rt/core';
 import { systemAudioSupported } from '../shared/audio-source';
 import asrWorkerPath from './asr-process?modulePath';
 import translateWorkerPath from './translation/translate-process?modulePath';
@@ -792,48 +792,54 @@ ipcMain.on('pipeline:audio', (_event, samples: Float32Array) => {
 const internalArchives = process.platform === 'win32' || app.getName().endsWith('Internal') || !!previewProfile;
 const archiveLibrary = new ArchiveLibraryStore(path.join(app.getPath('userData'), 'archive-library.json'));
 function requireArchiveLibrary(): void {
-  if (!internalArchives) throw new Error('Archive library is only available in Internal');
+  if (!internalArchives) throw new ArchiveOperationError('load', 'invalid', 'Archive library is only available in Internal');
 }
 async function archiveSummaries() {
   if (!internalArchives) return listArchives();
   const records = listArchives().map((item) => getArchive(item.id)!);
   return listSummaries(await archiveLibrary.decorate(records));
 }
-ipcMain.handle('archive:list', () => archiveSummaries());
-ipcMain.handle('archive:get', async (_event, id: string) => {
+async function archiveOperation<T>(op: ArchiveOperationError['op'], id: string | undefined, run: () => T | Promise<T>): Promise<T> {
+  try { return await run(); }
+  catch (error) { throw encodeArchiveOperationError(error, op, id); }
+}
+ipcMain.handle('archive:list', () => archiveOperation('load', undefined, archiveSummaries));
+ipcMain.handle('archive:get', (_event, id: string) => archiveOperation('open', id, async () => {
   const record = getArchive(id);
-  return record && internalArchives ? (await archiveLibrary.decorate([record]))[0] : record;
-});
-ipcMain.handle('archive:save', async (_event, name: string, lines: ArchiveLine[], folderId?: string | null) => {
+  return internalArchives ? (await archiveLibrary.decorate([record]))[0] : record;
+}));
+ipcMain.handle('archive:save', (_event, name: string, lines: ArchiveLine[], folderId?: string | null) => archiveOperation('save', undefined, async () => {
   if (internalArchives) {
     const library = await archiveLibrary.library();
     const destination = folderId === undefined ? library.lastFolderId : folderId;
-    if (destination !== null && !library.folders.some((folder) => folder.id === destination)) throw new Error('Folder not found');
+    if (destination !== null && !library.folders.some((folder) => folder.id === destination)) {
+      throw new ArchiveOperationError('save', 'not-found', 'Folder not found', destination);
+    }
     await saveArchive(name.trim() || suggestArchiveTitle(lines, new Date().toLocaleString()), lines, Date.now(), destination);
-    // The archive is already durable; an optional preference write must not invite a duplicate save.
-    try { await archiveLibrary.remember(destination); }
-    catch (error) { console.error('保存归档默认文件夹失败:', error); }
+    await archiveLibrary.remember(destination);
     return archiveSummaries();
   }
   return saveArchive(name, lines, Date.now());
-});
-ipcMain.handle('archive:delete', async (_event, id: string) => {
+}));
+ipcMain.handle('archive:delete', (_event, id: string) => archiveOperation('delete', id, async () => {
   await deleteArchive(id);
   return archiveSummaries();
-});
-ipcMain.handle('archive:library', () => { requireArchiveLibrary(); return archiveLibrary.library(); });
-ipcMain.handle('archive:folder-create', (_event, name: string) => {
+}));
+ipcMain.handle('archive:library', () => archiveOperation('load', undefined, () => {
+  requireArchiveLibrary(); return archiveLibrary.library();
+}));
+ipcMain.handle('archive:folder-create', (_event, name: string) => archiveOperation('save', undefined, () => {
   requireArchiveLibrary(); return archiveLibrary.createFolder(name);
-});
-ipcMain.handle('archive:folder-rename', (_event, id: string, name: string) => {
+}));
+ipcMain.handle('archive:folder-rename', (_event, id: string, name: string) => archiveOperation('rename', id, () => {
   requireArchiveLibrary(); return archiveLibrary.renameFolder(id, name);
-});
-ipcMain.handle('archive:update', async (_event, id: string, patch: { name?: string; folderId?: string | null }) => {
+}));
+ipcMain.handle('archive:update', (_event, id: string, patch: { name?: string; folderId?: string | null }) => archiveOperation('rename', id, async () => {
   requireArchiveLibrary();
-  if (!getArchive(id)) throw new Error('Archive not found');
+  getArchive(id);
   await archiveLibrary.update(id, patch);
   return archiveSummaries();
-});
+}));
 
 ipcMain.handle('window:set-always-on-top', (_event, on: unknown): void => {
   if (typeof on !== 'boolean') throw new TypeError('alwaysOnTop must be a boolean');

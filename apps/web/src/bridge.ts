@@ -20,6 +20,8 @@
 
 import { openDB, type IDBPDatabase } from 'idb';
 import {
+  ArchiveOperationError,
+  withArchiveOperation,
   makeDefaults,
   withDefaults,
   listSummaries,
@@ -230,12 +232,9 @@ export function createWebBridge(): AppBridge {
 
   // ---- 持久化：归档 ----
   async function readArchives(): Promise<ArchiveRecord[]> {
-    try {
-      const all = (await (await db()).getAll(ARCHIVE_STORE)) as ArchiveRecord[];
-      return Array.isArray(all) ? all : [];
-    } catch {
-      return [];
-    }
+    const all: unknown = await (await db()).getAll(ARCHIVE_STORE);
+    if (!Array.isArray(all)) throw new SyntaxError('Invalid archive storage');
+    return all as ArchiveRecord[];
   }
 
   // 反向翻译会话状态：识别语言为 auto 时，听到母语的段翻成上一次识别到的外语；每次开始录音清空（见 startPipeline）。
@@ -569,26 +568,36 @@ export function createWebBridge(): AppBridge {
 
     // ===== 归档（IndexedDB） =====
     async saveArchive(name: string, lines: ArchiveLine[]): Promise<ArchiveSummary[]> {
-      const createdAt = Date.now();
-      const record: ArchiveRecord = {
-        id: makeArchiveId(createdAt),
-        name,
-        createdAt,
-        lines,
-      };
-      await (await db()).put(ARCHIVE_STORE, record);
-      return listSummaries(await readArchives());
+      return withArchiveOperation('save', undefined, async () => {
+        const createdAt = Date.now();
+        const record: ArchiveRecord = { id: makeArchiveId(createdAt), name, createdAt, lines };
+        await (await db()).put(ARCHIVE_STORE, record);
+        return listSummaries(await readArchives());
+      });
     },
     async listArchives(): Promise<ArchiveSummary[]> {
-      return listSummaries(await readArchives());
+      return withArchiveOperation('load', undefined, async () => listSummaries(await readArchives()));
     },
     async getArchive(id: string): Promise<ArchiveRecord | null> {
-      const r = (await (await db()).get(ARCHIVE_STORE, id)) as ArchiveRecord | undefined;
-      return r ?? null;
+      return withArchiveOperation('open', id, async () => {
+        const record = (await (await db()).get(ARCHIVE_STORE, id)) as ArchiveRecord | undefined;
+        if (!record) throw new ArchiveOperationError('open', 'not-found', 'Archive not found', id);
+        return record;
+      });
     },
     async deleteArchive(id: string): Promise<ArchiveSummary[]> {
-      await (await db()).delete(ARCHIVE_STORE, id);
-      return listSummaries(await readArchives());
+      return withArchiveOperation('delete', id, async () => {
+        const database = await db();
+        const tx = database.transaction(ARCHIVE_STORE, 'readwrite');
+        const record = await tx.store.get(id);
+        if (!record) {
+          await tx.done;
+          throw new ArchiveOperationError('delete', 'not-found', 'Archive not found', id);
+        }
+        await tx.store.delete(id);
+        await tx.done;
+        return listSummaries(await readArchives());
+      });
     },
 
     // ===== 回调注册（与 macOS/iOS 语义一致：仅记录，事件由 WebAsr 转发） =====

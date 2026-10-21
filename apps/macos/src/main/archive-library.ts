@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { ArchiveOperationError } from '@rt/core';
 import type { ArchiveLibrary, ArchiveRecord } from '@rt/core';
 
 interface LibraryData extends ArchiveLibrary {
@@ -21,10 +22,14 @@ export class ArchiveLibraryStore {
       throw error;
     }
     const data = JSON.parse(raw) as LibraryData;
-    if (data.version !== 1 || !Array.isArray(data.folders) || !data.records
+    if (!data || data.version !== 1 || !Array.isArray(data.folders) || !data.records
       || typeof data.records !== 'object' || Array.isArray(data.records)
-      || data.folders.some((f) => !f || typeof f.id !== 'string' || typeof f.name !== 'string')) {
-      throw new Error('Invalid archive library; original file preserved');
+      || (data.lastFolderId !== null && typeof data.lastFolderId !== 'string')
+      || data.folders.some((f) => !f || typeof f.id !== 'string' || typeof f.name !== 'string')
+      || Object.values(data.records).some((record) => !record || typeof record !== 'object' || Array.isArray(record)
+        || (record.name !== undefined && typeof record.name !== 'string')
+        || (record.folderId !== undefined && record.folderId !== null && typeof record.folderId !== 'string'))) {
+      throw new ArchiveOperationError('load', 'invalid', 'Invalid archive library; original file preserved');
     }
     return data;
   }
@@ -61,7 +66,7 @@ export class ArchiveLibraryStore {
   createFolder(name: string): Promise<ArchiveLibrary> {
     return this.change((data) => {
       const clean = this.name(name);
-      if (data.folders.some((f) => f.name === clean)) throw new Error('Folder already exists');
+      if (data.folders.some((f) => f.name === clean)) throw new ArchiveOperationError('rename', 'invalid', 'Folder already exists');
       data.folders.push({ id: `f${crypto.randomUUID()}`, name: clean });
     });
   }
@@ -69,9 +74,9 @@ export class ArchiveLibraryStore {
   renameFolder(id: string, name: string): Promise<ArchiveLibrary> {
     return this.change((data) => {
       const folder = data.folders.find((f) => f.id === id);
-      if (!folder) throw new Error('Folder not found');
+      if (!folder) throw new ArchiveOperationError('rename', 'not-found', 'Folder not found', id);
       const clean = this.name(name);
-      if (data.folders.some((f) => f.id !== id && f.name === clean)) throw new Error('Folder already exists');
+      if (data.folders.some((f) => f.id !== id && f.name === clean)) throw new ArchiveOperationError('rename', 'invalid', 'Folder already exists');
       folder.name = clean;
     });
   }
@@ -79,7 +84,7 @@ export class ArchiveLibraryStore {
   update(id: string, patch: { name?: string; folderId?: string | null }): Promise<ArchiveLibrary> {
     return this.change((data) => {
       if (patch.folderId !== undefined && patch.folderId !== null
-        && !data.folders.some((f) => f.id === patch.folderId)) throw new Error('Folder not found');
+        && !data.folders.some((f) => f.id === patch.folderId)) throw new ArchiveOperationError('rename', 'not-found', 'Folder not found', id);
       const previous = Object.hasOwn(data.records, id) ? data.records[id] : {};
       Object.defineProperty(data.records, id, { enumerable: true, configurable: true, writable: true,
         value: { ...previous,
@@ -92,13 +97,13 @@ export class ArchiveLibraryStore {
 
   remember(folderId: string | null): Promise<ArchiveLibrary> {
     return this.change((data) => {
-      if (folderId !== null && !data.folders.some((f) => f.id === folderId)) throw new Error('Folder not found');
+      if (folderId !== null && !data.folders.some((f) => f.id === folderId)) throw new ArchiveOperationError('save', 'not-found', 'Folder not found', folderId ?? undefined);
       data.lastFolderId = folderId;
     });
   }
 
   private name(value: string): string {
-    if (typeof value !== 'string' || !value.trim() || [...value.trim()].length > 120) throw new Error('Invalid name');
+    if (typeof value !== 'string' || !value.trim() || [...value.trim()].length > 120) throw new ArchiveOperationError('rename', 'invalid', 'Invalid name');
     return value.trim();
   }
 }

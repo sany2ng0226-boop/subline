@@ -144,8 +144,11 @@ export interface AppBridge {
   createArchiveFolder?(name: string): Promise<ArchiveLibrary>;
   renameArchiveFolder?(id: string, name: string): Promise<ArchiveLibrary>;
   updateArchive?(id: string, patch: { name?: string; folderId?: string | null }): Promise<ArchiveSummary[]>;
+  /** Rejects with ArchiveOperationError (op: load) if the archive list cannot be loaded. */
   listArchives(): Promise<ArchiveSummary[]>;
+  /** Loads/opens an archive; rejects with ArchiveOperationError (op: open), including not-found. */
   getArchive(id: string): Promise<ArchiveRecord | null>;
+  /** Rejects with ArchiveOperationError (op: delete) if deletion fails, including not-found. */
   deleteArchive(id: string): Promise<ArchiveSummary[]>;
   // 事件订阅：追加语义（同一事件可注册多个回调），返回本次注册的反注册函数。
   // 组件级订阅（如 SetupScreen）须在卸载时反注册，避免监听器持有已卸载组件的闭包累积。

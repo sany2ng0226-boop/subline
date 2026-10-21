@@ -20,6 +20,8 @@
 
 import { Preferences } from '@capacitor/preferences';
 import {
+  ArchiveOperationError,
+  withArchiveOperation,
   makeDefaults,
   withDefaults,
   listSummaries,
@@ -119,13 +121,10 @@ export function createIosBridge(): AppBridge {
   // ---- 持久化：归档 ----
   async function readArchives(): Promise<ArchiveRecord[]> {
     const { value } = await Preferences.get({ key: ARCHIVES_KEY });
-    if (!value) return [];
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? (parsed as ArchiveRecord[]) : [];
-    } catch {
-      return [];
-    }
+    if (value === null) return [];
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) throw new SyntaxError('Invalid archive storage');
+    return parsed as ArchiveRecord[];
   }
 
   async function writeArchives(records: ArchiveRecord[]): Promise<void> {
@@ -330,29 +329,35 @@ export function createIosBridge(): AppBridge {
 
     // ===== 归档（Preferences）=====
     async saveArchive(name: string, lines: ArchiveLine[]): Promise<ArchiveSummary[]> {
-      const records = await readArchives();
-      const createdAt = Date.now();
-      const record: ArchiveRecord = {
-        id: makeArchiveId(createdAt),
-        name,
-        createdAt,
-        lines,
-      };
-      records.push(record);
-      await writeArchives(records);
-      return listSummaries(records);
+      return withArchiveOperation('save', undefined, async () => {
+        const records = await readArchives();
+        const createdAt = Date.now();
+        const record: ArchiveRecord = { id: makeArchiveId(createdAt), name, createdAt, lines };
+        records.push(record);
+        await writeArchives(records);
+        return listSummaries(records);
+      });
     },
     async listArchives(): Promise<ArchiveSummary[]> {
-      return listSummaries(await readArchives());
+      return withArchiveOperation('load', undefined, async () => listSummaries(await readArchives()));
     },
     async getArchive(id: string): Promise<ArchiveRecord | null> {
-      const records = await readArchives();
-      return records.find((r) => r.id === id) ?? null;
+      return withArchiveOperation('open', id, async () => {
+        const record = (await readArchives()).find((r) => r.id === id);
+        if (!record) throw new ArchiveOperationError('open', 'not-found', 'Archive not found', id);
+        return record;
+      });
     },
     async deleteArchive(id: string): Promise<ArchiveSummary[]> {
-      const records = (await readArchives()).filter((r) => r.id !== id);
-      await writeArchives(records);
-      return listSummaries(records);
+      return withArchiveOperation('delete', id, async () => {
+        const records = await readArchives();
+        if (!records.some((r) => r.id === id)) {
+          throw new ArchiveOperationError('delete', 'not-found', 'Archive not found', id);
+        }
+        const remaining = records.filter((r) => r.id !== id);
+        await writeArchives(remaining);
+        return listSummaries(remaining);
+      });
     },
 
     // ===== 回调注册（与 macOS preload 的 on* 语义一致：仅记录，事件由 subscribeNative 转发）=====

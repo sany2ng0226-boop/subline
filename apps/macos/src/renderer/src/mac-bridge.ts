@@ -6,7 +6,7 @@
 // stopPipeline：先停采集（停轨 + 关闭 AudioContext），再停 ASR 子进程（api.stopPipeline）。
 // 其余方法全部直通 window.api。
 
-import { audioLevel } from '@rt/core';
+import { audioLevel, withArchiveOperation } from '@rt/core';
 import type { AppBridge, StartResult, PipelineErrorCode, StatusPayload } from '@rt/core';
 import type { ElectronApi } from '@shared/types';
 
@@ -145,14 +145,14 @@ export function createMacBridge(api: ElectronApi): AppBridge {
     cancelModelDownload: (kind, id) => api.cancelModelDownload(kind, id),
     getTranslationSetupStatus: (modelId) => api.getTranslationSetupStatus(modelId),
     downloadTranslationModel: (modelId) => api.downloadTranslationModel(modelId),
-    saveArchive: (name, lines, folderId) => api.saveArchive(name, lines, folderId),
-    getArchiveLibrary: () => api.getArchiveLibrary!(),
-    createArchiveFolder: (name) => api.createArchiveFolder!(name),
-    renameArchiveFolder: (id, name) => api.renameArchiveFolder!(id, name),
-    updateArchive: (id, patch) => api.updateArchive!(id, patch),
-    listArchives: () => api.listArchives(),
-    getArchive: (id) => api.getArchive(id),
-    deleteArchive: (id) => api.deleteArchive(id),
+    saveArchive: (name, lines, folderId) => withArchiveOperation('save', undefined, () => api.saveArchive(name, lines, folderId)),
+    getArchiveLibrary: () => withArchiveOperation('load', undefined, () => api.getArchiveLibrary!()),
+    createArchiveFolder: (name) => withArchiveOperation('save', undefined, () => api.createArchiveFolder!(name)),
+    renameArchiveFolder: (id, name) => withArchiveOperation('rename', id, () => api.renameArchiveFolder!(id, name)),
+    updateArchive: (id, patch) => withArchiveOperation('rename', id, () => api.updateArchive!(id, patch)),
+    listArchives: () => withArchiveOperation('load', undefined, () => api.listArchives()),
+    getArchive: (id) => withArchiveOperation('open', id, () => api.getArchive(id)),
+    deleteArchive: (id) => withArchiveOperation('delete', id, () => api.deleteArchive(id)),
     onSetupProgress: (cb) => api.onSetupProgress(cb),
     onSegment: (cb) => api.onSegment(cb),
     onPartial: (cb) => api.onPartial(cb),
