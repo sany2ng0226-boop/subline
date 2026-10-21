@@ -53,11 +53,11 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 
 ### 设置、模型与归档
 
-- `@rt/ui` 只持有表单和当前会话状态；设置、模型和归档持久化经 `AppBridge`。默认值、字段校验、归档摘要和排序在 `@rt/core` 复用，各宿主只选择文件、Preferences 或 IndexedDB 作为存储后端。
+- `@rt/ui` 只持有表单和当前会话状态；设置、模型和归档持久化经 `AppBridge`。设置保存契约是 `SettingsPatch`：UI 只提交发生变化的字段，`@rt/core` 的 `mergeSettings` 将补丁合并到最新完整设置并统一校验；macOS 同步合并后写文件，Web 与 iOS 将异步写入串行化，并在每次实际执行时读取最新状态再合并。默认值、其它字段校验、归档摘要和排序也在 `@rt/core` 复用，各宿主只选择文件、Preferences 或 IndexedDB 作为存储后端。
 - Internal 归档入口由 `packages/ui/src/screens/ArchiveLibrary.vue` 管理文件夹、筛选、改名与移动，`MainScreen.vue` 负责手动保存弹窗；内容标题提取属于 `packages/core/src/archive.ts` 的 `suggestArchiveTitle`。产品规则见[清屏与归档](product/experience.md#清屏与归档)。
 - `apps/macos/src/main/archives.ts` 保留 `archives.json` 的记录数组格式，读取旧记录不做迁移；`archive-library.ts` 单独管理 `archive-library.json` 中的文件夹及记录元数据覆盖，改名和移动不重写归档正文。归档正文与元数据各自通过原子替换落盘，UI 等待保存成功后才清屏。
 - 文件夹能力同时受 UI 的 `__INTERNAL_BUILD__`、可选 `AppBridge.getArchiveLibrary` 能力和桌面主进程的 Internal 应用身份、Windows 候选版或隔离预览 profile 检查约束；稳定渠道、Web 与 iOS 保留原路径。
-- `apps/macos/src/main/settings.ts` 仅对新建设置启用本地 `hy-mt2-7b`；已有设置由共享兼容逻辑读取。正式应用名为 Subline，应用标识仍为 `io.github.sany2ng0226.classroomtranslator`，独立数据目录为 `~/Library/Application Support/Classroom Translator`。
+- `apps/macos/src/main/settings.ts` 仅对新建设置预选本地 `hy-mt2-7b`，翻译默认保持关闭；已有设置由共享兼容逻辑读取。正式应用名为 Subline，应用标识仍为 `io.github.sany2ng0226.classroomtranslator`，独立数据目录为 `~/Library/Application Support/Classroom Translator`。
 - 模型清单、大小、语言、平台可用性和有序下载源的单一事实源是 `packages/core/src/model-registry.ts`。各宿主将文件下载到本端模型目录或 Cache Storage，再由对应推理运行时离线装载。Hy-MT2 使用 Tencent 固定 revision 的 Q4_K_M 文件，注册表声明精确字节数及 SHA-256；macOS 下载流程据此校验。
 
 ## 测试与构建位置
