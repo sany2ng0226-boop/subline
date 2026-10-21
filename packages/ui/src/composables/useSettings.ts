@@ -1,9 +1,11 @@
 import { ref, computed } from 'vue';
 import { i18n } from '../i18n';
 import { bridge } from '../bridge';
-import type { AppSettings, FontSize, ThemePref, UiLang } from '@rt/core';
+import type { AppSettings, SettingsFontSize, ThemePref, UiLang } from '@rt/core';
 
-const FONT_PX: Record<FontSize, string> = { small: '13px', medium: '15px', large: '18px' };
+const FONT_PX: Record<SettingsFontSize, string> = {
+  xs: '13px', small: '15px', medium: '17px', large: '20px', xl: '24px',
+};
 
 // 全局单例：整个渲染进程共享同一份设置
 export const settings = ref<AppSettings | null>(null);
@@ -32,8 +34,9 @@ function applyLocale(lang: UiLang): void {
   document.documentElement.lang = lang;
 }
 
-export function applyFontSize(size: FontSize): void {
-  document.documentElement.style.setProperty('--transcript-size', FONT_PX[size]);
+export function applyFontSize(size: SettingsFontSize): void {
+  const px = Object.prototype.hasOwnProperty.call(FONT_PX, size) ? FONT_PX[size] : '15px';
+  document.documentElement.style.setProperty('--transcript-size', px);
 }
 
 /** 启动时加载设置并应用语言/字体/主题 */

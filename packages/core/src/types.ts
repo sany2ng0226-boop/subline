@@ -122,9 +122,7 @@ export interface TranslationSettings {
 
 /** 主页转写字体大小档位 */
 export type SettingsFontSize = 'xs' | 'small' | 'medium' | 'large' | 'xl';
-// Legacy UI uses Record<FontSize, string> with only three entries. Keep that
-// map source-compatible until it implements the v2 five-step scale.
-export type FontSize = 'small' | 'medium' | 'large' | (string & {});
+export type FontSize = SettingsFontSize;
 
 export type ShortcutAction = 'toggleOverlay' | 'toggleRecording' | 'toggleClickThrough';
 
@@ -230,7 +228,7 @@ export interface AppSettings {
   onboarded: boolean;
   /** 母语：界面语言 + 翻译目标 */
   nativeLang: UiLang;
-  /** Runtime normalization accepts only SettingsFontSize; widened for legacy UI forms. */
+  /** 主页转写字体大小档位 */
   fontSize: FontSize;
   /** 主题偏好 */
   theme: ThemePref;
