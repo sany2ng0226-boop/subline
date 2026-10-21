@@ -226,4 +226,6 @@ export interface AppSettings {
   /** 音频采集来源 */
   audioSource: AudioSource;
   translation: TranslationSettings;
+  /** 读屏播报：定稿原文与译文经 aria-live 播报（默认关） */
+  announceCaptions: boolean;
 }

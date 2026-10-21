@@ -163,3 +163,12 @@ describe('settingsVersion 迁移', () => {
     expect(withDefaults({ settingsVersion: 2, fontSize: 'huge' }, d).fontSize).toBe('small');
   });
 });
+
+describe('announceCaptions', () => {
+  const d = makeDefaults(['en-US']);
+  it('默认关闭，非法值回落默认，合法值保留', () => {
+    expect(d.announceCaptions).toBe(false);
+    expect(withDefaults({ announceCaptions: 'yes' }, d).announceCaptions).toBe(false);
+    expect(withDefaults({ announceCaptions: true }, d).announceCaptions).toBe(true);
+  });
+});

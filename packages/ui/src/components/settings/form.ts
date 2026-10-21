@@ -29,6 +29,8 @@ export interface SettingsFormData {
   /** 选用的本地翻译模型 id（仅 translationMode==='local' 时有意义）。 */
   translationModel: LocalEngine;
   cloud: CloudTranslationConfig;
+  /** 读屏播报定稿字幕 */
+  announceCaptions: boolean;
 }
 
 /** 通用设置子集（母语/字体/主题）：首次引导向导仅编辑这几项。 */

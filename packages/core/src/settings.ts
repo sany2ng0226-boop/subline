@@ -41,6 +41,7 @@ export function makeDefaults(systemLangs: string[]): AppSettings {
     asr: { language: 'auto', model: DEFAULT_ASR_MODEL_ID },
     // 默认麦克风（全平台可用）；系统音频由支持的端（macOS 14.2+）作为可选项提供。
     audioSource: 'mic',
+    announceCaptions: false,
     translation: {
       enabled: false,
       engine: DEFAULT_TRANSLATION_MODEL_ID,
@@ -95,6 +96,7 @@ export function withDefaults(raw: unknown, defaults: AppSettings): AppSettings {
     asr: { language: asrLang, model },
     audioSource:
       s.audioSource === 'mic' || s.audioSource === 'system' ? s.audioSource : d.audioSource,
+    announceCaptions: typeof s.announceCaptions === 'boolean' ? s.announceCaptions : d.announceCaptions,
     translation: {
       enabled: typeof t.enabled === 'boolean' ? t.enabled : d.translation.enabled,
       // 引擎：'cloud' 或注册表中的本地模型 id 原样保留，其余（未知/旧值）回落默认本地模型。

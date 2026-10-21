@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue';
-import { NButton, NTooltip } from 'naive-ui';
+import { NButton, NFormItem, NSwitch, NTooltip } from 'naive-ui';
 import { ArrowLeft, SlidersHorizontal, Mic, Languages, HardDrive } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { getAsrModel, getTranslationModel, DEFAULT_TRANSLATION_MODEL_ID } from '@rt/core';
@@ -45,6 +45,7 @@ const form = reactive<SettingsFormData>({
       ? currentEngine
       : DEFAULT_TRANSLATION_MODEL_ID,
   cloud: { ...current.translation.cloud },
+  announceCaptions: current.announceCaptions,
 });
 
 // 本地翻译模型未缓存时的就地下载弹窗
@@ -74,6 +75,7 @@ function persist(): Promise<unknown> {
       nativeLang: form.nativeLang,
       fontSize: form.fontSize,
       theme: form.theme,
+      announceCaptions: form.announceCaptions,
       asr: { ...form.asr },
       translation: { ...base.translation, enabled, engine, cloud: { ...form.cloud } },
     });
@@ -91,6 +93,7 @@ watch(
     () => form.nativeLang,
     () => form.fontSize,
     () => form.theme,
+    () => form.announceCaptions,
     () => form.asr.language,
     () => form.asr.model,
     () => form.translationMode,
@@ -219,7 +222,13 @@ function onDownloadConfirm(tasks: DownloadTask[]): void {
 
       <div class="flex-1 overflow-y-auto">
         <div class="mx-auto w-full max-w-[560px] px-5 py-6">
-          <general-section v-if="tab === 'general'" :form="form" />
+          <template v-if="tab === 'general'">
+            <general-section :form="form" />
+            <n-form-item :label="t('settings.announceCaptions')" :show-feedback="false">
+              <n-switch v-model:value="form.announceCaptions" />
+            </n-form-item>
+            <p class="mt-1.5 text-xs text-[var(--rt-ink-3)]">{{ t('settings.announceCaptionsHint') }}</p>
+          </template>
           <asr-section v-else-if="tab === 'asr'" :form="form" />
           <translation-section v-else-if="tab === 'translation'" :form="form" />
           <models-section v-else-if="tab === 'models'" />

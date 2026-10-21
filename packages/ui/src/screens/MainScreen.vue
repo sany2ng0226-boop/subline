@@ -513,8 +513,8 @@ function openMicSettings(): void {
       <!-- 模型加载状态：顶栏内联，转圈图标 + 文案；hover 看具体加载项 -->
       <n-tooltip v-if="loadingItems.length">
         <template #trigger>
-          <div class="flex items-center gap-2 text-xs text-[var(--rt-ink-3)]">
-            <LoaderCircle :size="14" class="animate-spin" />
+          <div class="flex items-center gap-2 text-xs text-[var(--rt-ink-3)]" role="status">
+            <LoaderCircle :size="14" class="animate-spin" aria-hidden="true" />
             <span>{{ loadingSummary }}</span>
           </div>
         </template>
@@ -523,7 +523,7 @@ function openMicSettings(): void {
       <!-- 翻译引擎级错误：同一位置收敛为红色警示图标（行级失败仍在对应行内展示） -->
       <n-tooltip v-else-if="translateOn && translationError">
         <template #trigger>
-          <TriangleAlert :size="14" class="text-[var(--rt-live)]" />
+          <TriangleAlert :size="14" class="text-[var(--rt-live)]" role="img" :aria-label="translationErrorDetail || t('status.transFailed')" />
         </template>
         {{ translationErrorDetail || t('status.transFailed') }}
       </n-tooltip>
@@ -688,6 +688,7 @@ function openMicSettings(): void {
       :translate-on="translateOn"
       :source-lang="settings?.asr.language"
       :target-lang="settings?.nativeLang"
+      :announce="settings?.announceCaptions"
     />
 
     <!-- 停止录音后的未归档提示：不挡操作，可稍后再归档 -->
