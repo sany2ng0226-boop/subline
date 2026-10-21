@@ -1,3 +1,4 @@
+import { createRecoveryStore } from './recovery-store';
 import { createAlwaysOnTopController } from './always-on-top';
 import { createDisplaySleepBlocker } from './display-sleep';
 import { TranslationRequestQueue } from './translation/request-queue';
@@ -847,6 +848,11 @@ ipcMain.handle('window:set-always-on-top', (_event, on: unknown): void => {
   alwaysOnTop.set(on);
 });
 
+const recoveryStore = createRecoveryStore(() => app.getPath('userData'));
+ipcMain.handle('recovery:save', (_event, json: string) => recoveryStore.saveRecovery(json));
+ipcMain.handle('recovery:load', () => recoveryStore.loadRecovery());
+ipcMain.handle('recovery:clear', () => recoveryStore.clearRecovery());
+
 ipcMain.handle('settings:get', (): AppSettings => effectiveSettings());
 
 ipcMain.handle('settings:save', (_event, next: AppSettings): AppSettings => {
@@ -967,7 +973,16 @@ app.on('before-quit', (event) => {
   });
 });
 
-app.on('will-quit', () => displaySleep.stop());
+let recoveryFlushed = false;
+app.on('will-quit', (event) => {
+  displaySleep.stop();
+  if (recoveryFlushed) return;
+  event.preventDefault();
+  void recoveryStore.flush().then(() => {
+    recoveryFlushed = true;
+    app.quit();
+  });
+});
 
 app.on('window-all-closed', () => {
   asrChild?.kill();

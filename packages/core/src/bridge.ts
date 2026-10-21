@@ -88,6 +88,14 @@ export interface AppBridge {
   setAlwaysOnTop?(on: boolean): Promise<void>;
   /** Subscribe to pinning changes (including the app menu); returns an unsubscribe function. */
   onAlwaysOnTopChange?(cb: (on: boolean) => void): () => void;
+  /** Persist unarchived JSON for crash recovery; UI throttles calls to roughly 10 seconds.
+   * Web/iOS leave this unimplemented; UI falls back to localStorage.
+   */
+  saveRecovery?(json: string): Promise<void>;
+  /** Read the recovery JSON, or null when missing, unreadable, or corrupt. Web/iOS use localStorage. */
+  loadRecovery?(): Promise<string | null>;
+  /** Remove crash recovery after archiving/discarding. Web/iOS use localStorage. */
+  clearRecovery?(): Promise<void>;
   getSettings(): Promise<AppSettings>;
   saveSettings(settings: AppSettings): Promise<AppSettings>;
   /**
