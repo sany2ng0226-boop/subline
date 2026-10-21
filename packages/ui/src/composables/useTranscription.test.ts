@@ -103,3 +103,12 @@ it('treats recording or unarchived rows as unsaved, and waits for an in-flight s
   state.clearTranscript();
   expect(state.hasUnsavedContent.value).toBe(false);
 });
+
+it('reports a denied microphone as a permission error, not a recognizer failure', async () => {
+  const { setBridge, bridge } = await import('../bridge');
+  setBridge({ ...bridge(), startPipeline: async () => ({ ok: false, error: 'NotAllowedError: Permission denied', code: 'asr-init-failed' }) });
+  await state.startRecording();
+  expect(state.errorCode.value).toBe('mic-permission');
+  callbacks.onStatus({ state: 'error', error: 'NotAllowedError: Permission denied' });
+  expect(state.errorCode.value).toBe('mic-permission');
+});

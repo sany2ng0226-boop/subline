@@ -102,6 +102,8 @@ const messages = {
     },
     mic: {
       windowsDeniedDesc: 'Allow desktop apps to access your microphone in Windows Settings > Privacy & security > Microphone, then retry.',
+      webDeniedDesc: 'Microphone access was denied. Allow it in your browser’s site settings (the icon left of the address bar), then try again.',
+      iosDeniedDesc: 'Microphone access was denied. Turn it on in Settings › Subline › Microphone, then try again.',
       allow: 'Allow & Start',
       cancel: 'Cancel',
       deniedDesc:
@@ -307,6 +309,8 @@ const messages = {
     },
     mic: {
       windowsDeniedDesc: 'Windows の設定 > プライバシーとセキュリティ > マイクでデスクトップアプリのアクセスを許可し、再試行してください。',
+      webDeniedDesc: 'マイクへのアクセスが拒否されています。ブラウザのサイト設定（アドレスバー左のアイコン）でマイクを許可してから再試行してください。',
+      iosDeniedDesc: 'マイクへのアクセスが拒否されています。「設定 › Subline › マイク」をオンにしてから再試行してください。',
       allow: '許可して開始',
       cancel: 'キャンセル',
       deniedDesc:
@@ -511,6 +515,8 @@ const messages = {
     },
     mic: {
       windowsDeniedDesc: 'Windows 설정 > 개인 정보 및 보안 > 마이크에서 데스크톱 앱의 접근을 허용한 후 다시 시도하세요.',
+      webDeniedDesc: '마이크 접근이 거부되었습니다. 브라우저의 사이트 설정(주소창 왼쪽 아이콘)에서 마이크를 허용한 후 다시 시도하세요.',
+      iosDeniedDesc: '마이크 접근이 거부되었습니다. 「설정 › Subline › 마이크」를 켠 후 다시 시도하세요.',
       allow: '허용하고 시작',
       cancel: '취소',
       deniedDesc:
@@ -712,6 +718,8 @@ const messages = {
     },
     mic: {
       windowsDeniedDesc: '请在 Windows 设置 > 隐私和安全性 > 麦克风中允许桌面应用访问麦克风，然后重试。',
+      webDeniedDesc: '麦克风权限已被拒绝。请在浏览器的网站设置（地址栏左侧图标）中允许麦克风后重试。',
+      iosDeniedDesc: '麦克风权限已被拒绝。请在「设置 › Subline › 麦克风」中打开后重试。',
       allow: '允许并开始',
       cancel: '取消',
       deniedDesc:

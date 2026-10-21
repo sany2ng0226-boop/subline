@@ -45,6 +45,7 @@ import { archiveSession, foldersEnabled as archiveFoldersEnabled, suggestArchive
 import { recoveryOffer, restoreRecovery, discardRecovery } from '../composables/useRecovery';
 import { fmtHourMinute } from '../utils/datetime';
 import { archiveErrorKey } from '../utils/archiveError';
+import { micDeniedDescKey, micSettingsOpener } from '../utils/micPermission';
 import { bridge } from '../bridge';
 
 const { t } = useI18n();
@@ -165,6 +166,9 @@ const showStopNotice = computed(() => stopNoticeOpen.value && hasContent.value &
 // 仍需此值让转写列表决定是否显示「翻译中」等待动画。
 const translateOn = computed<boolean>(() => settings.value?.translation.enabled ?? false);
 const windowsHost = bridge().platform === 'windows';
+// 麦克风被拒：按端说明去哪里开启；宿主能打开设置时才给「打开设置」按钮（Web 打不开）
+const micDeniedDesc = micDeniedDescKey(bridge().platform);
+const canOpenMicSettings = micSettingsOpener(bridge()) !== null;
 
 // 错误显示：有稳定错误码时用本地化文案，无码回退宿主原文（自由文本，可能非界面语言）
 const errorDisplay = computed(() =>
@@ -185,7 +189,11 @@ function dismissError(): void {
 }
 const errorAction = computed<{ label: string; run: () => void } | null>(() => {
   const code = errorCode.value;
-  if (code === 'mic-permission') return { label: t('mic.openSettings'), run: openMicSettings };
+  if (code === 'mic-permission') {
+    if (canOpenMicSettings) return { label: t('mic.openSettings'), run: openMicSettings };
+    if (recording.value || recordBusy.value) return null;
+    return { label: t('download.retry'), run: () => void onRecordClick() };
+  }
   if (code === 'system-audio-permission') {
     return bridge().openSystemAudioSettings ? { label: t('mic.openSettings'), run: openSysAudioSettings } : null;
   }
@@ -494,7 +502,7 @@ function confirmMic(): void {
 }
 
 function openMicSettings(): void {
-  bridge().openMicSettings();
+  micSettingsOpener(bridge())?.();
   micModal.value = '';
 }
 </script>
@@ -762,14 +770,17 @@ function openMicSettings(): void {
       style="width: 420px; max-width: 90vw"
     >
       <p class="text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-        {{ micModal === 'denied' ? t(windowsHost ? 'mic.windowsDeniedDesc' : 'mic.deniedDesc') : t('mic.desc') }}
+        {{ micModal === 'denied' ? t(micDeniedDesc) : t('mic.desc') }}
       </p>
       <template #footer>
         <div class="flex justify-end gap-2">
           <n-button @click="micModal = ''">{{ t('mic.cancel') }}</n-button>
-          <n-button v-if="micModal === 'denied'" type="primary" @click="openMicSettings">
-            {{ t('mic.openSettings') }}
-          </n-button>
+          <template v-if="micModal === 'denied'">
+            <n-button v-if="canOpenMicSettings" type="primary" @click="openMicSettings">
+              {{ t('mic.openSettings') }}
+            </n-button>
+            <n-button v-else type="primary" @click="confirmMic">{{ t('download.retry') }}</n-button>
+          </template>
           <n-button v-else type="primary" @click="confirmMic">{{ t('mic.allow') }}</n-button>
         </div>
       </template>

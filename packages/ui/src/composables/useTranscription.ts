@@ -1,6 +1,7 @@
 import { computed, reactive, ref } from 'vue';
 import type { PipelineErrorCode, TranslationStatusPayload } from '@rt/core';
 import { fmtClock } from '../utils/datetime';
+import { pipelineErrorCode } from '../utils/micPermission';
 import { bridge } from '../bridge';
 
 export interface TranscriptLine {
@@ -120,7 +121,7 @@ export function registerTranscriptionListeners(): void {
     } else if (s.state === 'error') {
       modelLoading.value = false;
       errorText.value = s.error ?? 'Error';
-      errorCode.value = s.code ?? null;
+      errorCode.value = pipelineErrorCode(s.code, s.error);
       // 经守卫收停：stopPipeline 在途期间用户点录音会被 recordBusy 挡住，避免 start/stop 交错
       if (recording.value) {
         recordBusy.value = true;
@@ -166,7 +167,7 @@ export async function startRecording(): Promise<void> {
   const result = await bridge().startPipeline();
   if (!result.ok) {
     errorText.value = result.error ?? 'Error';
-    errorCode.value = result.code ?? null;
+    errorCode.value = pipelineErrorCode(result.code, result.error);
     return;
   }
   // 计时基线在管线确认启动后才取：segment.start 的 0 点是管线启动之后，
