@@ -8,7 +8,6 @@ import ConversationLine from '../components/ConversationLine.vue';
 import ScrollArea from '../components/ScrollArea.vue';
 import { bridge } from '../bridge';
 import { fmtDateTime } from '../utils/datetime';
-import { useArchiveDeletion } from '../composables/useArchiveDeletion';
 
 const { t } = useI18n();
 const emit = defineEmits<{ close: [] }>();
@@ -19,9 +18,6 @@ const selected = ref<ArchiveRecord | null>(null);
 const loading = ref(true);
 const busy = ref(false);
 const error = ref('');
-const cancelButton = ref<{ $el: HTMLElement } | null>(null);
-const { pending, remove, undo, commit, commitAll, isHidden } = useArchiveDeletion(items, error, t);
-function focusCancel(): void { if (modal.value === 'delete') cancelButton.value?.$el.focus(); }
 const modal = ref<'create' | 'folderRename' | 'rename' | 'move' | 'delete' | null>(null);
 const target = ref<ArchiveSummary | ArchiveRecord | null>(null);
 const name = ref('');
@@ -33,12 +29,12 @@ const modalTitle = computed(() => t(`archive.${({ create: 'newFolder', folderRen
 function folderName(id: string | null | undefined): string {
   return library.value.folders.find((f) => f.id === id)?.name ?? t('archive.unfiled');
 }
-async function run(task: () => Promise<void>, errorKey = 'operationFailed'): Promise<void> {
+async function run(task: () => Promise<void>): Promise<void> {
   if (busy.value) return;
   busy.value = true;
   error.value = '';
   try { await task(); }
-  catch (cause) { error.value = t(`archive.${errorKey}`); console.error('[archive]', cause); }
+  catch (cause) { error.value = t('archive.operationFailed'); console.error('[archive]', cause); }
   finally { busy.value = false; }
 }
 function edit(kind: NonNullable<typeof modal.value>, item?: ArchiveSummary | ArchiveRecord): void {
@@ -56,11 +52,10 @@ async function confirm(): Promise<void> {
     } else if (target.value) {
       const id = target.value.id;
       if (modal.value === 'delete') {
-        remove(id);
+        items.value = await bridge().deleteArchive(id);
         if (selected.value?.id === id) selected.value = null;
       } else {
-        const updated = await bridge().updateArchive!(id, modal.value === 'move' ? { folderId: destination.value } : { name: name.value });
-        items.value = updated.filter((item) => !isHidden(item.id));
+        items.value = await bridge().updateArchive!(id, modal.value === 'move' ? { folderId: destination.value } : { name: name.value });
         if (selected.value?.id === id) selected.value = await bridge().getArchive(id);
       }
     }
@@ -68,20 +63,13 @@ async function confirm(): Promise<void> {
   });
 }
 async function open(id: string): Promise<void> {
-  await run(async () => { selected.value = await bridge().getArchive(id); }, 'openFailed');
+  await run(async () => { selected.value = await bridge().getArchive(id); });
 }
-async function back(): Promise<void> {
-  if (selected.value) selected.value = null;
-  else {
-    error.value = '';
-    await commitAll();
-    if (!error.value) emit('close');
-  }
-}
+function back(): void { if (selected.value) selected.value = null; else emit('close'); }
 onMounted(async () => {
   await run(async () => {
     [items.value, library.value] = await Promise.all([bridge().listArchives(), bridge().getArchiveLibrary!()]);
-  }, 'loadFailed');
+  });
   loading.value = false;
 });
 </script>
@@ -138,19 +126,14 @@ onMounted(async () => {
         </div>
       </ScrollArea>
     </div>
-    <div v-for="item in pending" :key="item.id" role="status" class="flex items-center gap-3 border-t border-neutral-200 px-5 py-3 text-sm dark:border-[#3a3b44]">
-      <span class="min-w-0 flex-1 truncate">{{ t('archive.deleted', { name: item.name }) }}</span>
-      <n-button text @click="undo(item.id)">{{ t('main.undo') }}</n-button>
-      <n-button text :aria-label="t('main.dismiss')" @click="commit(item.id)">×</n-button>
-    </div>
-    <n-modal :auto-focus="modal !== 'delete'" @after-enter="focusCancel" :show="modal !== null" preset="card" :title="modalTitle" style="width: 390px; max-width: calc(100vw - 32px)" :mask-closable="!busy" :closable="!busy" @update:show="(show) => { if (!show && !busy) modal = null; }">
+    <n-modal :show="modal !== null" preset="card" :title="modalTitle" style="width: 390px; max-width: calc(100vw - 32px)" :mask-closable="!busy" :closable="!busy" @update:show="(show) => { if (!show && !busy) modal = null; }">
       <n-select v-if="modal === 'move'" :value="destination ?? ''" :options="folderOptions" :disabled="busy" :aria-label="t('archive.folder')" @update:value="destination = $event || null" />
       <p v-else-if="modal === 'delete'" class="break-words">{{ t('archive.confirmDelete', { name: target?.name }) }}</p>
       <n-input v-else v-model:value="name" autofocus :maxlength="120" :disabled="busy" :aria-label="modalTitle" @keydown.enter="name.trim() && !busy && confirm()" />
       <p v-if="error" role="alert" class="mt-2 text-sm text-red-500">{{ error }}</p>
       <template #footer><div class="flex justify-end gap-2">
-        <n-button ref="cancelButton" :disabled="busy" @click="modal = null">{{ t('archive.cancel') }}</n-button>
-        <n-button :type="modal === 'delete' ? 'error' : 'primary'" :loading="busy" :disabled="busy || (!['move', 'delete'].includes(modal ?? '') && !name.trim())" @click="confirm">{{ t(modal === 'delete' ? 'archive.delete' : 'archive.save') }}</n-button>
+        <n-button :disabled="busy" @click="modal = null">{{ t('archive.cancel') }}</n-button>
+        <n-button type="primary" :loading="busy" :disabled="busy || (!['move', 'delete'].includes(modal ?? '') && !name.trim())" @click="confirm">{{ t('archive.save') }}</n-button>
       </div></template>
     </n-modal>
   </div>
