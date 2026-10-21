@@ -121,7 +121,12 @@ export interface TranslationSettings {
 }
 
 /** 主页转写字体大小档位 */
-export type FontSize = 'small' | 'medium' | 'large';
+export type SettingsFontSize = 'xs' | 'small' | 'medium' | 'large' | 'xl';
+// Legacy UI uses Record<FontSize, string> with only three entries. Keep that
+// map source-compatible until it implements the v2 five-step scale.
+export type FontSize = 'small' | 'medium' | 'large' | (string & {});
+
+export type ShortcutAction = 'toggleOverlay' | 'toggleRecording' | 'toggleClickThrough';
 
 /** 界面/母语语言码（界面文案 + 翻译目标）。zh=中文（繁体并入简体）。 */
 export type UiLang = 'en' | 'ja' | 'ko' | 'zh';
@@ -212,10 +217,20 @@ export interface AsrSettings {
 
 /** 持久化到本地（electron userData）的应用设置 */
 export interface AppSettings {
+  settingsVersion: number;
+  uiScale: 1 | 1.15 | 1.3;
+  contrast: 'standard' | 'more' | 'system';
+  overlay?: {
+    fontDelta: number;
+    bounds?: { x: number; y: number; width: number; height: number };
+    clickThrough: boolean;
+  };
+  shortcuts?: Partial<Record<ShortcutAction, string | null>>;
   /** 是否已完成首次语言引导 */
   onboarded: boolean;
   /** 母语：界面语言 + 翻译目标 */
   nativeLang: UiLang;
+  /** Runtime normalization accepts only SettingsFontSize; widened for legacy UI forms. */
   fontSize: FontSize;
   /** 主题偏好 */
   theme: ThemePref;

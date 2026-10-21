@@ -1,6 +1,6 @@
 // 应用设置的纯逻辑：默认值生成、字段补齐与语言/模型校验。
 // 不依赖任何平台 API——系统语言由调用方传入，持久化（fs 等）留在各端实现。
-import type { AppSettings, AsrLang, UiLang } from './types';
+import type { AppSettings, AsrLang, SettingsFontSize, ShortcutAction, UiLang } from './types';
 import { DEFAULT_ASR_MODEL_ID, getAsrModel } from './models';
 import { DEFAULT_TRANSLATION_MODEL_ID, getTranslationModel } from './translation/local-spec';
 
@@ -27,9 +27,12 @@ function defaultNativeLang(systemLangs: string[]): UiLang {
 /** 生成默认设置；母语按传入的系统语言推断 */
 export function makeDefaults(systemLangs: string[]): AppSettings {
   return {
+    settingsVersion: 2,
+    uiScale: 1,
+    contrast: 'standard',
     onboarded: false,
     nativeLang: defaultNativeLang(systemLangs),
-    fontSize: 'medium',
+    fontSize: 'small',
     theme: 'system',
     alwaysOnTop: false,
     asr: { language: 'auto', model: DEFAULT_ASR_MODEL_ID },
@@ -57,16 +60,24 @@ export function asAsrLang(v: unknown): AsrLang | null {
 }
 
 /**
- * 补齐缺省字段并校验：无效值一律回落默认，不迁移旧版本数据。
+ * 补齐缺省字段并校验，将旧版设置迁移到当前版本。
  * @param raw 反序列化得到的原始对象
  * @param defaults 由调用方按系统语言生成的默认值
  */
 export function withDefaults(raw: unknown, defaults: AppSettings): AppSettings {
   const d = defaults;
-  const s = (raw ?? {}) as Record<string, unknown>;
-  const t = (s.translation ?? {}) as Record<string, unknown>;
-  const cloud = (t.cloud ?? {}) as Record<string, unknown>;
-  const asr = (s.asr ?? {}) as Record<string, unknown>;
+  const s = record(raw);
+  const t = record(s.translation);
+  const cloud = record(t.cloud);
+  const asr = record(s.asr);
+  const version = finite(s.settingsVersion) ? s.settingsVersion : 1;
+  let fontSize = s.fontSize;
+  if (version < 2) {
+    if (fontSize === 'small') fontSize = 'xs';
+    else if (fontSize === 'medium') fontSize = 'small';
+  }
+  const overlay = normalizeOverlay(s.overlay);
+  const shortcuts = normalizeShortcuts(s.shortcuts);
 
   // 识别语言非法则回落 auto。
   const asrLang = asAsrLang(asr.language) ?? d.asr.language;
@@ -76,10 +87,17 @@ export function withDefaults(raw: unknown, defaults: AppSettings): AppSettings {
   const model = asrModel?.languages.includes(asrLang) ? asrModelId : DEFAULT_ASR_MODEL_ID;
 
   return {
+    settingsVersion: 2,
+    uiScale: s.uiScale === 1 || s.uiScale === 1.15 || s.uiScale === 1.3 ? s.uiScale : d.uiScale,
+    contrast: s.contrast === 'standard' || s.contrast === 'more' || s.contrast === 'system'
+      ? s.contrast : d.contrast,
+    ...(overlay ? { overlay } : {}),
+    ...(shortcuts ? { shortcuts } : {}),
     onboarded: typeof s.onboarded === 'boolean' ? s.onboarded : d.onboarded,
     alwaysOnTop: typeof s.alwaysOnTop === 'boolean' ? s.alwaysOnTop : d.alwaysOnTop,
     nativeLang: asUiLang(s.nativeLang) ?? d.nativeLang,
-    fontSize: s.fontSize === 'small' || s.fontSize === 'large' ? s.fontSize : d.fontSize,
+    fontSize: typeof fontSize === 'string' && ['xs', 'small', 'medium', 'large', 'xl'].includes(fontSize)
+      ? fontSize as SettingsFontSize : d.fontSize,
     theme: s.theme === 'light' || s.theme === 'dark' ? s.theme : d.theme,
     asr: { language: asrLang, model },
     audioSource:
@@ -94,10 +112,46 @@ export function withDefaults(raw: unknown, defaults: AppSettings): AppSettings {
             ? (t.engine as AppSettings['translation']['engine'])
             : DEFAULT_TRANSLATION_MODEL_ID,
       cloud: {
-        baseURL: (cloud.baseURL as string) || d.translation.cloud.baseURL,
-        apiKey: (cloud.apiKey as string) ?? '',
-        model: (cloud.model as string) || d.translation.cloud.model,
+        baseURL: typeof cloud.baseURL === 'string' ? cloud.baseURL : d.translation.cloud.baseURL,
+        apiKey: typeof cloud.apiKey === 'string' ? cloud.apiKey : d.translation.cloud.apiKey,
+        model: typeof cloud.model === 'string' ? cloud.model : d.translation.cloud.model,
       },
     },
   };
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown> : {};
+}
+
+function finite(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function normalizeOverlay(value: unknown): AppSettings['overlay'] {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const o = record(value);
+  const b = record(o.bounds);
+  const bounds = finite(b.x) && finite(b.y) && finite(b.width) && b.width > 0
+    && finite(b.height) && b.height > 0
+    ? { x: b.x, y: b.y, width: b.width, height: b.height } : undefined;
+  return {
+    fontDelta: finite(o.fontDelta) ? o.fontDelta : 0,
+    clickThrough: typeof o.clickThrough === 'boolean' ? o.clickThrough : false,
+    ...(bounds ? { bounds } : {}),
+  };
+}
+
+function normalizeShortcuts(value: unknown): AppSettings['shortcuts'] {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const raw = record(value);
+  const shortcuts: Partial<Record<ShortcutAction, string | null>> = {};
+  for (const action of ['toggleOverlay', 'toggleRecording', 'toggleClickThrough'] as const) {
+    const accelerator = raw[action];
+    if (accelerator === null || (typeof accelerator === 'string' && accelerator.trim())) {
+      shortcuts[action] = accelerator;
+    }
+  }
+  return shortcuts;
 }
