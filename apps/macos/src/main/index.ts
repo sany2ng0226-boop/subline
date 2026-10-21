@@ -1,6 +1,7 @@
 import { createAlwaysOnTopController } from './always-on-top';
 import { createDisplaySleepBlocker } from './display-sleep';
 import { TranslationRequestQueue } from './translation/request-queue';
+import { migrateLegacyProfile } from './profile-migration';
 import { runCandidateSmoke } from './candidate-smoke';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -89,6 +90,14 @@ const smokeReport = smokeFlag >= 0 ? process.argv[smokeFlag + 1] : undefined;
 if (smokeFlag >= 0) {
   if (!smokeReport || !path.isAbsolute(smokeReport)) throw new Error('Candidate smoke requires an absolute report path');
   app.setPath('userData', fs.mkdtempSync(path.join(app.getPath('temp'), 'subline-candidate-smoke-')));
+}
+
+if (app.isPackaged && process.platform !== 'win32' && app.getName() === 'Subline'
+  && !process.env['RT_PREVIEW_PROFILE'] && !process.argv.includes('--candidate-smoke')) {
+  migrateLegacyProfile({
+    targetDir: app.getPath('userData'),
+    sourceDirs: ['Classroom Translator Internal', '@rt/macos'].map((name) => path.join(app.getPath('appData'), name)),
+  });
 }
 
 // 模型存放目录：
