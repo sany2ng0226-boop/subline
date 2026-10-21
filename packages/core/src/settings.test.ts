@@ -208,3 +208,12 @@ describe('v2 settings migration', () => {
     }
   });
 });
+
+describe('announceCaptions', () => {
+  const d = makeDefaults(['en-US']);
+  it('默认关闭，非法值回落默认，合法值保留', () => {
+    expect(d.announceCaptions).toBe(false);
+    expect(withDefaults({ announceCaptions: 'yes' }, d).announceCaptions).toBe(false);
+    expect(withDefaults({ announceCaptions: true }, d).announceCaptions).toBe(true);
+  });
+});

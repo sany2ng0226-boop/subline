@@ -156,6 +156,8 @@ const messages = {
       translateTo: 'Translate into {lang}',
     },
     settings: {
+      announceCaptions: 'Read captions aloud',
+      announceCaptionsHint: 'With a screen reader on, new finalized captions and translations are announced.',
       apiKey: 'API Key',
       asrLanguage: 'Recognition language',
       asrLanguageAuto: 'Auto-detect',
@@ -357,6 +359,8 @@ const messages = {
       translateTo: '{lang}に翻訳',
     },
     settings: {
+      announceCaptions: '字幕を読み上げる',
+      announceCaptionsHint: 'スクリーンリーダー使用時、確定した字幕と翻訳を読み上げます。',
       apiKey: 'API Key',
       asrLanguage: '認識する言語',
       asrLanguageAuto: '自動検出',
@@ -558,6 +562,8 @@ const messages = {
       translateTo: '{lang}(으)로 번역',
     },
     settings: {
+      announceCaptions: '자막 읽어 주기',
+      announceCaptionsHint: '화면 낭독기를 켜면 확정된 자막과 번역을 읽어 줍니다.',
       apiKey: 'API Key',
       asrLanguage: '인식 언어',
       asrLanguageAuto: '자동 감지',
@@ -756,6 +762,8 @@ const messages = {
       translateTo: '翻译成{lang}',
     },
     settings: {
+      announceCaptions: '朗读字幕',
+      announceCaptionsHint: '开启读屏软件时，播报新定稿的字幕和译文。',
       apiKey: 'API Key',
       asrLanguage: '识别语言',
       asrLanguageAuto: '自动检测',

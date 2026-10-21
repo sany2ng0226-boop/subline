@@ -3,6 +3,7 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { ArrowDown } from '@lucide/vue';
 import type { TranscriptLine } from '../composables/useTranscription';
 import TranslatingDots from './TranslatingDots.vue';
+import { useCaptionAnnouncer } from '../composables/useCaptionAnnouncer';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -16,10 +17,13 @@ const props = defineProps<{
   translateOn?: boolean;
   sourceLang?: string;
   targetLang?: string;
+  /** 读屏播报定稿字幕（设置「朗读字幕」） */
+  announce?: boolean;
 }>();
 function textLang(value?: string): string | undefined {
   return value === 'zh' ? 'zh-Hans' : value === 'auto' ? undefined : value;
 }
+const { announcements } = useCaptionAnnouncer(() => props.lines, () => props.announce);
 const scroller = ref<HTMLElement | null>(null);
 const column = ref<HTMLElement | null>(null);
 const followEnd = ref(true);
@@ -112,6 +116,11 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
           </article>
         </TransitionGroup>
       </div>
+    </div>
+
+    <!-- 读屏区域：视觉隐藏，只追加定稿原文与定稿译文 -->
+    <div v-if="announce" class="sr-only" aria-live="polite">
+      <p v-for="a in announcements" :key="a.id" :lang="textLang(a.kind === 'source' ? sourceLang : targetLang)">{{ a.text }}</p>
     </div>
 
     <Transition name="jump">
