@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F2D30D5E1F5EE144ACEF4D47 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E5074EFA380606E21F5A8916 /* PrivacyInfo.xcprivacy */; };
 		1A6D4AE6D090F18410C1E3B4 /* RealtimeTranslate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24C7999A5D4CCBBBD23E16E7 /* RealtimeTranslate.swift */; };
 		1B83F307931ADA605C09217D /* SherpaOnnx.swift in Sources */ = {isa = PBXBuildFile; fileRef = D081CE749145DD9E4074D805 /* SherpaOnnx.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
@@ -40,6 +41,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		E5074EFA380606E21F5A8916 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		0CA9B0BC19BA6ECBE6FD88BB /* RealtimeAsrPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RealtimeAsrPlugin.swift; path = "../../native-plugin/ios/RealtimeAsrPlugin.swift"; sourceTree = SOURCE_ROOT; };
 		24C7999A5D4CCBBBD23E16E7 /* RealtimeTranslate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RealtimeTranslate.swift; path = "../../native-plugin/ios/RealtimeTranslate.swift"; sourceTree = SOURCE_ROOT; };
 		2A8A9242AD8B78B0DC07F8DA /* sherpa-onnx.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; name = "sherpa-onnx.xcframework"; path = "Frameworks/sherpa-onnx.xcframework"; sourceTree = SOURCE_ROOT; };
@@ -114,6 +116,7 @@
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
 				504EC3131FED79650016851F /* Info.plist */,
+				E5074EFA380606E21F5A8916 /* PrivacyInfo.xcprivacy */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
 				CFA9E673B1FACB7657E2A60A /* MainViewController.swift */,
@@ -204,6 +207,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F2D30D5E1F5EE144ACEF4D47 /* PrivacyInfo.xcprivacy in Resources */,
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
