@@ -80,6 +80,18 @@ describe('desktop audio lifecycle', () => {
   });
 });
 
+describe('global shortcut passthrough', () => {
+  it('forwards onShortcut when preload provides it, and omits it otherwise', () => {
+    const off = vi.fn();
+    const onShortcut = vi.fn(() => off);
+    const bridge = createMacBridge({ platform: 'macos', onStatus: vi.fn(() => vi.fn()), onShortcut } as unknown as ElectronApi);
+    const cb = vi.fn();
+    expect(bridge.onShortcut!(cb)).toBe(off);
+    expect(onShortcut).toHaveBeenCalledWith(cb);
+    expect(createMacBridge({ platform: 'macos', onStatus: vi.fn(() => vi.fn()) } as unknown as ElectronApi).onShortcut).toBeUndefined();
+  });
+});
+
 describe('crash recovery passthrough', () => {
   it('forwards recovery storage to the host when preload provides it', async () => {
     const recovery = { saveRecovery: vi.fn(async () => {}), loadRecovery: vi.fn(async () => '{"v":1}'),

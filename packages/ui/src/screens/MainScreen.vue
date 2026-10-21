@@ -43,6 +43,7 @@ import {
 } from '../composables/useModelDownloads';
 import { archiveSession, foldersEnabled as archiveFoldersEnabled, suggestArchiveName } from '../composables/useSessionArchive';
 import { recoveryOffer, restoreRecovery, discardRecovery } from '../composables/useRecovery';
+import { onShortcutAction } from '../composables/useShortcuts';
 import { fmtHourMinute } from '../utils/datetime';
 import { archiveErrorKey } from '../utils/archiveError';
 import { micDeniedDescKey, micSettingsOpener } from '../utils/micPermission';
@@ -426,6 +427,12 @@ function stopAwait(): void {
 
 // 切屏卸载时反注册等待订阅，避免后台下载完成误触发已离开的录音等待。
 onUnmounted(() => offAwaitDone?.());
+
+// 全局快捷键（macOS ⌥⌘R）：和点录音按钮走同一流程（缺模型先确认下载、麦克风说明）；按钮禁用时同样不响应。
+onUnmounted(onShortcutAction('toggleRecording', () => {
+  if (preparing.value || recordBusy.value || awaitingRecord.value || languageSaving.value) return;
+  void onRecordClick();
+}));
 
 // 进度模态里每个所等模型的进度：下载中取实时百分比，已下完（仍在等其它模型）显示 100%。
 function awaitTaskName(task: DownloadTask): string {

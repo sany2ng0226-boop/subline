@@ -127,6 +127,7 @@ export function createMacBridge(api: ElectronApi): AppBridge {
     },
 
     // ===== 以下全部直通 window.api =====
+    onShortcut: api.onShortcut ? (cb) => api.onShortcut!(cb) : undefined,
     prewarmPipeline: () => api.prewarmPipeline(),
     getMicStatus: () => api.getMicStatus(),
     openMicSettings: () => api.openMicSettings(),

@@ -3,6 +3,7 @@
 // 仅引用 @rt/core 内的领域类型与回调，保持平台无关；音频采集不在此契约内（隐藏在各宿主实现中）。
 
 import type {
+  ShortcutAction,
   SegmentPayload,
   PartialPayload,
   TranslationPayload,
@@ -44,6 +45,7 @@ export interface CloseGuard {
 export interface AppBridge {
   /** 运行平台标识；UI 据此按平台过滤可用模型、决定音源开关等。 */
   platform: Platform;
+  onShortcut?(cb: (action: ShortcutAction) => void): () => void;
   /**
    * 本平台支持的音频采集来源；缺省视为 `['mic']`。
    * UI 仅当其中含 `'system'` 时才渲染「系统音频 / 麦克风」音源开关。
