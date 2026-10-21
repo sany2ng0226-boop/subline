@@ -32,8 +32,8 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    NSMicrophoneUsageDescription: 用于实时识别与翻译语音（音频仅在本机处理，不上传）
-    NSAudioCaptureUsageDescription: 用于实时识别与翻译系统播放的声音（音频仅在本机处理，不上传）
+    NSMicrophoneUsageDescription: 用于实时识别与翻译语音。语音识别在本机完成，音频不会上传；仅当你启用云端翻译时，识别出的文字会发送到你配置的翻译服务。
+    NSAudioCaptureUsageDescription: 用于实时识别与翻译系统播放的声音。语音识别在本机完成，音频不会上传；仅当你启用云端翻译时，识别出的文字会发送到你配置的翻译服务。
   target:
     - target: dmg
       arch: [arm64]

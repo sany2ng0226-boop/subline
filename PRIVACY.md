@@ -4,6 +4,8 @@
 
 ## 音频与本地识别
 
+麦克风与系统音频用于实时识别与翻译。语音识别在本机完成，音频不会上传；仅当你启用 API／云端翻译时，识别出的文字会发送到你配置的翻译服务（可以是本机或云端服务）。
+
 ASR（语音识别）在本机执行；本次检查的应用录音／识别流程没有上传音频。桌面端在本机进程间传递 PCM，Web 在 AudioWorklet／Worker 内处理，iOS 使用原生音频采集与 sherpa-onnx。云翻译请求不包含 PCM、录音文件或音频编码内容。
 
 依据：[共享识别管线](packages/core/src/asr/transcription-pipeline.ts)、[桌面音频桥接](apps/macos/src/renderer/src/mac-bridge.ts)、[桌面主进程](apps/macos/src/main/index.ts)、[Web ASR](apps/web/src/asr/web-asr.ts)、[Web 识别 Worker](apps/web/src/asr/sherpa-worker.ts)、[iOS 原生识别](apps/ios/native-plugin/ios/RealtimeAsrPlugin.swift)。
