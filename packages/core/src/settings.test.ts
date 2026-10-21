@@ -41,7 +41,8 @@ describe('makeDefaults 母语推断', () => {
   it('默认关闭翻译、引擎为本地 m2m100、云端三项留空', () => {
     const d = makeDefaults([]);
     expect(d.onboarded).toBe(false);
-    expect(d.fontSize).toBe('medium');
+    expect(d.fontSize).toBe('small');
+    expect(d.settingsVersion).toBe(2);
     expect(d.theme).toBe('system');
     expect(d.translation.enabled).toBe(false);
     expect(d.translation.engine).toBe('m2m100');
@@ -63,7 +64,7 @@ describe('withDefaults 字段补齐与校验', () => {
       d,
     );
     expect(s.nativeLang).toBe(d.nativeLang);
-    expect(s.fontSize).toBe('medium');
+    expect(s.fontSize).toBe('small');
     expect(s.theme).toBe('system');
     expect(s.audioSource).toBe('mic');
   });
@@ -71,6 +72,7 @@ describe('withDefaults 字段补齐与校验', () => {
   it('合法字段原样保留', () => {
     const s = withDefaults(
       {
+        settingsVersion: 2,
         onboarded: true,
         nativeLang: 'ja',
         fontSize: 'large',
@@ -136,5 +138,28 @@ describe('withDefaults 字段补齐与校验', () => {
       const s = withDefaults({ asr: { language: 'zh', model: 'paraformer-zh' } }, d);
       expect(s.asr).toEqual({ language: 'zh', model: 'paraformer-zh' });
     });
+  });
+});
+
+describe('settingsVersion 迁移', () => {
+  const d = makeDefaults(['en-US']);
+
+  it('v1 三档字号按像素映射到五档：small→xs、medium→small、large→large', () => {
+    expect(withDefaults({ fontSize: 'small' }, d).fontSize).toBe('xs');
+    expect(withDefaults({ fontSize: 'medium' }, d).fontSize).toBe('small');
+    expect(withDefaults({ fontSize: 'large' }, d).fontSize).toBe('large');
+    expect(withDefaults({ fontSize: 'small' }, d).settingsVersion).toBe(2);
+  });
+
+  it('v2 字号原样保留，迁移只做一次', () => {
+    for (const size of ['xs', 'small', 'medium', 'large', 'xl']) {
+      const once = withDefaults({ settingsVersion: 2, fontSize: size }, d);
+      expect(once.fontSize).toBe(size);
+      expect(withDefaults(once, d).fontSize).toBe(size);
+    }
+  });
+
+  it('非法字号回落默认 small', () => {
+    expect(withDefaults({ settingsVersion: 2, fontSize: 'huge' }, d).fontSize).toBe('small');
   });
 });

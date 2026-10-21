@@ -1,9 +1,9 @@
 import { ref, computed } from 'vue';
 import { i18n } from '../i18n';
 import { bridge } from '../bridge';
-import type { AppSettings, FontSize, ThemePref, UiLang } from '@rt/core';
+import { FONT_SIZES, type AppSettings, type FontSize, type ThemePref, type UiLang } from '@rt/core';
 
-const FONT_PX: Record<FontSize, string> = { small: '13px', medium: '15px', large: '18px' };
+const FONT_PX: Record<FontSize, string> = { xs: '13px', small: '15px', medium: '17px', large: '20px', xl: '24px' };
 
 // 全局单例：整个渲染进程共享同一份设置
 export const settings = ref<AppSettings | null>(null);
@@ -58,6 +58,27 @@ export async function saveSettings(next: AppSettings): Promise<AppSettings> {
   applyFontSize(saved.fontSize);
   applyTheme(saved.theme);
   return saved;
+}
+
+/** 当前字号是否已到最小 / 最大档 */
+export const fontAtMin = computed(() => settings.value?.fontSize === FONT_SIZES[0]);
+export const fontAtMax = computed(() => settings.value?.fontSize === FONT_SIZES[FONT_SIZES.length - 1]);
+
+// 连点 A−/A+ 时串行保存，避免并发写把档位回退
+let fontSaves: Promise<unknown> = Promise.resolve();
+
+/** 字幕字号升降一档：立即生效并持久化（录音中可用） */
+export function stepFontSize(delta: 1 | -1): void {
+  const s = settings.value;
+  if (!s) return;
+  const index = FONT_SIZES.indexOf(s.fontSize);
+  const next = FONT_SIZES[Math.min(FONT_SIZES.length - 1, Math.max(0, index + delta))];
+  if (next === s.fontSize) return;
+  settings.value = { ...s, fontSize: next };
+  applyFontSize(next);
+  fontSaves = fontSaves
+    .then(() => saveSettings({ ...settings.value!, fontSize: next }))
+    .catch((error) => console.error('[settings:font-size]', error));
 }
 
 /** 直接设置主题偏好（持久化） */

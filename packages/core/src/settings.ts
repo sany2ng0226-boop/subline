@@ -1,6 +1,6 @@
 // 应用设置的纯逻辑：默认值生成、字段补齐与语言/模型校验。
 // 不依赖任何平台 API——系统语言由调用方传入，持久化（fs 等）留在各端实现。
-import type { AppSettings, AsrLang, UiLang } from './types';
+import type { AppSettings, AsrLang, FontSize, UiLang } from './types';
 import { DEFAULT_ASR_MODEL_ID, getAsrModel } from './models';
 import { DEFAULT_TRANSLATION_MODEL_ID, getTranslationModel } from './translation/local-spec';
 
@@ -8,6 +8,12 @@ import { DEFAULT_TRANSLATION_MODEL_ID, getTranslationModel } from './translation
 export const UI_LANGS: UiLang[] = ['en', 'ja', 'ko', 'zh'];
 
 const ASR_LANGS: AsrLang[] = ['auto', 'en', 'ja', 'ko', 'zh'];
+
+/** 字幕字号档位，由小到大 */
+export const FONT_SIZES: FontSize[] = ['xs', 'small', 'medium', 'large', 'xl'];
+
+/** 当前设置结构版本 */
+export const SETTINGS_VERSION = 2;
 
 /**
  * 按系统语言猜母语，落到支持的语言之一，否则英语。
@@ -27,9 +33,10 @@ function defaultNativeLang(systemLangs: string[]): UiLang {
 /** 生成默认设置；母语按传入的系统语言推断 */
 export function makeDefaults(systemLangs: string[]): AppSettings {
   return {
+    settingsVersion: SETTINGS_VERSION,
     onboarded: false,
     nativeLang: defaultNativeLang(systemLangs),
-    fontSize: 'medium',
+    fontSize: 'small',
     theme: 'system',
     asr: { language: 'auto', model: DEFAULT_ASR_MODEL_ID },
     // 默认麦克风（全平台可用）；系统音频由支持的端（macOS 14.2+）作为可选项提供。
@@ -56,7 +63,9 @@ export function asAsrLang(v: unknown): AsrLang | null {
 }
 
 /**
- * 补齐缺省字段并校验：无效值一律回落默认，不迁移旧版本数据。
+ * 补齐缺省字段并校验：无效值一律回落默认。
+ * 版本迁移：v1（无 settingsVersion）的三档字号 small 13 / medium 15 / large 18px
+ * 映射到五档的 xs 13 / small 15 / large 20px。
  * @param raw 反序列化得到的原始对象
  * @param defaults 由调用方按系统语言生成的默认值
  */
@@ -66,6 +75,9 @@ export function withDefaults(raw: unknown, defaults: AppSettings): AppSettings {
   const t = (s.translation ?? {}) as Record<string, unknown>;
   const cloud = (t.cloud ?? {}) as Record<string, unknown>;
   const asr = (s.asr ?? {}) as Record<string, unknown>;
+  const version = typeof s.settingsVersion === 'number' ? s.settingsVersion : 1;
+  let fontSize = s.fontSize;
+  if (version < 2) fontSize = fontSize === 'small' ? 'xs' : fontSize === 'medium' ? 'small' : fontSize;
 
   // 识别语言非法则回落 auto。
   const asrLang = asAsrLang(asr.language) ?? d.asr.language;
@@ -75,9 +87,10 @@ export function withDefaults(raw: unknown, defaults: AppSettings): AppSettings {
   const model = asrModel?.languages.includes(asrLang) ? asrModelId : DEFAULT_ASR_MODEL_ID;
 
   return {
+    settingsVersion: SETTINGS_VERSION,
     onboarded: typeof s.onboarded === 'boolean' ? s.onboarded : d.onboarded,
     nativeLang: asUiLang(s.nativeLang) ?? d.nativeLang,
-    fontSize: s.fontSize === 'small' || s.fontSize === 'large' ? s.fontSize : d.fontSize,
+    fontSize: (FONT_SIZES as unknown[]).includes(fontSize) ? (fontSize as FontSize) : d.fontSize,
     theme: s.theme === 'light' || s.theme === 'dark' ? s.theme : d.theme,
     asr: { language: asrLang, model },
     audioSource:

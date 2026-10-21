@@ -120,8 +120,8 @@ export interface TranslationSettings {
   cloud: CloudTranslationConfig;
 }
 
-/** 主页转写字体大小档位 */
-export type FontSize = 'small' | 'medium' | 'large';
+/** 主页转写字体大小档位：xs 13 / small 15 / medium 17 / large 20 / xl 24px */
+export type FontSize = 'xs' | 'small' | 'medium' | 'large' | 'xl';
 
 /** 界面/母语语言码（界面文案 + 翻译目标）。zh=中文（繁体并入简体）。 */
 export type UiLang = 'en' | 'ja' | 'ko' | 'zh';
@@ -212,6 +212,8 @@ export interface AsrSettings {
 
 /** 持久化到本地（electron userData）的应用设置 */
 export interface AppSettings {
+  /** 设置结构版本：2 起字号为五档（旧三档在 withDefaults 中迁移） */
+  settingsVersion: number;
   /** 是否已完成首次语言引导 */
   onboarded: boolean;
   /** 母语：界面语言 + 翻译目标 */

@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { NSelect, NFormItem } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { UI_LANGS } from '@rt/core';
+import { UI_LANGS, FONT_SIZES, type FontSize } from '@rt/core';
 import { LANG_LABELS } from './form';
 import type { GeneralFormData } from './form';
 
@@ -11,11 +11,14 @@ const { t } = useI18n();
 defineProps<{ form: GeneralFormData }>();
 
 const langOptions = UI_LANGS.map((l) => ({ label: LANG_LABELS[l], value: l }));
-const fontOptions = computed(() => [
-  { label: t('settings.fontSmall'), value: 'small' },
-  { label: t('settings.fontMedium'), value: 'medium' },
-  { label: t('settings.fontLarge'), value: 'large' },
-]);
+const FONT_LABELS: Record<FontSize, string> = {
+  xs: 'settings.fontXs',
+  small: 'settings.fontSmall',
+  medium: 'settings.fontMedium',
+  large: 'settings.fontLarge',
+  xl: 'settings.fontXl',
+};
+const fontOptions = computed(() => FONT_SIZES.map((size) => ({ label: t(FONT_LABELS[size]), value: size })));
 const themeOptions = computed(() => [
   { label: t('main.themeLight'), value: 'light' },
   { label: t('main.themeDark'), value: 'dark' },
