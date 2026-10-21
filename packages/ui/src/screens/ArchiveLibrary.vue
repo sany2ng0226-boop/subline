@@ -10,6 +10,7 @@ import UndoBar from '../components/UndoBar.vue';
 import { useArchiveDelete } from '../composables/useArchiveDelete';
 import { bridge } from '../bridge';
 import { fmtDateTime } from '../utils/datetime';
+import { archiveErrorKey } from '../utils/archiveError';
 
 const { t } = useI18n();
 const emit = defineEmits<{ close: [] }>();
@@ -38,7 +39,7 @@ async function run(task: () => Promise<void>): Promise<void> {
   busy.value = true;
   error.value = '';
   try { await task(); }
-  catch (cause) { error.value = t('archive.operationFailed'); console.error('[archive]', cause); }
+  catch (cause) { error.value = t(archiveErrorKey(cause, 'archive.operationFailed')); console.error('[archive]', cause); }
   finally { busy.value = false; }
 }
 function edit(kind: NonNullable<typeof modal.value>, item?: ArchiveSummary | ArchiveRecord): void {

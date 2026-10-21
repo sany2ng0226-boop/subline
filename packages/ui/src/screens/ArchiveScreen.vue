@@ -9,6 +9,7 @@ import ScrollArea from '../components/ScrollArea.vue';
 import UndoBar from '../components/UndoBar.vue';
 import { useArchiveDelete } from '../composables/useArchiveDelete';
 import { fmtDateTime } from '../utils/datetime';
+import { archiveErrorKey } from '../utils/archiveError';
 import { bridge } from '../bridge';
 import ArchiveLibrary from './ArchiveLibrary.vue';
 declare const __INTERNAL_BUILD__: boolean;
@@ -30,7 +31,7 @@ async function open(id: string): Promise<void> {
   try {
     selected.value = await bridge().getArchive(id);
   } catch (cause) {
-    error.value = t('archive.openFailed');
+    error.value = t(archiveErrorKey(cause, 'archive.openFailed'));
     console.error('[archive:open]', cause);
   }
 }
@@ -49,7 +50,7 @@ onMounted(async () => {
   try {
     items.value = await bridge().listArchives();
   } catch (cause) {
-    error.value = t('archive.loadFailed');
+    error.value = t(archiveErrorKey(cause, 'archive.loadFailed'));
     console.error('[archive:list]', cause);
   }
 });

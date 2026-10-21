@@ -32,6 +32,7 @@ import {
 import AudioLevelMeter from '../components/AudioLevelMeter.vue';
 import TranscriptList from '../components/TranscriptList.vue';
 import ModelDownloadModal from '../components/ModelDownloadModal.vue';
+import StatusBanner from '../components/StatusBanner.vue';
 import {
   type DownloadTask,
   startDownloads,
@@ -43,6 +44,7 @@ import {
 import { archiveSession, foldersEnabled as archiveFoldersEnabled, suggestArchiveName } from '../composables/useSessionArchive';
 import { recoveryOffer, restoreRecovery, discardRecovery } from '../composables/useRecovery';
 import { fmtHourMinute } from '../utils/datetime';
+import { archiveErrorKey } from '../utils/archiveError';
 import { bridge } from '../bridge';
 
 const { t } = useI18n();
@@ -121,7 +123,7 @@ async function openArchiveModal(): Promise<void> {
       archiveLibrary.value = await bridge().getArchiveLibrary!();
       archiveFolder.value = archiveLibrary.value.lastFolderId;
     } catch (error) {
-      errorText.value = t('archive.operationFailed');
+      showLocalError(t(archiveErrorKey(error, 'archive.operationFailed')), openArchiveModal);
       console.error('[archive:library]', error);
       return;
     }
@@ -138,7 +140,7 @@ async function confirmArchive(): Promise<void> {
     await archiveSession(archiveName.value, archiveFolder.value);
     archiveModalOpen.value = false;
   } catch (error) {
-    archiveError.value = t('archive.operationFailed');
+    archiveError.value = t(archiveErrorKey(error, 'archive.operationFailed'));
     console.error('[archive:save]', error);
   } finally {
     archiveSaving.value = false;
@@ -168,6 +170,36 @@ const windowsHost = bridge().platform === 'windows';
 const errorDisplay = computed(() =>
   errorCode.value ? t(`errors.${errorCode.value}`) : errorText.value,
 );
+
+// 错误横幅的恢复操作：权限类去系统设置，其余重试。本屏自己报的错（下载、归档库）各自指定重试动作。
+// 记下对应的文案：之后被别的错误覆盖时不会沿用旧的重试动作
+const errorRetry = ref<{ text: string; run: () => void } | null>(null);
+function showLocalError(text: string, retry: () => void): void {
+  errorText.value = text;
+  errorCode.value = null;
+  errorRetry.value = { text, run: retry };
+}
+function dismissError(): void {
+  errorText.value = '';
+  errorCode.value = null;
+}
+const errorAction = computed<{ label: string; run: () => void } | null>(() => {
+  const code = errorCode.value;
+  if (code === 'mic-permission') return { label: t('mic.openSettings'), run: openMicSettings };
+  if (code === 'system-audio-permission') {
+    return bridge().openSystemAudioSettings ? { label: t('mic.openSettings'), run: openSysAudioSettings } : null;
+  }
+  const retry = errorRetry.value;
+  if (!code && retry?.text === errorText.value) return { label: t('download.retry'), run: retry.run };
+  // 识别 / 采集类错误：录音已停，重试即重新开始
+  if (recording.value || recordBusy.value) return null;
+  return { label: t('download.retry'), run: () => void onRecordClick() };
+});
+function runErrorAction(): void {
+  const action = errorAction.value;
+  dismissError();
+  action?.run();
+}
 
 // 强制更新入口仅在桥接提供该能力时显示（目前只有 Web PWA 实现，原生端无此项）。
 // setup 时 bridge 已由 mountApp 注入，可同步判定。
@@ -365,8 +397,7 @@ function beginAwait(tasks: DownloadTask[]): void {
     if (!ok) {
       // 失败或被取消：退出等待，提示下载失败（用户可到模型管理重试）。
       stopAwait();
-      errorText.value = t('download.failed');
-      errorCode.value = null;
+      showLocalError(t('download.failed'), () => void onRecordClick());
       return;
     }
     remaining.delete(k);
@@ -471,8 +502,6 @@ function openMicSettings(): void {
 <template>
   <div class="flex h-full flex-col">
     <header class="app-header">
-      <span v-if="errorText" class="min-w-0 truncate text-xs text-[var(--rt-live)]">{{ errorDisplay }}</span>
-
       <div class="flex-1" />
 
       <!-- 归档状态：有内容即「未归档」（点击归档，录音中锁定）；刚归档完显示时刻 -->
@@ -630,6 +659,15 @@ function openMicSettings(): void {
         </n-dropdown>
       </div>
     </header>
+
+    <!-- 错误横幅：完整文案 + 恢复操作 + 关闭（替代顶栏截断的小字） -->
+    <status-banner
+      v-if="errorText"
+      :message="errorDisplay"
+      :action-label="errorAction?.label"
+      @action="runErrorAction"
+      @dismiss="dismissError"
+    />
 
     <!-- 上次未归档内容的恢复条：非模态，不挡录音；恢复后放在当前内容之前 -->
     <div v-if="recoveryOffer" class="recovery-bar" role="status">

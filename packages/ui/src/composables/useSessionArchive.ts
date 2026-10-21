@@ -3,6 +3,7 @@ import { suggestArchiveTitle } from '@rt/core';
 import { i18n } from '../i18n';
 import { bridge } from '../bridge';
 import { fmtDateTime } from '../utils/datetime';
+import { archiveErrorKey } from '../utils/archiveError';
 import {
   lines,
   recording,
@@ -66,7 +67,7 @@ async function archiveBeforeClose(): Promise<boolean> {
     await archiveSession(await suggestArchiveName(), folderId);
     return true;
   } catch (error) {
-    errorText.value = i18n.global.t('archive.operationFailed');
+    errorText.value = i18n.global.t(archiveErrorKey(error, 'archive.operationFailed'));
     console.error('[archive:before-close]', error);
     return false;
   }
