@@ -112,6 +112,8 @@ function applyPlatformConstraints(s: AppSettings): AppSettings {
 
 function preventUnload(event: BeforeUnloadEvent): void {
   event.preventDefault();
+  // 只认 returnValue 的旧内核（含部分 Safari / Chromium 旧版）需要赋值才会弹离开确认
+  event.returnValue = '';
 }
 
 export function createWebBridge(): AppBridge {

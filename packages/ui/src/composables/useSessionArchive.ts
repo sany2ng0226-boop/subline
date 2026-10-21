@@ -13,6 +13,8 @@ import {
   ensureStopped,
   hasUnsavedContent,
   lastArchivedAt,
+  canUndoDelete,
+  undoDelete,
 } from './useTranscription';
 import { persistRecoveryNow } from './useRecovery';
 
@@ -57,6 +59,8 @@ export async function archiveSession(name: string, folderId?: string | null): Pr
 async function archiveBeforeClose(): Promise<boolean> {
   try {
     await ensureStopped();
+    // 撤销期内选「归档并退出」：把刚清空的内容找回来再归档，而不是让它随退出消失
+    if (!lines.length && canUndoDelete.value) undoDelete();
     if (!lines.length) return true;
     const folderId = foldersEnabled() ? (await bridge().getArchiveLibrary!()).lastFolderId : undefined;
     await archiveSession(await suggestArchiveName(), folderId);
@@ -68,15 +72,19 @@ async function archiveBeforeClose(): Promise<boolean> {
   }
 }
 
-/** 关闭保护：有未归档内容时让宿主在关窗 / 退出 / 离开页面前确认。由 mountApp 注册一次。 */
+/**
+ * 关闭保护：有未归档内容、或清空后仍在撤销期时，让宿主在关窗 / 退出 / 离开页面前确认。
+ * 由 mountApp 注册一次。
+ */
 export function registerCloseGuard(): void {
   const { t, locale } = i18n.global;
   watch(
-    () => [hasUnsavedContent.value, recording.value || recordBusy.value, locale.value] as const,
-    ([unsaved, live]) => {
-      bridge().setCloseGuard?.(unsaved ? {
+    () => [hasUnsavedContent.value, recording.value || recordBusy.value, canUndoDelete.value, locale.value] as const,
+    ([unsaved, live, undoable]) => {
+      const detail = live ? 'main.closeDetailRecording' : unsaved ? 'main.closeDetail' : 'main.closeUndoable';
+      bridge().setCloseGuard?.(unsaved || undoable ? {
         message: t('main.closeMessage'),
-        detail: t(live ? 'main.closeDetailRecording' : 'main.closeDetail'),
+        detail: t(detail),
         archive: t('main.closeArchive'),
         discard: t('main.closeDiscard'),
         cancel: t('main.closeCancel'),

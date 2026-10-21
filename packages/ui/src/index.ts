@@ -23,9 +23,11 @@ export function mountApp(selector: string, b: AppBridge): void {
   // 桥接就绪后再注册一次性 IPC 监听（内部有 registered 守卫，重复调用安全）。
   registerTranscriptionListeners();
   registerModelDownloadListeners();
-  // 关闭保护跟随应用整个生命周期（离开主页去设置 / 归档页时内容仍在内存，仍需拦截退出）。
-  registerCloseGuard();
-  // 崩溃暂存只归主窗管：悬浮窗收到同样的字幕，不能重复写入或弹恢复条。
-  if (!isOverlayWindow()) void initRecovery({ lang: () => settings.value?.asr.language });
+  // 关闭保护与崩溃暂存只归主窗管：悬浮窗收到同样的字幕，不能重复拦截退出、重复写入或弹恢复条。
+  if (!isOverlayWindow()) {
+    // 关闭保护跟随应用整个生命周期（离开主页去设置 / 归档页时内容仍在内存，仍需拦截退出）。
+    registerCloseGuard();
+    void initRecovery({ lang: () => settings.value?.asr.language });
+  }
   createApp(App).use(i18n).mount(selector);
 }
