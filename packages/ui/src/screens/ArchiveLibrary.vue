@@ -25,6 +25,8 @@ const modal = ref<'create' | 'folderRename' | 'rename' | 'move' | 'delete' | nul
 const target = ref<ArchiveSummary | ArchiveRecord | null>(null);
 const name = ref('');
 const destination = ref<string | null>(null);
+// 删除确认默认聚焦「取消」，回车不会误删
+const cancelBtn = ref<{ $el: HTMLElement } | null>(null);
 const visible = computed(() => items.value.filter((item) => folder.value === 'all' || (item.folderId ?? null) === folder.value));
 const folderOptions = computed(() => [{ label: t('archive.unfiled'), value: '' }, ...library.value.folders.map((f) => ({ label: f.name, value: f.id }))]);
 const location = computed(() => folder.value === 'all' ? t('archive.all') : folderName(folder.value));
@@ -133,14 +135,16 @@ onMounted(async () => {
         </div>
       </ScrollArea>
     </div>
-    <n-modal :show="modal !== null" preset="card" :title="modalTitle" style="width: 390px; max-width: calc(100vw - 32px)" :mask-closable="!busy" :closable="!busy" @update:show="(show) => { if (!show && !busy) modal = null; }">
+    <n-modal :show="modal !== null" preset="card" :title="modalTitle" style="width: 390px; max-width: calc(100vw - 32px)" :mask-closable="!busy" :closable="!busy" :auto-focus="modal !== 'delete'"
+      @update:show="(show) => { if (!show && !busy) modal = null; }" @after-enter="modal === 'delete' && cancelBtn?.$el.focus()">
       <n-select v-if="modal === 'move'" :value="destination ?? ''" :options="folderOptions" :disabled="busy" :aria-label="t('archive.folder')" @update:value="destination = $event || null" />
       <p v-else-if="modal === 'delete'" class="break-words">{{ t('archive.confirmDelete', { name: target?.name }) }}</p>
       <n-input v-else v-model:value="name" autofocus :maxlength="120" :disabled="busy" :aria-label="modalTitle" @keydown.enter="name.trim() && !busy && confirm()" />
       <p v-if="error" role="alert" class="mt-2 text-sm text-[var(--rt-live)]">{{ error }}</p>
       <template #footer><div class="flex justify-end gap-2">
-        <n-button :disabled="busy" @click="modal = null">{{ t('archive.cancel') }}</n-button>
-        <n-button type="primary" :loading="busy" :disabled="busy || (!['move', 'delete'].includes(modal ?? '') && !name.trim())" @click="confirm">{{ t('archive.save') }}</n-button>
+        <n-button ref="cancelBtn" :disabled="busy" @click="modal = null">{{ t('archive.cancel') }}</n-button>
+        <n-button v-if="modal === 'delete'" type="error" @click="confirm">{{ t('archive.deleteConfirmOk') }}</n-button>
+        <n-button v-else type="primary" :loading="busy" :disabled="busy || (modal !== 'move' && !name.trim())" @click="confirm">{{ t('archive.save') }}</n-button>
       </div></template>
     </n-modal>
     <UndoBar v-if="removal.pending.value" :message="t('archive.deleted')" @undo="removal.undo()" @dismiss="removal.flush()" />
