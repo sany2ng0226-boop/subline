@@ -52,16 +52,28 @@ export async function loadSettings(): Promise<AppSettings> {
   return s;
 }
 
+let settingsSaves: Promise<unknown> = Promise.resolve();
+
 /** 持久化整份设置，并重新应用语言/字体/主题 */
-export async function saveSettings(next: AppSettings): Promise<AppSettings> {
-  // 去掉 Vue 响应式 Proxy，否则 Electron IPC 结构化克隆会抛 "could not be cloned"
-  const plain: AppSettings = JSON.parse(JSON.stringify(next));
-  const saved = await bridge().saveSettings(plain);
-  settings.value = saved;
-  applyLocale(saved.nativeLang);
-  applyFontSize(saved.fontSize);
-  applyTheme(saved.theme);
-  return saved;
+export function saveSettings(next: AppSettings): Promise<AppSettings> {
+  const patch = Object.fromEntries(
+    Object.entries(next).filter(([key, value]) =>
+      JSON.stringify(value) !== JSON.stringify(settings.value?.[key as keyof AppSettings])),
+  );
+  settings.value = { ...settings.value, ...next };
+  applyLocale(next.nativeLang);
+  applyFontSize(next.fontSize);
+  applyTheme(next.theme);
+  const save = settingsSaves.then(async () => {
+    // 在执行时合并最新设置，并去掉 Electron IPC 无法克隆的 Vue Proxy。
+    const plain: AppSettings = JSON.parse(JSON.stringify({ ...settings.value, ...patch }));
+    const saved = await bridge().saveSettings(plain);
+    // 宿主可能返回旧快照，不能覆盖保存期间发生的本地修改。
+    settings.value = { ...saved, ...settings.value };
+    return settings.value;
+  });
+  settingsSaves = save.catch(() => {});
+  return save;
 }
 
 // 字号档位从小到大，A−/A+ 每次移动一档
@@ -71,9 +83,6 @@ const FONT_TIERS: SettingsFontSize[] = ['xs', 'small', 'medium', 'large', 'xl'];
 export const fontAtMin = computed(() => settings.value?.fontSize === FONT_TIERS[0]);
 export const fontAtMax = computed(() => settings.value?.fontSize === FONT_TIERS[FONT_TIERS.length - 1]);
 
-// 连点 A−/A+ 时串行保存，避免并发写把档位回退
-let fontSaves: Promise<unknown> = Promise.resolve();
-
 /** 字幕字号升降一档：立即生效并持久化（录音中可用） */
 export function stepFontSize(delta: 1 | -1): void {
   const s = settings.value;
@@ -82,10 +91,7 @@ export function stepFontSize(delta: 1 | -1): void {
   if (index < 0) return;
   const next = FONT_TIERS[Math.min(FONT_TIERS.length - 1, Math.max(0, index + delta))];
   if (next === s.fontSize) return;
-  settings.value = { ...s, fontSize: next };
-  applyFontSize(next);
-  fontSaves = fontSaves
-    .then(() => saveSettings({ ...settings.value!, fontSize: next }))
+  void saveSettings({ ...s, fontSize: next })
     .catch((error) => console.error('[settings:font-size]', error));
 }
 
