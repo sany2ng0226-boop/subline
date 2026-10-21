@@ -75,7 +75,7 @@ onMounted(async () => {
       </span>
     </header>
 
-    <p v-if="error || removal.failed.value" role="alert" class="px-5 py-2 text-sm text-red-500">
+    <p v-if="error || removal.failed.value" role="alert" class="px-5 py-2 text-sm text-[var(--rt-live)]">
       {{ removal.failed.value ? t('archive.deleteFailed') : error }}
     </p>
 
@@ -96,7 +96,7 @@ onMounted(async () => {
     <ScrollArea v-else class="flex-1">
       <p
         v-if="items.length === 0"
-        class="mt-16 text-center text-sm text-neutral-400 dark:text-neutral-500"
+        class="mt-16 text-center text-sm text-[var(--rt-ink-3)]"
       >
         {{ t('archive.empty') }}
       </p>
@@ -112,11 +112,11 @@ onMounted(async () => {
           >
             <div class="flex items-center gap-2">
               <span class="truncate font-medium">{{ it.name }}</span>
-              <span class="shrink-0 text-xs text-neutral-400 dark:text-neutral-500">
+              <span class="shrink-0 text-xs text-[var(--rt-ink-3)]">
                 {{ fmtDateTime(it.createdAt) }}
               </span>
             </div>
-            <div class="mt-0.5 truncate text-xs text-neutral-400 dark:text-neutral-500">
+            <div class="mt-0.5 truncate text-xs text-[var(--rt-ink-3)]">
               {{ it.lastLine }}
             </div>
           </button>

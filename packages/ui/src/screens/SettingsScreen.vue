@@ -214,7 +214,7 @@ function onDownloadConfirm(tasks: DownloadTask[]): void {
         <div class="hidden flex-1 sm:block" />
         <p
           v-if="appVersion"
-          class="hidden text-center text-[11px] text-neutral-400 select-text dark:text-neutral-500 sm:block"
+          class="hidden text-center text-[11px] text-[var(--rt-ink-3)] select-text sm:block"
         >
           {{ t('settings.version') }} {{ appVersion }}
         </p>
@@ -235,7 +235,7 @@ function onDownloadConfirm(tasks: DownloadTask[]): void {
 
           <p
             v-if="appVersion"
-            class="mt-8 text-center text-[11px] text-neutral-400 select-text dark:text-neutral-500 sm:hidden"
+            class="mt-8 text-center text-[11px] text-[var(--rt-ink-3)] select-text sm:hidden"
           >
             {{ t('settings.version') }} {{ appVersion }}
           </p>

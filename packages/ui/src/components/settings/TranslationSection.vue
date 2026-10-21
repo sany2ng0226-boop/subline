@@ -206,7 +206,7 @@ const modelOptions = computed(() => {
            等高的底部留白，保证无论以哪种状态收尾（有无测试按钮/错误文案），表单底边与
            后续内容的间距都一致。用 padding 而非 margin，避免与相邻元素发生外边距折叠。 -->
       <div class="pb-6">
-        <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{{ t('settings.cloudHint') }}</p>
+        <p class="mt-1 text-xs text-[var(--rt-ink-3)]">{{ t('settings.cloudHint') }}</p>
 
         <!-- 平台支持时才有测试：必填齐全才可点击；仅作连通性自查，不阻断保存 -->
         <template v-if="canTestCloud">
@@ -221,16 +221,16 @@ const modelOptions = computed(() => {
             </n-button>
             <span
               v-if="cloudTest === 'ok'"
-              class="text-xs font-medium text-green-600 dark:text-green-400"
+              class="text-xs font-medium text-[var(--rt-ok)]"
             >✓ {{ t('settings.testOk') }}</span>
             <span
               v-else-if="cloudTest === 'error'"
-              class="text-xs font-medium text-red-600 dark:text-red-400"
+              class="text-xs font-medium text-[var(--rt-live)]"
             >{{ t('settings.testFail') }}</span>
           </div>
           <p
             v-if="cloudTest === 'error' && cloudTestError"
-            class="mt-1 break-words text-xs text-red-500 dark:text-red-400"
+            class="mt-1 break-words text-xs text-[var(--rt-live)]"
           >{{ cloudTestError }}</p>
         </template>
       </div>

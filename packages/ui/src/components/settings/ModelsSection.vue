@@ -93,7 +93,7 @@ function retry(m: ModelInfo): void {
 <template>
   <div>
     <section v-if="asrModels.length" class="mb-6">
-      <h2 class="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+      <h2 class="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--rt-ink-3)]">
         {{ t('modelsScreen.asrGroup') }}
       </h2>
       <ul>
@@ -109,7 +109,7 @@ function retry(m: ModelInfo): void {
                 {{ t('modelsScreen.inUse') }}
               </n-tag>
             </div>
-            <div class="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
+            <div class="mt-0.5 text-xs text-[var(--rt-ink-3)]">
               <span class="tabular-nums">{{ sizeText(m) }}</span>
               <span v-if="isDownloading(m.kind, m.id)"> · {{ t('download.downloading') }}</span>
               <span v-else-if="!m.downloaded"> · {{ t('modelsScreen.notDownloaded') }}</span>
@@ -182,7 +182,7 @@ function retry(m: ModelInfo): void {
     </section>
 
     <section v-if="translationModels.length">
-      <h2 class="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+      <h2 class="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--rt-ink-3)]">
         {{ t('modelsScreen.translationGroup') }}
       </h2>
       <ul>
@@ -198,7 +198,7 @@ function retry(m: ModelInfo): void {
                 {{ t('modelsScreen.inUse') }}
               </n-tag>
             </div>
-            <div class="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
+            <div class="mt-0.5 text-xs text-[var(--rt-ink-3)]">
               <span class="tabular-nums">{{ sizeText(m) }}</span>
               <span v-if="isDownloading(m.kind, m.id)"> · {{ t('download.downloading') }}</span>
               <span v-else-if="!m.downloaded"> · {{ t('modelsScreen.notDownloaded') }}</span>

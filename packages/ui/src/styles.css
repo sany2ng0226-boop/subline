@@ -12,18 +12,23 @@
   /* 主页转写字体档位（small/medium/large 由 JS 设置） */
   --transcript-size: 15px;
 
-  /* 视觉 token：主页/归档/设置共用。强调色只有一个（译文、电平图、焦点），录音态单独用红。 */
+  /* 视觉 token：主页/归档/设置共用。强调色只有一个（译文、电平图、焦点），录音态单独用红。
+     文字类 token 对 bg / surface 均 ≥ 4.5:1（WCAG AA），由 tokens.test.ts 断言。 */
   --rt-bg: #ffffff;
   --rt-surface: #f6f6f4;
   --rt-line: #e8e8e5;
   --rt-ink: #18181b;
   --rt-ink-2: #3f3f46;
-  --rt-ink-3: #8a8a93;
+  --rt-ink-3: #6b6b74;
   --rt-accent: #3557d6;
   --rt-accent-ink: #2c47ad;
   --rt-accent-soft: rgba(53, 87, 214, 0.1);
-  --rt-live: #e5484d;
-  --rt-live-soft: rgba(229, 72, 77, 0.12);
+  --rt-live: #d13438;
+  --rt-live-soft: rgba(209, 52, 56, 0.12);
+  /* 录音按钮等实心红底（配白字 4.93:1），两套主题共用 */
+  --rt-live-solid: #d13438;
+  /* 成功提示文字 */
+  --rt-ok: #1f7a3f;
   --rt-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 html.dark {
@@ -32,12 +37,13 @@ html.dark {
   --rt-line: #3a3b44;
   --rt-ink: #f2f2f4;
   --rt-ink-2: #c9c9d1;
-  --rt-ink-3: #7c7d88;
+  --rt-ink-3: #9a9ba6;
   --rt-accent: #8ea2ff;
   --rt-accent-ink: #aebcff;
   --rt-accent-soft: rgba(142, 162, 255, 0.14);
   --rt-live: #ff6369;
   --rt-live-soft: rgba(255, 99, 105, 0.16);
+  --rt-ok: #5fd08a;
 }
 
 html,

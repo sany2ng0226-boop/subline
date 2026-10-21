@@ -36,7 +36,7 @@ function onCancel(): void {
     :mask-closable="false"
     :close-on-esc="false"
   >
-    <p class="mb-3 text-sm text-neutral-500 dark:text-neutral-400">{{ t('download.desc') }}</p>
+    <p class="mb-3 text-sm text-[var(--rt-ink-3)]">{{ t('download.desc') }}</p>
     <ul class="mb-2 space-y-1.5">
       <li
         v-for="(task, i) in tasks"
@@ -44,7 +44,7 @@ function onCancel(): void {
         class="flex items-center justify-between gap-3 text-sm"
       >
         <span class="min-w-0 truncate">{{ t(task.nameKey) }}</span>
-        <span class="shrink-0 tabular-nums text-neutral-500 dark:text-neutral-400">{{ humanBytes(task.sizeBytes) }}</span>
+        <span class="shrink-0 tabular-nums text-[var(--rt-ink-3)]">{{ humanBytes(task.sizeBytes) }}</span>
       </li>
     </ul>
     <div
