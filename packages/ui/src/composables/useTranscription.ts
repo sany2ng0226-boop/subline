@@ -216,8 +216,12 @@ export function clearTranscript(): void {
 let clearedLines: TranscriptLine[] = [];
 export const canUndoDelete = ref(false);
 
+// 最近一次归档成功的时刻：主页清空后顶栏显示「已归档 · HH:mm」；删除内容后不再沿用旧时刻。
+export const lastArchivedAt = ref<number | null>(null);
+
 /** 删除主页内容，但保留一次撤销机会 */
 export function deleteTranscript(): void {
+  lastArchivedAt.value = null;
   clearedLines = lines.splice(0, lines.length);
   resetDraft();
   canUndoDelete.value = clearedLines.length > 0;

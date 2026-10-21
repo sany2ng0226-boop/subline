@@ -22,6 +22,7 @@ import {
   undoDelete,
   dismissUndo,
   canUndoDelete,
+  lastArchivedAt,
   translationLoading,
   translationError,
   translationErrorDetail,
@@ -40,6 +41,7 @@ import {
   downloadEntry,
 } from '../composables/useModelDownloads';
 import { archiveSession, foldersEnabled as archiveFoldersEnabled, suggestArchiveName } from '../composables/useSessionArchive';
+import { fmtHourMinute } from '../utils/datetime';
 import { bridge } from '../bridge';
 
 const { t } = useI18n();
@@ -78,21 +80,6 @@ const deleteOption = (disabled = false): DropdownMixedOption => ({
   props: disabled ? undefined : { style: { color: DANGER } },
   disabled,
 });
-
-// 清屏按钮：点击弹下拉，归档在主位，删除在最后
-const clearOptions = computed<DropdownMixedOption[]>(() => [
-  { key: 'archive', label: t('main.archive'), icon: () => h(Archive, { size: 16 }) },
-  { type: 'divider', key: 'd-clear' },
-  deleteOption(),
-]);
-
-function onClearSelect(key: string): void {
-  if (key === 'delete') {
-    requestClear();
-  } else {
-    void openArchiveModal();
-  }
-}
 
 // 清空前确认；确认后仍可在 8 秒内撤销（被删的行暂存在内存快照里）
 const clearConfirmOpen = ref(false);
@@ -157,8 +144,19 @@ async function confirmArchive(): Promise<void> {
   }
 }
 
-// 未归档提示：停止后主页仍有定稿行即视为未保存（归档成功会清空主页），录音中不打扰。
-const showUnsaved = computed(() => hasContent.value && !recording.value && !recordBusy.value);
+// 顶栏归档状态：有定稿行即「未归档」（归档成功会清空主页）；刚归档完则显示「已归档 · HH:mm」。
+const archivedLabel = computed(() =>
+  !hasContent.value && !recording.value && lastArchivedAt.value !== null
+    ? t('main.archivedAt', { time: fmtHourMinute(lastArchivedAt.value) })
+    : '',
+);
+
+// 停止录音后的提示条：非阻塞，可「稍后」收起；再次开始录音、归档或清空后自动消失。
+const stopNoticeOpen = ref(false);
+watch(recording, (live, wasLive) => {
+  stopNoticeOpen.value = !live && !!wasLive && hasContent.value;
+});
+const showStopNotice = computed(() => stopNoticeOpen.value && hasContent.value && !recording.value);
 
 // 是否开启翻译：现由设置里的「翻译方式」决定（选了模型即启用），主页不再有独立开关。
 // 仍需此值让转写列表决定是否显示「翻译中」等待动画。
@@ -454,10 +452,11 @@ function openMicSettings(): void {
 
       <div class="flex-1" />
 
-      <!-- 停止后仍有未归档内容：常驻提示，点击直接打开归档弹窗 -->
-      <button v-if="showUnsaved" type="button" class="unsaved-btn" @click="openArchiveModal">
+      <!-- 归档状态：有内容即「未归档」（点击归档，录音中锁定）；刚归档完显示时刻 -->
+      <button v-if="hasContent" type="button" class="unsaved-btn" :disabled="headerLocked" @click="openArchiveModal">
         <span class="unsaved-dot" aria-hidden="true" />{{ t('main.unsaved') }}
       </button>
+      <span v-else-if="archivedLabel" class="archived-label">{{ archivedLabel }}</span>
 
       <!-- 模型加载状态：顶栏内联，转圈图标 + 文案；hover 看具体加载项 -->
       <n-tooltip v-if="loadingItems.length">
@@ -489,15 +488,23 @@ function openMicSettings(): void {
       <div class="flex items-center gap-3 max-sm:hidden">
         <!-- 次要操作收进一组图标，和主操作（电平 / 语言 / 录音）之间用细分隔线拉开层级 -->
         <div class="tool-group">
-          <!-- NDropdown 无 disabled 属性：无内容或录音锁定时直接渲染禁用按钮，避免仍能弹出菜单 -->
-          <n-dropdown v-if="hasContent && !headerLocked" trigger="click" :options="clearOptions" @select="onClearSelect">
-            <n-button quaternary circle size="small" :aria-label="t('main.clear')">
-              <template #icon><Eraser :size="17" /></template>
-            </n-button>
-          </n-dropdown>
-          <n-button v-else quaternary circle size="small" disabled :aria-label="t('main.clear')">
-            <template #icon><Eraser :size="17" /></template>
-          </n-button>
+          <n-tooltip>
+            <template #trigger>
+              <n-button quaternary circle size="small" :disabled="!hasContent || headerLocked" :aria-label="t('main.archive')" @click="openArchiveModal">
+                <template #icon><Archive :size="17" /></template>
+              </n-button>
+            </template>
+            {{ t('main.archive') }}
+          </n-tooltip>
+          <!-- 橡皮擦只表示清空：点击弹确认框，确认后 8 秒内可撤销 -->
+          <n-tooltip>
+            <template #trigger>
+              <n-button quaternary circle size="small" :disabled="!hasContent || headerLocked" :aria-label="t('main.clear')" @click="requestClear">
+                <template #icon><Eraser :size="17" /></template>
+              </n-button>
+            </template>
+            {{ t('main.clear') }}
+          </n-tooltip>
           <n-tooltip>
             <template #trigger>
               <n-button quaternary circle size="small" :disabled="headerLocked" :aria-label="t('main.viewArchives')" @click="$emit('open-archive')">
@@ -590,6 +597,15 @@ function openMicSettings(): void {
       :source-lang="settings?.asr.language"
       :target-lang="settings?.nativeLang"
     />
+
+    <!-- 停止录音后的未归档提示：不挡操作，可稍后再归档 -->
+    <div v-if="showStopNotice" class="stop-notice" role="status">
+      <span class="min-w-0 truncate">{{ t('main.stopNotice') }}</span>
+      <div class="flex shrink-0 items-center gap-4">
+        <n-button text size="small" @click="stopNoticeOpen = false">{{ t('main.later') }}</n-button>
+        <n-button text type="primary" size="small" @click="openArchiveModal">{{ t('main.archive') }}</n-button>
+      </div>
+    </div>
 
     <!-- 清空确认：默认焦点在「取消」，回车不会误删 -->
     <n-modal
@@ -809,7 +825,20 @@ function openMicSettings(): void {
   background: transparent;
   cursor: pointer;
 }
-.unsaved-btn:hover { color: var(--rt-ink); }
+.unsaved-btn:hover:not(:disabled) { color: var(--rt-ink); }
+.unsaved-btn:disabled { opacity: 0.5; cursor: default; }
+.archived-label { font-size: 12px; white-space: nowrap; color: var(--rt-ink-3); }
+
+.stop-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 24px;
+  border-top: 1px solid var(--rt-line);
+  font-size: 13px;
+  color: var(--rt-ink-2);
+}
 .unsaved-btn:focus-visible { outline: 2px solid var(--rt-accent); outline-offset: 2px; }
 .unsaved-dot { width: 6px; height: 6px; border-radius: 50%; background: #e0a43a; }
 
@@ -838,5 +867,6 @@ function openMicSettings(): void {
   .app-header { min-height: 52px; padding: 8px 12px 8px 16px; }
   /* 避开底部圆形录音按钮 */
   .undo-bar { bottom: calc(env(safe-area-inset-bottom) + 100px); }
+  .stop-notice { margin-bottom: calc(env(safe-area-inset-bottom) + 98px); padding: 10px 16px; }
 }
 </style>

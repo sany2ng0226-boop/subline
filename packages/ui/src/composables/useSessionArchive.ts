@@ -12,6 +12,7 @@ import {
   clearTranscript,
   ensureStopped,
   hasUnsavedContent,
+  lastArchivedAt,
 } from './useTranscription';
 
 declare const __INTERNAL_BUILD__: boolean;
@@ -46,6 +47,7 @@ export async function suggestArchiveName(): Promise<string> {
 export async function archiveSession(name: string, folderId?: string | null): Promise<void> {
   await bridge().saveArchive(name.trim() || defaultArchiveName(), archiveSnapshot(), foldersEnabled() ? folderId : undefined);
   clearTranscript();
+  lastArchivedAt.value = Date.now();
 }
 
 // 关闭确认框里选「归档并退出」：先停录（等最后一句定稿），再按默认名归档到上次使用的文件夹。
