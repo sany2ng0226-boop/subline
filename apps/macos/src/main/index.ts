@@ -7,6 +7,7 @@ import {
   app,
   BrowserWindow,
   desktopCapturer,
+  dialog,
   ipcMain,
   session,
   shell,
@@ -31,6 +32,7 @@ import {
   type AsrLang,
   type ModelInfo,
   type ModelKind,
+  type CloseGuard,
 } from '@rt/core';
 import { localModelCached } from './translation/model-cache';
 import { downloadTranslationModel } from './translation/model-downloader';
@@ -94,6 +96,8 @@ const MODELS_DIR = !app.isPackaged && process.env['RT_MODELS_DIR']
 const TRANSLATION_CACHE_DIR = path.join(MODELS_DIR, 'transformers');
 
 let win: BrowserWindow | null = null;
+// 渲染层在主页有未归档内容或正在录音时设置；关窗 / ⌘Q 前据此确认，避免一键丢掉整节课。
+let closeGuard: CloseGuard | null = null;
 // ASR 识别跑在独立的 utilityProcess 子进程，主进程只转发音频、不做推理
 let asrChild: UtilityProcess | null = null;
 let asrReady: Promise<void> | null = null;
@@ -203,6 +207,19 @@ function createWindow(): void {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
     },
+  });
+  win.on('close', (event) => {
+    if (!closeGuard || !win) return;
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'warning',
+      message: closeGuard.message,
+      detail: closeGuard.detail,
+      buttons: [closeGuard.cancel, closeGuard.confirm],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    if (choice === 0) event.preventDefault();
+    else closeGuard = null;
   });
   win.on('page-title-updated', (event) => {
     if (app.isPackaged) event.preventDefault();
@@ -497,6 +514,10 @@ ipcMain.on('mic:open-settings', () => {
   } else if (process.platform === 'win32') {
     void shell.openExternal('ms-settings:privacy-microphone');
   }
+});
+
+ipcMain.on('window:close-guard', (_event, guard: CloseGuard | null) => {
+  closeGuard = guard;
 });
 
 // 系统音频录制权限被拒后的引导：打开「屏幕与系统音频录制」隐私页

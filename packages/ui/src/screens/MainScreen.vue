@@ -2,7 +2,7 @@
 import { computed, ref, h, watch, onUnmounted } from 'vue';
 import { NButton, NModal, NInput, NDropdown, NTooltip, NProgress, NSelect } from 'naive-ui';
 import type { DropdownMixedOption } from 'naive-ui/es/dropdown/src/interface';
-import { Settings, Trash2, Archive, Library, Eraser, LoaderCircle, TriangleAlert, MoreHorizontal, Mic, MonitorSpeaker, Square, RefreshCw } from '@lucide/vue';
+import { Settings, Trash2, Archive, Library, Eraser, LoaderCircle, TriangleAlert, MoreHorizontal, Mic, MonitorSpeaker, Square, RefreshCw, X } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { getAsrModel, getTranslationModel, UI_LANGS, asrModelsFor, DEFAULT_ASR_MODEL_ID, type AsrLang, suggestArchiveTitle, type ArchiveLibrary } from '@rt/core';
 import { LANG_LABELS } from '../components/settings/form';
@@ -19,6 +19,10 @@ import {
   recordBusy,
   toggleRecording,
   clearTranscript,
+  deleteTranscript,
+  undoDelete,
+  dismissUndo,
+  canUndoDelete,
   translationLoading,
   translationError,
   translationErrorDetail,
@@ -74,7 +78,7 @@ const clearOptions = computed(() => [
 
 function onClearSelect(key: string): void {
   if (key === 'delete') {
-    clearTranscript();
+    deleteTranscript();
   } else {
     void openArchiveModal();
   }
@@ -137,6 +141,23 @@ async function confirmArchive(): Promise<void> {
     archiveSaving.value = false;
   }
 }
+
+// 未归档提示：停止后主页仍有定稿行即视为未保存（归档成功会清空主页），录音中不打扰。
+const showUnsaved = computed(() => hasContent.value && !recording.value && !recordBusy.value);
+
+// 关闭保护：正在录音或有未归档内容时，关窗 / 退出 / 离开页面前要求确认。
+watch(
+  () => [recording.value || recordBusy.value, hasContent.value, t('main.closeConfirm')] as const,
+  ([live, content]) => {
+    bridge().setCloseGuard?.(live || content ? {
+      message: t(live ? 'main.closeRecording' : 'main.closeUnsaved'),
+      detail: t('main.closeDetail'),
+      confirm: t('main.closeConfirm'),
+      cancel: t('main.closeCancel'),
+    } : null);
+  },
+  { immediate: true },
+);
 
 // 是否开启翻译：现由设置里的「翻译方式」决定（选了模型即启用），主页不再有独立开关。
 // 仍需此值让转写列表决定是否显示「翻译中」等待动画。
@@ -214,7 +235,7 @@ function onMobileMenuSelect(key: string): void {
       void openArchiveModal();
       break;
     case 'delete':
-      clearTranscript();
+      deleteTranscript();
       break;
     case 'view-archive':
       emit('open-archive');
@@ -431,6 +452,11 @@ function openMicSettings(): void {
 
       <div class="flex-1" />
 
+      <!-- 停止后仍有未归档内容：常驻提示，点击直接打开归档弹窗 -->
+      <button v-if="showUnsaved" type="button" class="unsaved-btn" @click="openArchiveModal">
+        <span class="unsaved-dot" aria-hidden="true" />{{ t('main.unsaved') }}
+      </button>
+
       <!-- 模型加载状态：顶栏内联，转圈图标 + 文案；hover 看具体加载项 -->
       <n-tooltip v-if="loadingItems.length">
         <template #trigger>
@@ -562,6 +588,15 @@ function openMicSettings(): void {
       :source-lang="settings?.asr.language"
       :target-lang="settings?.nativeLang"
     />
+
+    <!-- 删除后的撤销条：保留到撤销、关闭或下一次开始录音 -->
+    <div v-if="canUndoDelete" class="undo-bar" role="status">
+      <span>{{ t('main.deleted') }}</span>
+      <button type="button" class="undo-action" @click="undoDelete">{{ t('main.undo') }}</button>
+      <button type="button" class="undo-close" :aria-label="t('main.dismiss')" @click="dismissUndo">
+        <X :size="14" />
+      </button>
+    </div>
 
     <!-- 归档命名弹窗 -->
     <n-modal
@@ -738,7 +773,49 @@ function openMicSettings(): void {
 .record-btn.is-live { color: #fff; background: var(--rt-live); }
 .record-btn.is-live .record-glyph { border-radius: 2px; background: #fff; }
 
+.unsaved-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--rt-line);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--rt-ink-2);
+  background: transparent;
+  cursor: pointer;
+}
+.unsaved-btn:hover { color: var(--rt-ink); }
+.unsaved-btn:focus-visible { outline: 2px solid var(--rt-accent); outline-offset: 2px; }
+.unsaved-dot { width: 6px; height: 6px; border-radius: 50%; background: #e0a43a; }
+
+.undo-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  white-space: nowrap;
+  color: var(--rt-bg);
+  background: var(--rt-ink);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  transform: translateX(-50%);
+}
+.undo-action { font: inherit; font-weight: 600; color: inherit; text-decoration: underline; text-underline-offset: 3px; background: none; border: 0; cursor: pointer; }
+.undo-close { display: inline-flex; padding: 4px; border: 0; border-radius: 50%; color: inherit; background: none; opacity: 0.7; cursor: pointer; }
+.undo-close:hover { opacity: 1; }
+
 @media (max-width: 639px) {
   .app-header { min-height: 52px; padding: 8px 12px 8px 16px; }
+  /* 避开底部圆形录音按钮 */
+  .undo-bar { bottom: calc(env(safe-area-inset-bottom) + 100px); }
 }
 </style>

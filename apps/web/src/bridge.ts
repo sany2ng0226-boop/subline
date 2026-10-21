@@ -109,6 +109,10 @@ function applyPlatformConstraints(s: AppSettings): AppSettings {
   return s;
 }
 
+function preventUnload(event: BeforeUnloadEvent): void {
+  event.preventDefault();
+}
+
 export function createWebBridge(): AppBridge {
   // —— UI 注册的回调（mountApp → registerTranscriptionListeners 时注入） ——
   const segmentCb = createCallbackHub<SegmentPayload>();
@@ -523,6 +527,12 @@ export function createWebBridge(): AppBridge {
       } catch {
         /* 清理失败忽略：listModels 刷新会反映真实缓存状态 */
       }
+    },
+
+    // 浏览器只允许显示自带的通用离开提示，自定义文案会被忽略。
+    setCloseGuard(guard) {
+      if (guard) window.addEventListener('beforeunload', preventUnload);
+      else window.removeEventListener('beforeunload', preventUnload);
     },
 
     // ===== 强制更新应用资源（已安装 PWA 长期拿不到新版本时的手动出口） =====

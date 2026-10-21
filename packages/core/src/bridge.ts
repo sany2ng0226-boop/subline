@@ -24,6 +24,14 @@ import type {
   ArchiveRecord,
 } from './types';
 
+/** 关闭窗口或退出应用前的确认文案；由 UI 本地化后交给宿主展示。 */
+export interface CloseGuard {
+  message: string;
+  detail: string;
+  confirm: string;
+  cancel: string;
+}
+
 /**
  * 宿主提供给渲染层（@rt/ui）的平台桥接契约，由各宿主实现并注入。
  * UI 只负责开/停会话与接收事件，音频采集隐藏在桥接背后、按平台实现：
@@ -84,6 +92,11 @@ export interface AppBridge {
    * UI 仅在本方法存在时才在主屏幕菜单显示「强制更新」入口，原生端（macOS/iOS）无需实现。
    */
   forceUpdateApp?(): Promise<void>;
+  /**
+   * 设置关闭保护：非 null 时，宿主在关闭窗口 / 退出应用 / 离开页面前要求用户确认。
+   * 主页有未归档内容或正在录音时由 UI 设置，归档或删除后置回 null。iOS 无关闭入口，可不实现。
+   */
+  setCloseGuard?(guard: CloseGuard | null): void;
   /** 查询指定 ASR 模型（含公共依赖 VAD）是否已就绪 */
   getSetupStatus(modelId: string): Promise<SetupStatus>;
   /** 下载指定 ASR 模型（含公共依赖 VAD），返回结果（失败带 error，供重试） */

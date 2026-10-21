@@ -131,6 +131,7 @@ export function createMacBridge(api: ElectronApi): AppBridge {
     getMicStatus: () => api.getMicStatus(),
     openMicSettings: () => api.openMicSettings(),
     openSystemAudioSettings: () => api.openSystemAudioSettings?.(),
+    setCloseGuard: (guard) => api.setCloseGuard?.(guard),
     getSettings: () => api.getSettings(),
     saveSettings: (settings) => api.saveSettings(settings),
     testCloud: (cfg) => api.testCloud(cfg),

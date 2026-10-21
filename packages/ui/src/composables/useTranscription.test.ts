@@ -64,3 +64,27 @@ it('keeps cumulative translation provisional until completion and clears it on s
   expect(row.translation).toBe('完整译文'); expect(row.translationPartial).toBe(false); expect(row.failed).toBe(false);
   expect(state.archiveSnapshot()[0].translation).toBe('完整译文');
 });
+
+it('restores deleted rows on undo, including translations that arrived meanwhile', () => {
+  callbacks.onSegment({ id: 30, text: '消した文。', start: 0, duration: 2, lang: 'ja' });
+  const row = state.lines[0];
+  callbacks.onTranslation({ id: 30, text: '', pending: true });
+  state.deleteTranscript();
+  expect(state.lines).toHaveLength(0);
+  expect(state.canUndoDelete.value).toBe(true);
+  callbacks.onTranslation({ id: 30, text: '删掉的句子。' });
+  state.undoDelete();
+  expect(state.lines[0]).toBe(row);
+  expect(row.translation).toBe('删掉的句子。');
+  expect(row.translating).toBe(false);
+  expect(state.canUndoDelete.value).toBe(false);
+});
+
+it('drops the undo buffer after an archive clear', () => {
+  callbacks.onSegment({ id: 31, text: '保存済み。', start: 0, duration: 2, lang: 'ja' });
+  state.deleteTranscript();
+  state.clearTranscript();
+  expect(state.canUndoDelete.value).toBe(false);
+  state.undoDelete();
+  expect(state.lines).toHaveLength(0);
+});

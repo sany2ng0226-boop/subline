@@ -20,6 +20,7 @@ const api: ElectronApi = {
   getMicStatus: () => ipcRenderer.invoke('mic:get-status'),
   openMicSettings: () => ipcRenderer.send('mic:open-settings'),
   openSystemAudioSettings: () => ipcRenderer.send('system-audio:open-settings'),
+  setCloseGuard: (guard) => ipcRenderer.send('window:close-guard', guard),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   testCloud: (cfg) => ipcRenderer.invoke('translation:test-cloud', cfg),
