@@ -35,7 +35,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@huggingface/transformers": "^4.2.0",
+    "@huggingface/transformers": "^4.3.1",
     "chinese-conv": "catalog:",
     "node-llama-cpp": "3.22.1",
     "sherpa-onnx-node": "^1.13.2"

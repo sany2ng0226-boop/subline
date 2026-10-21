@@ -12,7 +12,7 @@
     "icons": "node scripts/gen-icons.mjs"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.2.0",
+    "@huggingface/transformers": "^4.3.1",
     "@rt/core": "workspace:*",
     "@rt/ui": "workspace:*",
     "idb": "^8.0.0"

