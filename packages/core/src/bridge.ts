@@ -81,6 +81,14 @@ export interface AppBridge {
    * 故引导只能在采集报 system-audio-permission 错误后事后进行。
    */
   openSystemAudioSettings?(): void;
+  /** Persist unarchived JSON for crash recovery; UI throttles calls to roughly 10 seconds.
+   * Web/iOS leave this unimplemented; UI falls back to localStorage.
+   */
+  saveRecovery?(json: string): Promise<void>;
+  /** Read the recovery JSON, or null when missing, unreadable, or corrupt. Web/iOS use localStorage. */
+  loadRecovery?(): Promise<string | null>;
+  /** Remove crash recovery after archiving/discarding. Web/iOS use localStorage. */
+  clearRecovery?(): Promise<void>;
   getSettings(): Promise<AppSettings>;
   saveSettings(settings: AppSettings): Promise<AppSettings>;
   /**
