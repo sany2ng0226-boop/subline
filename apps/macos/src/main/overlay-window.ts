@@ -1,0 +1,109 @@
+import type { BrowserWindow, BrowserWindowConstructorOptions, Rectangle, WebContents } from 'electron';
+import type { AppSettings, OverlayState } from '@rt/core';
+
+export interface OverlayDependencies {
+  createWindow(options: BrowserWindowConstructorOptions): BrowserWindow;
+  screen: {
+    getDisplayMatching(bounds: Rectangle): { workArea: Rectangle };
+    getPrimaryDisplay(): { workArea: Rectangle };
+  };
+  preload: string;
+  rendererFile: string;
+  rendererUrl?: string;
+  platform: string;
+  readSettings(): AppSettings;
+  writeSettings(settings: AppSettings): unknown;
+  publish(state: OverlayState): void;
+}
+
+export const OVERLAY_BROADCAST_CHANNELS = new Set([
+  'pipeline:segment', 'pipeline:partial', 'pipeline:translation',
+  'pipeline:status', 'translation:status',
+]);
+
+export function createOverlayController(deps: OverlayDependencies) {
+  let window: BrowserWindow | null = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let clickThrough = false;
+  let bounds: Rectangle | undefined;
+  const state = (): OverlayState => ({
+    visible: !!window && !window.isDestroyed(), clickThrough,
+    ...(bounds ? { bounds: { ...bounds } } : {}),
+  });
+  const publish = () => deps.publish(state());
+  function persist() {
+    clearTimeout(timer);
+    timer = undefined;
+    const settings = deps.readSettings();
+    deps.writeSettings({
+      ...settings,
+      overlay: { fontDelta: 0, ...settings.overlay, clickThrough, ...(bounds ? { bounds } : {}) },
+    });
+  }
+  function restoredBounds(): Rectangle {
+    const saved = deps.readSettings().overlay?.bounds;
+    const area = saved ? deps.screen.getDisplayMatching(saved).workArea : deps.screen.getPrimaryDisplay().workArea;
+    const intersects = saved && saved.x < area.x + area.width && saved.x + saved.width > area.x
+      && saved.y < area.y + area.height && saved.y + saved.height > area.y;
+    const width = Math.min(intersects ? saved.width : 640, area.width);
+    const height = Math.min(intersects ? saved.height : 120, area.height);
+    return {
+      width, height,
+      x: intersects ? Math.max(area.x, Math.min(saved.x, area.x + area.width - width)) : Math.round(area.x + (area.width - width) / 2),
+      y: intersects ? Math.max(area.y, Math.min(saved.y, area.y + area.height - height)) : area.y + area.height - height,
+    };
+  }
+  return {
+    state,
+    isOverlaySender: (sender: WebContents) => !!window && sender === window.webContents,
+    send(channel: string, payload: unknown) {
+      if (window && !window.isDestroyed()) window.webContents.send(channel, payload);
+    },
+    async open() {
+      if (window && !window.isDestroyed()) { window.focus(); return; }
+      clickThrough = deps.readSettings().overlay?.clickThrough ?? false;
+      bounds = restoredBounds();
+      const target = deps.createWindow({
+        ...bounds, minWidth: 360, minHeight: 72,
+        frame: false, transparent: true, alwaysOnTop: true, hasShadow: false,
+        resizable: true, skipTaskbar: true, focusable: true,
+        webPreferences: { preload: deps.preload, contextIsolation: true },
+      });
+      window = target;
+      target.setAlwaysOnTop(true, deps.platform === 'win32' ? 'screen-saver' : 'floating');
+      target.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      target.setIgnoreMouseEvents(clickThrough, { forward: true });
+      const changed = () => {
+        bounds = target.getBounds();
+        clearTimeout(timer);
+        timer = setTimeout(persist, 250);
+        publish();
+      };
+      target.on('move', changed);
+      target.on('resize', changed);
+      target.on('closed', () => {
+        persist();
+        window = null;
+        publish();
+      });
+      target.webContents.on('did-finish-load', publish);
+      publish();
+      try {
+        if (deps.rendererUrl) await target.loadURL(deps.rendererUrl.split('#')[0] + '#overlay');
+        else await target.loadFile(deps.rendererFile, { hash: 'overlay' });
+      } catch (error) {
+        if (!target.isDestroyed()) target.destroy();
+        throw error;
+      }
+    },
+    close() {
+      if (window && !window.isDestroyed()) window.close();
+    },
+    setClickThrough(on: boolean) {
+      clickThrough = on;
+      window?.setIgnoreMouseEvents(on, { forward: true });
+      persist();
+      publish();
+    },
+  };
+}

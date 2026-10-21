@@ -26,6 +26,12 @@ import type {
   ArchiveRecord,
 } from './types';
 
+export interface OverlayState {
+  visible: boolean;
+  clickThrough: boolean;
+  bounds?: { x: number; y: number; width: number; height: number };
+}
+
 /** 关闭窗口或退出应用前的确认文案；由 UI 本地化后交给宿主展示。 */
 export interface CloseGuard {
   message: string;
@@ -46,6 +52,15 @@ export interface CloseGuard {
 export interface AppBridge {
   /** 运行平台标识；UI 据此按平台过滤可用模型、决定音源开关等。 */
   platform: Platform;
+  /** Desktop overlay uses the same renderer/preload with #overlay.
+   * UI should render OverlayScreen when location.hash === '#overlay'.
+   */
+  isOverlayWindow?(): boolean;
+  openOverlay?(): Promise<void>;
+  closeOverlay?(): Promise<void>;
+  setOverlayClickThrough?(on: boolean): void;
+  /** Receives current state on subscription and subsequent changes in every window. */
+  onOverlayState?(cb: (state: OverlayState) => void): () => void;
   /**
    * 本平台支持的音频采集来源；缺省视为 `['mic']`。
    * UI 仅当其中含 `'system'` 时才渲染「系统音频 / 麦克风」音源开关。

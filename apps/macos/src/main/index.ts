@@ -1,3 +1,4 @@
+import { createOverlayController, OVERLAY_BROADCAST_CHANNELS } from './overlay-window';
 import { createGuardedRelaunch } from './guarded-relaunch';
 import { mapPermissionState, createPermissionChangeDetector, type PermissionKind, type PermissionState } from '@rt/core';
 import { createRecoveryStore } from './recovery-store';
@@ -18,6 +19,7 @@ import {
   ipcMain,
   powerSaveBlocker,
   session,
+  screen,
   shell,
   systemPreferences,
   utilityProcess,
@@ -128,7 +130,7 @@ function archiveBeforeClose(target: BrowserWindow): Promise<boolean> {
       resolve(ok);
     };
     const onDone = (_event: IpcMainEvent, replyId: number, ok: boolean): void => {
-      if (replyId === id) finish(ok);
+      if (_event.sender === target.webContents && replyId === id) finish(ok);
     };
     const timer = setTimeout(() => finish(false), ARCHIVE_BEFORE_CLOSE_TIMEOUT_MS);
     ipcMain.on('window:archive-before-close:done', onDone);
@@ -306,7 +308,7 @@ function createWindow(): void {
     },
   });
   alwaysOnTop.apply(loadSettings().alwaysOnTop);
-  win.on('closed', () => displaySleep.stop());
+  win.on('closed', () => { displaySleep.stop(); overlay.close(); });
   win.on('close', (event) => {
     if (leaveConfirmed || !hasUnsavedContent()) return;
     event.preventDefault();
@@ -327,7 +329,29 @@ function createWindow(): void {
   }
 }
 
+const overlay = createOverlayController({
+  createWindow: (options) => new BrowserWindow(options),
+  screen,
+  preload: path.join(__dirname, '../preload/index.js'),
+  rendererFile: path.join(__dirname, '../renderer/index.html'),
+  rendererUrl: process.env['ELECTRON_RENDERER_URL'],
+  platform: process.platform,
+  readSettings: loadSettings,
+  writeSettings: saveSettings,
+  publish: (state) => {
+    if (win && !win.isDestroyed()) win.webContents.send('overlay:state', state);
+    overlay.send('overlay:state', state);
+  },
+});
+ipcMain.handle('overlay:open', () => overlay.open());
+ipcMain.handle('overlay:close', () => overlay.close());
+ipcMain.on('overlay:click-through', (_event, on: unknown) => {
+  if (typeof on === 'boolean') overlay.setClickThrough(on);
+});
+ipcMain.on('overlay:subscribe', (event) => event.sender.send('overlay:state', overlay.state()));
+
 function sendToRenderer(channel: string, payload: unknown): void {
+  if (OVERLAY_BROADCAST_CHANNELS.has(channel)) overlay.send(channel, payload);
   if (win && !win.isDestroyed()) {
     win.webContents.send(channel, payload);
   }
@@ -660,7 +684,7 @@ ipcMain.on('app:relaunch', () => {
 });
 
 ipcMain.on('window:close-guard', (_event, guard: CloseGuard | null) => {
-  closeGuard = guard;
+  if (!overlay.isOverlaySender(_event.sender)) closeGuard = guard;
 });
 
 ipcMain.handle('setup:get-status', (_event, modelId: string): SetupStatus => ({
@@ -884,9 +908,9 @@ ipcMain.handle('window:set-always-on-top', (_event, on: unknown): void => {
 });
 
 const recoveryStore = createRecoveryStore(() => app.getPath('userData'));
-ipcMain.handle('recovery:save', (_event, json: string) => recoveryStore.saveRecovery(json));
-ipcMain.handle('recovery:load', () => recoveryStore.loadRecovery());
-ipcMain.handle('recovery:clear', () => recoveryStore.clearRecovery());
+ipcMain.handle('recovery:save', (event, json: string) => overlay.isOverlaySender(event.sender) ? undefined : recoveryStore.saveRecovery(json));
+ipcMain.handle('recovery:load', (event) => overlay.isOverlaySender(event.sender) ? null : recoveryStore.loadRecovery());
+ipcMain.handle('recovery:clear', (event) => overlay.isOverlaySender(event.sender) ? undefined : recoveryStore.clearRecovery());
 
 ipcMain.handle('settings:get', (): AppSettings => effectiveSettings());
 
@@ -1011,6 +1035,7 @@ app.on('before-quit', (event) => {
 let recoveryFlushed = false;
 app.on('will-quit', (event) => {
   displaySleep.stop();
+  overlay.close();
   if (recoveryFlushed) return;
   event.preventDefault();
   void recoveryStore.flush().then(() => {

@@ -11,6 +11,15 @@ function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
 }
 
 const api: ElectronApi = {
+  isOverlayWindow: () => location.hash === '#overlay',
+  openOverlay: () => ipcRenderer.invoke('overlay:open'),
+  closeOverlay: () => ipcRenderer.invoke('overlay:close'),
+  setOverlayClickThrough: (on) => ipcRenderer.send('overlay:click-through', on),
+  onOverlayState: (cb) => {
+    const unsubscribe = subscribe<import('@rt/core').OverlayState>('overlay:state', cb);
+    ipcRenderer.send('overlay:subscribe');
+    return unsubscribe;
+  },
   platform: process.platform === 'win32' ? 'windows' : 'macos',
   // 系统音频采集要求 macOS 14.2+；不满足时仅暴露麦克风（与主进程的音源收敛判定共用逻辑）。
   audioSources: availableAudioSources(process.getSystemVersion(), process.platform),
