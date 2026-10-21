@@ -7,6 +7,7 @@ import { i18n } from './i18n';
 import { setBridge } from './bridge';
 import { registerTranscriptionListeners } from './composables/useTranscription';
 import { registerModelDownloadListeners } from './composables/useModelDownloads';
+import { registerCloseGuard } from './composables/useSessionArchive';
 
 export { setBridge, bridge } from './bridge';
 
@@ -19,5 +20,7 @@ export function mountApp(selector: string, b: AppBridge): void {
   // 桥接就绪后再注册一次性 IPC 监听（内部有 registered 守卫，重复调用安全）。
   registerTranscriptionListeners();
   registerModelDownloadListeners();
+  // 关闭保护跟随应用整个生命周期（离开主页去设置 / 归档页时内容仍在内存，仍需拦截退出）。
+  registerCloseGuard();
   createApp(App).use(i18n).mount(selector);
 }

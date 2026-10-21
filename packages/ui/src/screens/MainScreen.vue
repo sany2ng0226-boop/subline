@@ -4,11 +4,11 @@ import { NButton, NModal, NInput, NDropdown, NTooltip, NProgress, NSelect } from
 import type { DropdownMixedOption } from 'naive-ui/es/dropdown/src/interface';
 import { Settings, Trash2, Archive, Library, Eraser, LoaderCircle, TriangleAlert, MoreHorizontal, Mic, MonitorSpeaker, Square, RefreshCw, X } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
-import { getAsrModel, getTranslationModel, UI_LANGS, asrModelsFor, DEFAULT_ASR_MODEL_ID, type AsrLang, suggestArchiveTitle, type ArchiveLibrary } from '@rt/core';
+import { getAsrModel, getTranslationModel, UI_LANGS, asrModelsFor, DEFAULT_ASR_MODEL_ID, type AsrLang, type ArchiveLibrary } from '@rt/core';
 import { LANG_LABELS } from '../components/settings/form';
 import { settings, saveSettings } from '../composables/useSettings';
 import {
-  lines, archiveSnapshot,
+  lines,
   partial,
   stablePartial,
   draftLine,
@@ -18,7 +18,6 @@ import {
   errorCode,
   recordBusy,
   toggleRecording,
-  clearTranscript,
   deleteTranscript,
   undoDelete,
   dismissUndo,
@@ -40,7 +39,7 @@ import {
   percentOf,
   downloadEntry,
 } from '../composables/useModelDownloads';
-import { fmtDateTime } from '../utils/datetime';
+import { archiveSession, foldersEnabled as archiveFoldersEnabled, suggestArchiveName } from '../composables/useSessionArchive';
 import { bridge } from '../bridge';
 
 const { t } = useI18n();
@@ -124,15 +123,10 @@ const archiveSaving = ref(false);
 const archiveError = ref('');
 const archiveFolder = ref<string | null>(null);
 const archiveLibrary = ref<ArchiveLibrary>({ folders: [], lastFolderId: null });
-const foldersEnabled = internalBuild && !!bridge().getArchiveLibrary;
+const foldersEnabled = archiveFoldersEnabled();
 const archiveFolderOptions = computed(() => [{ label: t('archive.unfiled'), value: '' }, ...archiveLibrary.value.folders.map((f) => ({ label: f.name, value: f.id }))]);
 
-function defaultArchiveName(): string {
-  return fmtDateTime(Date.now());
-}
-
 async function openArchiveModal(): Promise<void> {
-  // 生成不与现有重复的默认名
   archiveError.value = '';
   if (foldersEnabled) {
     try {
@@ -144,18 +138,7 @@ async function openArchiveModal(): Promise<void> {
       return;
     }
   }
-  let name = foldersEnabled ? suggestArchiveTitle(archiveSnapshot(), defaultArchiveName()) : defaultArchiveName();
-  try {
-    const names = new Set((await bridge().listArchives()).map((a) => a.name));
-    if (names.has(name)) {
-      let i = 2;
-      while (names.has(`${name} (${i})`)) i += 1;
-      name = `${name} (${i})`;
-    }
-  } catch {
-    /* 取不到列表就用默认名 */
-  }
-  archiveName.value = name;
+  archiveName.value = await suggestArchiveName();
   archiveModalOpen.value = true;
 }
 
@@ -164,9 +147,7 @@ async function confirmArchive(): Promise<void> {
   archiveSaving.value = true;
   archiveError.value = '';
   try {
-    const snapshot = archiveSnapshot();
-    await bridge().saveArchive(archiveName.value.trim() || defaultArchiveName(), snapshot, foldersEnabled ? archiveFolder.value : undefined);
-    clearTranscript();
+    await archiveSession(archiveName.value, archiveFolder.value);
     archiveModalOpen.value = false;
   } catch (error) {
     archiveError.value = t('archive.operationFailed');
@@ -178,20 +159,6 @@ async function confirmArchive(): Promise<void> {
 
 // 未归档提示：停止后主页仍有定稿行即视为未保存（归档成功会清空主页），录音中不打扰。
 const showUnsaved = computed(() => hasContent.value && !recording.value && !recordBusy.value);
-
-// 关闭保护：正在录音或有未归档内容时，关窗 / 退出 / 离开页面前要求确认。
-watch(
-  () => [recording.value || recordBusy.value, hasContent.value, t('main.closeConfirm')] as const,
-  ([live, content]) => {
-    bridge().setCloseGuard?.(live || content ? {
-      message: t(live ? 'main.closeRecording' : 'main.closeUnsaved'),
-      detail: t('main.closeDetail'),
-      confirm: t('main.closeConfirm'),
-      cancel: t('main.closeCancel'),
-    } : null);
-  },
-  { immediate: true },
-);
 
 // 是否开启翻译：现由设置里的「翻译方式」决定（选了模型即启用），主页不再有独立开关。
 // 仍需此值让转写列表决定是否显示「翻译中」等待动画。

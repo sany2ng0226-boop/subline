@@ -13,6 +13,7 @@ import {
   shell,
   systemPreferences,
   utilityProcess,
+  type IpcMainEvent,
   type UtilityProcess,
 } from 'electron';
 import {
@@ -96,8 +97,60 @@ const MODELS_DIR = !app.isPackaged && process.env['RT_MODELS_DIR']
 const TRANSLATION_CACHE_DIR = path.join(MODELS_DIR, 'transformers');
 
 let win: BrowserWindow | null = null;
-// 渲染层在主页有未归档内容或正在录音时设置；关窗 / ⌘Q 前据此确认，避免一键丢掉整节课。
+// 渲染层在正在录音或有未归档内容时设置；关窗 / ⌘Q 前据此确认，避免一键丢掉整节课。
 let closeGuard: CloseGuard | null = null;
+// 用户已在确认框选择退出（或归档完成）：之后的 close / before-quit 直接放行，不再重复弹框。
+let leaveConfirmed = false;
+let leavePrompt: Promise<boolean> | null = null;
+let archiveRequestId = 0;
+// 停录需等 ASR 收尾最后一句，归档再写盘；超时视为失败，窗口保持打开。
+const ARCHIVE_BEFORE_CLOSE_TIMEOUT_MS = 30_000;
+
+function hasUnsavedContent(): boolean {
+  return closeGuard !== null;
+}
+
+// 请渲染层停止录音并归档，等待其回执。
+function archiveBeforeClose(target: BrowserWindow): Promise<boolean> {
+  const id = ++archiveRequestId;
+  return new Promise((resolve) => {
+    const finish = (ok: boolean): void => {
+      clearTimeout(timer);
+      ipcMain.removeListener('window:archive-before-close:done', onDone);
+      resolve(ok);
+    };
+    const onDone = (_event: IpcMainEvent, replyId: number, ok: boolean): void => {
+      if (replyId === id) finish(ok);
+    };
+    const timer = setTimeout(() => finish(false), ARCHIVE_BEFORE_CLOSE_TIMEOUT_MS);
+    ipcMain.on('window:archive-before-close:done', onDone);
+    target.webContents.send('window:archive-before-close', id);
+  });
+}
+
+// 关窗与 ⌘Q 共用的确认流程；对话框已开着时再次触发（如连按 ⌘Q）复用同一结果。
+function confirmLeave(): Promise<boolean> {
+  leavePrompt ??= (async () => {
+    const guard = closeGuard;
+    const target = win;
+    if (!guard || !target || target.isDestroyed()) return true;
+    const { response } = await dialog.showMessageBox(target, {
+      type: 'warning',
+      message: guard.message,
+      detail: guard.detail,
+      buttons: [guard.archive, guard.discard, guard.cancel],
+      defaultId: 2,
+      cancelId: 2,
+      noLink: true,
+    });
+    if (response === 2) return false;
+    if (response === 1) return true;
+    return archiveBeforeClose(target);
+  })().finally(() => {
+    leavePrompt = null;
+  });
+  return leavePrompt;
+}
 // ASR 识别跑在独立的 utilityProcess 子进程，主进程只转发音频、不做推理
 let asrChild: UtilityProcess | null = null;
 let asrReady: Promise<void> | null = null;
@@ -209,17 +262,13 @@ function createWindow(): void {
     },
   });
   win.on('close', (event) => {
-    if (!closeGuard || !win) return;
-    const choice = dialog.showMessageBoxSync(win, {
-      type: 'warning',
-      message: closeGuard.message,
-      detail: closeGuard.detail,
-      buttons: [closeGuard.cancel, closeGuard.confirm],
-      defaultId: 0,
-      cancelId: 0,
+    if (leaveConfirmed || !hasUnsavedContent()) return;
+    event.preventDefault();
+    void confirmLeave().then((ok) => {
+      if (!ok) return;
+      leaveConfirmed = true;
+      win?.close();
     });
-    if (choice === 0) event.preventDefault();
-    else closeGuard = null;
   });
   win.on('page-title-updated', (event) => {
     if (app.isPackaged) event.preventDefault();
@@ -845,6 +894,17 @@ app.whenReady().then(() => {
   if (t.enabled && t.engine !== 'cloud' && translationModelCached()) {
     ensureTranslateChild().proc.send({ type: 'preheat' });
   }
+});
+
+// ⌘Q / 菜单退出 / Dock 退出：有未归档内容时先确认，确认后再走正常退出。
+app.on('before-quit', (event) => {
+  if (leaveConfirmed || !hasUnsavedContent()) return;
+  event.preventDefault();
+  void confirmLeave().then((ok) => {
+    if (!ok) return;
+    leaveConfirmed = true;
+    app.quit();
+  });
 });
 
 app.on('window-all-closed', () => {

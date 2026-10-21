@@ -28,7 +28,10 @@ import type {
 export interface CloseGuard {
   message: string;
   detail: string;
-  confirm: string;
+  /** 归档并退出：宿主经 onArchiveBeforeClose 请 UI 先停录再归档，成功后才退出 */
+  archive: string;
+  /** 不保存直接退出 */
+  discard: string;
   cancel: string;
 }
 
@@ -97,6 +100,12 @@ export interface AppBridge {
    * 主页有未归档内容或正在录音时由 UI 设置，归档或删除后置回 null。iOS 无关闭入口，可不实现。
    */
   setCloseGuard?(guard: CloseGuard | null): void;
+  /**
+   * 注册「归档并退出」处理器：宿主在用户于关闭确认框选择归档时调用，handler 负责停止录音并归档，
+   * 返回 true 表示已归档（或已无内容）可以退出，false 则宿主保持窗口打开。浏览器无法在离开前
+   * 执行异步归档，Web / iOS 可不实现。
+   */
+  onArchiveBeforeClose?(handler: () => Promise<boolean>): () => void;
   /** 查询指定 ASR 模型（含公共依赖 VAD）是否已就绪 */
   getSetupStatus(modelId: string): Promise<SetupStatus>;
   /** 下载指定 ASR 模型（含公共依赖 VAD），返回结果（失败带 error，供重试） */

@@ -8,6 +8,8 @@ beforeEach(async () => {
   callbacks = {};
   const bridge = Object.fromEntries(['onSegment', 'onPartial', 'onTranslation', 'onStatus', 'onTranslationStatus']
     .map((key) => [key, (fn: (v: any) => void) => { callbacks[key] = fn; return () => {}; }])) as unknown as AppBridge;
+  bridge.startPipeline = async () => ({ ok: true });
+  bridge.stopPipeline = async () => ({ ok: true });
   (await import('../bridge')).setBridge(bridge);
   state = await import('./useTranscription');
   state.registerTranscriptionListeners();
@@ -87,4 +89,17 @@ it('drops the undo buffer after an archive clear', () => {
   expect(state.canUndoDelete.value).toBe(false);
   state.undoDelete();
   expect(state.lines).toHaveLength(0);
+});
+
+it('treats recording or unarchived rows as unsaved, and waits for an in-flight start before stopping', async () => {
+  expect(state.hasUnsavedContent.value).toBe(false);
+  state.toggleRecording();
+  expect(state.hasUnsavedContent.value).toBe(true);
+  callbacks.onSegment({ id: 40, text: '最後の文。', start: 0, duration: 2, lang: 'ja' });
+  await state.ensureStopped();
+  expect(state.recording.value).toBe(false);
+  expect(state.recordBusy.value).toBe(false);
+  expect(state.hasUnsavedContent.value).toBe(true);
+  state.clearTranscript();
+  expect(state.hasUnsavedContent.value).toBe(false);
 });

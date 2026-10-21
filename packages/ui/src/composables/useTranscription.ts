@@ -1,4 +1,4 @@
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import type { PipelineErrorCode, TranslationStatusPayload } from '@rt/core';
 import { fmtClock } from '../utils/datetime';
 import { bridge } from '../bridge';
@@ -183,15 +183,27 @@ export async function stopRecording(): Promise<void> {
   draftLine.value = null;
 }
 
+let toggling: Promise<void> = Promise.resolve();
 export function toggleRecording(): void {
   // 上一次切换（含 onStatus error 分支触发的收停）尚在途时忽略本次点击，避免 start/stop 交错并发。
   if (recordBusy.value) return;
   recordBusy.value = true;
   const action = recording.value ? stopRecording() : startRecording();
-  void action.finally(() => {
+  toggling = action.finally(() => {
     recordBusy.value = false;
   });
 }
+
+/** 等在途的启停结束；仍在录音则停止并等到收尾完成（关闭前归档用） */
+export async function ensureStopped(): Promise<void> {
+  await toggling;
+  if (!recording.value) return;
+  toggleRecording();
+  await toggling;
+}
+
+// 未归档：正在录音，或主页仍有定稿行（归档成功会清空主页，所以剩下的行都是上次归档后新增的）。
+export const hasUnsavedContent = computed(() => recording.value || recordBusy.value || lines.length > 0);
 
 /** 清空转写历史（归档成功后调用；不可撤销） */
 export function clearTranscript(): void {
