@@ -16,7 +16,7 @@ function defaults(): AppSettings {
     app.getSystemLocale?.() ?? '',
     app.getLocale(),
   ]);
-  settings.translation = { ...settings.translation, enabled: true, engine: 'hy-mt2-7b' };
+  settings.translation = { ...settings.translation, enabled: false, engine: 'hy-mt2-7b' };
   return settings;
 }
 
