@@ -136,20 +136,22 @@ export async function translateFinalizedSegment(
     opts.context?.reset();
     return;
   }
+  const requestedAt = Date.now();
+  const emit = (payload: TranslationPayload): void => opts.emitTranslation({ ...payload, requestedAt });
   if (plan.kind === 'script') {
     opts.context?.reset();
-    opts.emitTranslation({ id: segment.id, text: plan.text });
+    emit({ id: segment.id, text: plan.text });
     return;
   }
 
-  opts.emitTranslation({ id: segment.id, text: '', pending: true });
+  emit({ id: segment.id, text: '', pending: true });
   let settled = false;
   try {
     const text = await opts.translate({
       id: segment.id,
       text: segment.text,
       onPartial: (partial) => {
-        if (!settled && partial.trim()) opts.emitTranslation({ id: segment.id,
+        if (!settled && partial.trim()) emit({ id: segment.id,
           text: plan.toScript ? plan.toScript(partial) : partial, partial: true });
       },
       source: sourceLang,
@@ -158,10 +160,10 @@ export async function translateFinalizedSegment(
       ...(opts.context ? { context: opts.context.take(sourceLang, plan.targetLang, segment.text) } : {}),
     });
     settled = true;
-    opts.emitTranslation({ id: segment.id, text: plan.toScript ? plan.toScript(text) : text });
+    emit({ id: segment.id, text: plan.toScript ? plan.toScript(text) : text });
   } catch (e) {
     settled = true;
-    opts.emitTranslation({
+    emit({
       id: segment.id,
       text: '',
       failed: true,

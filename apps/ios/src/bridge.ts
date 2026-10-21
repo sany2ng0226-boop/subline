@@ -181,7 +181,9 @@ export function createIosBridge(): AppBridge {
   function subscribeNative(): void {
     void RealtimeAsr.addListener('partial', (p) => partialCb.emit(p)).catch(() => undefined);
     void RealtimeAsr.addListener('segment', (seg) => {
+      // Native events expose no capture epoch; receipt is the closest available endpoint.
       const line: SegmentPayload = { ...seg, id: nextLineId++ };
+      line.speechEndAt ??= Date.now();
       segmentCb.emit(line);
       void translateSegment(line);
     }).catch(() => undefined);

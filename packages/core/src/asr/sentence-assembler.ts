@@ -59,6 +59,7 @@ export class SentenceAssembler {
     } else {
       const separator = /[A-Za-z0-9]$/.test(this.pending.text) && /^[A-Za-z0-9]/.test(segment.text) ? ' ' : '';
       this.pending.text += separator + segment.text;
+      this.pending.speechEndAt = segment.speechEndAt;
       this.pending.duration = segment.start + segment.duration - this.pending.start;
     }
     const p = this.pending;

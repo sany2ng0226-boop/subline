@@ -358,6 +358,7 @@ export class TranscriptionPipeline {
   // 最近音频的历史缓冲
   private historyChunks: HistoryChunk[] = [];
   private totalSamples = 0;
+  private captureStartedAt?: number;
 
   // 定稿段序号（引擎宿主内自增；宿主下发前可改写为跨会话单调的行 id）
   private segmentId = 0;
@@ -426,6 +427,8 @@ export class TranscriptionPipeline {
 
   /** @param samples 16kHz 单声道 */
   acceptWaveform(samples: Float32Array): void {
+    if (samples.length === 0) return;
+    this.captureStartedAt ??= Date.now() - samples.length / SAMPLE_RATE * 1000;
     this.rememberHistory(samples);
     const merged = new Float32Array(this.pending.length + samples.length);
     merged.set(this.pending);
@@ -460,6 +463,7 @@ export class TranscriptionPipeline {
    */
   reset(): void {
     this.sessionBase = this.totalSamples;
+    this.captureStartedAt = undefined;
     // 上一会话的音频全部视为已定稿：句首回看不会跨进上一会话的尾音
     this.partialFloor = this.totalSamples;
     // 丢弃上一会话残留的不足一个 VAD 窗口的样本，避免跨会话串音
@@ -703,6 +707,7 @@ export class TranscriptionPipeline {
       lang: cleanLang(this.lineLang),
       start: (this.lineStart - this.sessionBase) / SAMPLE_RATE,
       duration: (boundary - this.lineStart) / SAMPLE_RATE,
+      speechEndAt: this.captureStartedAt! + (boundary - this.sessionBase) / SAMPLE_RATE * 1000,
     });
     this.partialFloor = boundary;
     // 新行从提交边界继续：committedInWindow / prevDecode / windowStart 原样保留，仅重置已滑出部分。
@@ -749,6 +754,7 @@ export class TranscriptionPipeline {
       lang,
       start: (this.lineStart - this.sessionBase) / SAMPLE_RATE,
       duration: (to - this.lineStart) / SAMPLE_RATE,
+      speechEndAt: this.captureStartedAt! + (to - this.sessionBase) / SAMPLE_RATE * 1000,
     });
     this.resetLine();
   }

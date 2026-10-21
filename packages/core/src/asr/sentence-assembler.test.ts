@@ -153,3 +153,14 @@ describe('sentence assembly', () => {
     a.reset();
   });
 });
+
+
+it('keeps the last audio endpoint through merging and delayed flush', () => {
+  vi.useFakeTimers();
+  const emit = vi.fn();
+  const a = new SentenceAssembler(emit);
+  a.push({ ...seg('その', 0), speechEndAt: 1000 });
+  a.push({ ...seg('続き', 1), speechEndAt: 2000 });
+  vi.advanceTimersByTime(SENTENCE_IDLE_MS);
+  expect(emit.mock.calls[0][0].speechEndAt).toBe(2000);
+});

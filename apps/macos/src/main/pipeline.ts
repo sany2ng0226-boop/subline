@@ -183,6 +183,8 @@ export class TranscriptionPipeline {
     }
 
     warming = false;
+    // Core stamps speechEndAt from PCM position; the assembler preserves the final
+    // fragment endpoint so rule/deadline waiting is excluded from speech time.
     // 提交策略随模型注入：非自回归模型走一致前缀提交，自回归 transducer 走定长分块提交。
     this.core = new CorePipeline(engine, options.sentenceAssembly === false ? callbacks : {
       onSegment: (segment) => {

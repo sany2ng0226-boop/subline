@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   TranscriptionPipeline,
   cleanAsrText,
@@ -662,4 +662,23 @@ it('exposes the agreed display prefix without hiding a new tentative suffix', ()
   h.pipeline.flush();
   expect(h.segments.map((s) => s.text).join('')).toBe('你好世界还有后文');
   expect(h.partialPayloads.at(-1)?.text).toBe('');
+});
+
+
+describe('speech endpoint epoch', () => {
+  it('uses audio time rather than decode/debounce time and reanchors after reset', () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(100000);
+    try {
+      const h = makeHarness();
+      h.feed(1, true);
+      clock.mockReturnValue(120000);
+      h.feed(1, false);
+      expect(h.segments[0].speechEndAt).toBe(100900);
+      h.pipeline.reset();
+      clock.mockReturnValue(200000);
+      h.feed(1, true);
+      h.pipeline.flush();
+      expect(h.segments[1].speechEndAt).toBe(200900);
+    } finally { clock.mockRestore(); }
+  });
 });

@@ -286,7 +286,8 @@ export function createWebBridge(): AppBridge {
     },
     onPartial: (p) => partialCb.emit(p),
     onSegment: (seg) => {
-      const line: SegmentPayload = { ...seg, id: nextLineId++ };
+      // Older worker adapters omit endpoint metadata; retain it when available.
+      const line: SegmentPayload = { ...seg, id: nextLineId++, speechEndAt: seg.speechEndAt ?? Date.now() };
       segmentCb.emit(line);
       void translateSegment(line);
     },

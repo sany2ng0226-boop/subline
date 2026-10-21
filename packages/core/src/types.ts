@@ -12,11 +12,18 @@ export interface SegmentPayload {
   start: number;
   /** 段时长（秒） */
   duration: number;
+  /** Epoch ms at the audio endpoint, not ASR completion. Core derives this from sample
+   * position anchored to first PCM arrival minus its duration; excludes inference and
+   * endpoint debounce latency. Bridges without a forwarded capture clock use receipt time (including transport/ASR delay). */
+  speechEndAt?: number;
 }
 
 /** 某条转写段的译文，按 id 对应回原文行 */
 export interface TranslationPayload {
   id: number;
+  /** Epoch ms when translation was requested, before queueing; shared by pending,
+   * partial and terminal events. Script conversion uses its invocation time. */
+  requestedAt?: number;
   /** Cumulative provisional translation; the queue remains occupied until the final result. */
   partial?: boolean;
   /** 译文文本；pending / failed 阶段为占位空串 */

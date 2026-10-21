@@ -220,3 +220,24 @@ it('normalizes partial translations and ignores late partial callbacks after com
   expect(events[events.length - 1]?.text).toBe('这是完整翻译');
   const count = events.length; publish?.('過期'); expect(events).toHaveLength(count);
 });
+
+
+it.each([false, true])('preserves request epoch through partial and terminal events (failure=%s)', async (fail) => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(100000);
+  try {
+    const { emitted } = await run({
+      segment: seg('ja', 'こんにちは'), nativeLang: 'zh',
+      translate: async (req) => {
+        clock.mockReturnValue(120000);
+        req.onPartial?.('部分');
+        if (fail) throw new Error('failed');
+        return '完成';
+      },
+    });
+    expect(emitted).toHaveLength(3);
+    expect(emitted.map(p => p.requestedAt)).toEqual([100000, 100000, 100000]);
+    expect(emitted[0].pending).toBe(true);
+    expect(emitted[1].partial).toBe(true);
+    expect(emitted[2].failed).toBe(fail || undefined);
+  } finally { clock.mockRestore(); }
+});
