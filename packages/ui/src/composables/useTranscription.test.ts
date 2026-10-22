@@ -112,3 +112,18 @@ it('reports a denied microphone as a permission error, not a recognizer failure'
   callbacks.onStatus({ state: 'error', error: 'NotAllowedError: Permission denied' });
   expect(state.errorCode.value).toBe('mic-permission');
 });
+
+it('converts session-relative seconds into wall-clock time and preserves it in archives', async () => {
+  const epoch = new Date(2026, 9, 22, 19, 38, 10).getTime();
+  const now = vi.spyOn(Date, 'now').mockReturnValue(epoch);
+  try {
+    await state.startRecording();
+    callbacks.onPartial({ text: 'Draft' });
+    expect(state.draftLine.value?.time).toBe('19:38:10');
+    callbacks.onSegment({ id: 90, text: 'Final', start: 4, duration: 2, lang: 'en' });
+    expect(state.lines[0].time).toBe('19:38:14');
+    expect(state.archiveSnapshot()[0].time).toBe('19:38:14');
+    callbacks.onSegment({ id: 91, text: 'Later', start: 22250, duration: 2, lang: 'en' });
+    expect(state.lines[1].time).toBe('01:49:00');
+  } finally { now.mockRestore(); }
+});

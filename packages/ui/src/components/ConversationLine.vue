@@ -8,7 +8,7 @@ import { useI18n } from 'vue-i18n';
 import TranslatingDots from './TranslatingDots.vue';
 const { t } = useI18n();
 defineProps<{
-  time: string;
+  time?: string;
   text: string;
   translation?: string;
   dim?: boolean;
@@ -20,11 +20,7 @@ defineProps<{
 
 <template>
   <div class="mb-3.5 flex gap-3">
-    <div
-      class="w-12 shrink-0 whitespace-nowrap pt-[3px] text-[11px] tabular-nums text-[var(--rt-ink-3)]"
-    >
-      {{ time }}
-    </div>
+    <time v-if="time" class="timeline-time">{{ time }}</time>
     <div class="min-w-0 flex-1">
       <div
         :class="[

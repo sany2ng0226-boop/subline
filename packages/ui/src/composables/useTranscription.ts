@@ -26,7 +26,7 @@ export const stablePartial = ref<string>();
 export const draftLine = ref<TranscriptLine | null>(null);
 let nextDisplayId = 0;
 function makeDraft(text: string): TranscriptLine {
-  return { displayId: ++nextDisplayId, id: -1, time: '', text, translation: '', translating: false, failed: false };
+  return { displayId: ++nextDisplayId, id: -1, time: fmtClock(Date.now()), text, translation: '', translating: false, failed: false };
 }
 export const recording = ref(false);
 
