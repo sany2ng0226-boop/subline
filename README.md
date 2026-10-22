@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/subline-icon.png" width="128" alt="Subline"></p>
+
 # Subline
 
 **Subline** is a local, real-time transcription and translation app, developed as a classroom-focused derivative of [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator), maintained by [Jack](https://github.com/sany2ng0226-boop). Upstream Git history is preserved. This repository contains our custom source; upstream release links below refer to upstream builds, not this version.

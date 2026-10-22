@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/subline-icon.png" width="128" alt="Subline"></p>
+
 # Subline
 
 本地实时转写与翻译，把原文和译文放在连续的双语字幕流中。
