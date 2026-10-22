@@ -997,18 +997,19 @@ const quitFlow = createQuitFlow({
 // Process termination cannot wait for a dialog, especially after a renderer crash.
 // Keep the last durable draft instead of treating the signal as an explicit discard.
 let terminating = false;
-for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-  process.on(signal, () => {
-    if (terminating || !isPrimaryInstance) return;
-    terminating = true;
-    closeGuard = null;
-    void recoveryStore.flush().catch((error) => console.error('Termination recovery flush failed', error))
-      .finally(() => quitFlow.windowsClosed());
-  });
-}
 
 app.whenReady().then(() => {
   if (!isPrimaryInstance) return;
+  // Electron installs its native shutdown handlers before ready, replacing earlier Node handlers.
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.on(signal, () => {
+      if (terminating) return;
+      terminating = true;
+      closeGuard = null;
+      void recoveryStore.flush().catch((error) => console.error('Termination recovery flush failed', error))
+        .finally(() => quitFlow.windowsClosed());
+    });
+  }
   shortcuts.start();
   // macOS dev：Dock 默认显示 Electron 图标，手动替换；打包后用 .app 内置图标
   if (!app.isPackaged && process.platform === 'darwin' && app.dock) {
