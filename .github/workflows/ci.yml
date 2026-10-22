@@ -50,7 +50,7 @@ jobs:
         run: pnpm exec vitest run --config packages/ui/vitest.config.ts packages/ui/src apps/macos/renderer-build.test.ts
 
       - name: Caption, queue and latency accounting regressions
-        run: pnpm exec vitest run packages/ui/src/composables/useTranscription.test.ts apps/macos/src/main/translation/request-queue.test.ts apps/macos/test/stage-metrics.test.ts
+        run: pnpm exec vitest run packages/ui/src/composables/useTranscription.test.ts apps/macos/src/main/translation/request-queue.test.ts apps/macos/test/stage-metrics.test.ts apps/macos/src/main/translation/hy-translator.test.ts
 
       - name: Model file integrity regressions
         run: pnpm --filter @rt/macos test-model-integrity
