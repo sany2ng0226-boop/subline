@@ -101,17 +101,20 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
             class="caption-row"
             :class="{ 'is-past': i < focusFrom }"
           >
-            <div :lang="textLang(line.lang || sourceLang)" class="caption-source">
-              <!-- stablePartial 为 undefined 表示 iOS/Web 不提供稳定前缀元数据：草稿必须保持整段深色，不能去掉这层判断。 -->
-              <template v-if="line === draft"><span>{{ stableText }}</span><span :class="{ tentative: stablePartial !== undefined }">{{ tentativeText }}</span><span class="caret" aria-hidden="true" /></template>
-              <template v-else>{{ line.text }}</template>
-            </div>
-            <div v-if="translateOn && line !== draft" :lang="textLang(targetLang)" class="caption-translation">
-              <Transition name="tr" mode="out-in">
-                <span v-if="line.translation" key="text" :class="{ 'is-partial': line.translationPartial }">{{ line.translation }}</span>
-                <TranslatingDots v-else-if="line.translating" key="dots" class="tr-dots" />
-                <span v-else-if="line.failed" key="failed" class="tr-failed" :title="line.failedDetail">{{ t('status.transFailedLine') }}</span>
-              </Transition>
+            <time v-if="line.time" class="timeline-time">{{ line.time }}</time>
+            <div class="caption-body">
+              <div :lang="textLang(line.lang || sourceLang)" class="caption-source">
+                <!-- stablePartial 为 undefined 表示 iOS/Web 不提供稳定前缀元数据：草稿必须保持整段深色，不能去掉这层判断。 -->
+                <template v-if="line === draft"><span>{{ stableText }}</span><span :class="{ tentative: stablePartial !== undefined }">{{ tentativeText }}</span><span class="caret" aria-hidden="true" /></template>
+                <template v-else>{{ line.text }}</template>
+              </div>
+              <div v-if="translateOn && line !== draft" :lang="textLang(targetLang)" class="caption-translation">
+                <Transition name="tr" mode="out-in">
+                  <span v-if="line.translation" key="text" :class="{ 'is-partial': line.translationPartial }">{{ line.translation }}</span>
+                  <TranslatingDots v-else-if="line.translating" key="dots" class="tr-dots" />
+                  <span v-else-if="line.failed" key="failed" class="tr-failed" :title="line.failedDetail">{{ t('status.transFailedLine') }}</span>
+                </Transition>
+              </div>
             </div>
           </article>
         </TransitionGroup>
@@ -134,7 +137,8 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 <style scoped>
 .caption-column { max-width: calc(36 * (var(--transcript-size) + 7px)); }
 
-.caption-row { padding-bottom: 26px; }
+.caption-row { display: flex; gap: 12px; padding-bottom: 26px; }
+.caption-body { min-width: 0; flex: 1; }
 .caption-source, .caption-translation {
   font-weight: 400; letter-spacing: normal;
   line-break: strict; word-break: normal; overflow-wrap: anywhere;
@@ -146,6 +150,8 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 }
 .caption-translation {
   margin-top: 6px;
+  border-left: 2px solid var(--rt-accent);
+  padding-left: 10px;
   min-height: 1.6em;
   font-size: calc(var(--transcript-size) + 4px);
   line-height: 1.6;

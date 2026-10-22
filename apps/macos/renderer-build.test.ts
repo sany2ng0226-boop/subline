@@ -17,6 +17,8 @@ it('includes the current workspace MainScreen shortcut subscription in productio
   const outputs = (Array.isArray(result) ? result : [result])
     .flatMap((output) => 'output' in output ? output.output : []);
   const code = outputs.filter((output) => output.type === 'chunk').map((chunk) => chunk.code).join('\n');
+  expect(code).toContain('timeline-time');
+  expect(code).toContain('settings.targetLang');
   expect(code).toContain('function onShortcutAction(');
   expect(code).toContain('onUnmounted(onShortcutAction("toggleRecording"');
 }, 20_000);

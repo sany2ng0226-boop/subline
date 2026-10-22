@@ -84,3 +84,15 @@ html {
     transition: none;
   }
 }
+
+/* Eight clock digits stay aligned without shrinking as caption settings change. */
+.timeline-time {
+  flex: 0 0 8ch;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, monospace;
+  font-size: max(11px, calc(var(--transcript-size) - 3px));
+  line-height: 1.6;
+  padding-top: 0.3em;
+  color: var(--rt-ink-3);
+}

@@ -478,6 +478,7 @@ function translateSegment(segment: SegmentPayload): void {
     segment,
     enabled: settings.translation.enabled,
     nativeLang: settings.nativeLang,
+    targetLang: settings.translation.targetLang ?? settings.nativeLang,
     asrLanguage: settings.asr.language,
     reverse: reverseCtx,
     context: ['cloud', 'hy-mt2-7b'].includes(settings.translation.engine) ? translationContext : undefined,
@@ -891,7 +892,8 @@ const shortcuts = createGlobalShortcuts({
 ipcMain.handle('settings:get', (): AppSettings => effectiveSettings());
 
 ipcMain.handle('settings:save', (_event, next: SettingsPatch): AppSettings => {
-  const prev = loadSettings().translation;
+  const previous = loadSettings();
+  const prev = previous.translation;
   const saved = saveSettings(next);
   const cur = saved.translation;
   // 只有翻译引擎/云端配置变了才需要重建翻译器；
@@ -909,6 +911,11 @@ ipcMain.handle('settings:save', (_event, next: SettingsPatch): AppSettings => {
   alwaysOnTop.apply(saved.alwaysOnTop);
   if (engineChanged) {
     reconfigureTranslate();
+  }
+  if ((prev.targetLang ?? previous.nativeLang) !== (cur.targetLang ?? saved.nativeLang)) {
+    translationQueue.cancelWaiting();
+    translationContext.reset();
+    resetReverseTranslationContext(reverseCtx);
   }
   // 识别模型/语言变了：kill 当前 ASR 子进程，下次 start/prewarm 按新配置重建
   // （与翻译器的 reconfigure 同风格；比对存活子进程实际装载的配置，无子进程时无需处理）。

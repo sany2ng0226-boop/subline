@@ -9,15 +9,7 @@ import { langIdentity, planTranslation, type LocalModelSpec } from './local-spec
 import type { TranslationPayload } from '../types';
 import type { TranslationContext } from './context';
 
-/**
- * 反向翻译的会话状态：记录最近一次识别到的「非母语」源语言短码。
- * 识别语言为 auto 时，听到母语的段会被反向翻译到该语言（母语→上一次的外语）。
- *
- * 由各端桥接持有一个实例、逐段传入 translateFinalizedSegment，核心据此累计并决策——
- * 这样「反向翻译怎么判定」的逻辑只在此一处、三端一致。**外语历史只在本次录音会话内有效**：
- * 各端在「开始录音」入口调 resetReverseTranslationContext 清空，故会话第一句若是母语则无可翻的
- * 外语、直接不翻。省略该实例即关闭反向翻译（退化为单向翻译）。
- */
+/** Legacy callers without targetLang may keep session-local history for auto reverse translation. */
 export interface ReverseTranslationContext {
   /** 上一次识别到的非母语源语言短码；null=本次会话尚未听到任何外语。 */
   lastForeignLang: string | null;
@@ -61,7 +53,7 @@ export interface SegmentTranslateRequest {
   text: string;
   /** ASR 源语言短码（zh/en/ja/ko/yue） */
   source: string;
-  /** 目标母语 app 语言键（zh/ja/en/ko）：能感知语言的引擎（本地模型映射 / 云端提示词）用它 */
+  /** 目标 app 语言键（zh/ja/en/ko）：能感知语言的引擎（本地模型映射 / 云端提示词）用它 */
   targetLang: string;
   /** 目标的模型短码（M2M100: zh/en/…）：只认短码的引擎（如 iOS 原生框架）用它 */
   targetCode: string;
@@ -73,18 +65,13 @@ export interface TranslateFinalizedSegmentOptions {
   segment: { id: number; text: string; lang: string };
   /** 翻译是否开启（关闭时不发任何事件） */
   enabled: boolean;
-  /** 母语 app 语言键（正向翻译目标；反向翻译时目标改为上一次的外语） */
+  /** 旧调用的默认目标语言；显式 targetLang 优先 */
   nativeLang: string;
-  /**
-   * 识别语言设置（AppSettings.asr.language：'auto' | 语言短码）。
-   * 仅当为 'auto' 时启用反向翻译（听到母语→翻成上一次的外语）；指定具体语言时理论上不会
-   * 识别出母语，保持单向翻译。省略视作非 auto（关闭反向翻译）。
-   */
+  /** 显式目标语言；传入后固定翻译方向，不使用反向翻译历史。 */
+  targetLang?: string;
+  /** 未提供 targetLang 时，auto 可启用旧的反向翻译策略。 */
   asrLanguage?: string;
-  /**
-   * 反向翻译会话状态（跨段可变，由桥接持有）。传入即启用反向翻译：核心据此累计「上一次外语」
-   * 并决定母语段的翻译目标。省略则关闭反向翻译（目标恒为母语）。
-   */
+  /** 仅供未提供 targetLang 的旧调用使用；历史在新会话开始时清空。 */
   reverse?: ReverseTranslationContext;
   /** 平台引擎调用：把 text 翻成目标语言，失败抛错 */
   translate: (req: SegmentTranslateRequest) => Promise<string>;
@@ -92,13 +79,9 @@ export interface TranslateFinalizedSegmentOptions {
   emitTranslation: (p: TranslationPayload) => void;
 }
 
-/**
- * 决定该段的翻译目标语言，并顺带维护反向翻译状态（同步执行，须在任何 await 之前按段序调用）：
- * - 源是外语（语言身份 != 母语）：记录为 lastForeignLang，目标 = 母语（正向翻译）。
- * - 源是母语：仅当识别语言为 auto 且已记录过外语时，目标 = 上一次外语（反向翻译）；
- *   否则目标 = 母语（planTranslation 据此判定 skip/script，即保持现有「母语不翻」行为）。
- */
+/** Explicit targets stay fixed; callers without one retain the legacy reverse-translation policy. */
 function resolveTargetLang(opts: TranslateFinalizedSegmentOptions, sourceLang: string): string {
+  if (opts.targetLang) return opts.targetLang;
   const isForeign = langIdentity(opts.spec, sourceLang) !== langIdentity(opts.spec, opts.nativeLang);
   if (isForeign) {
     if (opts.reverse) opts.reverse.lastForeignLang = sourceLang;
@@ -112,8 +95,8 @@ function resolveTargetLang(opts: TranslateFinalizedSegmentOptions, sourceLang: s
 }
 
 /**
- * 对一条定稿段执行完整翻译编排（fire-and-forget，失败不影响转写）。目标语言通常为母语；
- * 识别语言为 auto 且传入 reverse 状态时，听到母语的段会反向翻译到上一次识别到的外语。
+ * 对一条定稿段执行完整翻译编排（fire-and-forget，失败不影响转写）。优先使用显式目标；
+ * 未提供目标的旧调用可通过 auto 与 reverse 状态启用反向翻译。
  * - `skip`：不发任何事件（不显示译文、不触发等待动画）。
  * - `script`：仅简繁字形不同，直接产出转换后的原文，不经引擎。
  * - `translate`：先发 pending（UI 显示等待动画），引擎产出后套 plan.toScript 做目标

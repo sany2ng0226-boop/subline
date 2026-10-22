@@ -6,9 +6,18 @@
 
 **[简体中文](README.zh-CN.md)** · [Product rules](docs/product/experience.md) · [Code map](docs/project-map.md)
 
-![Subline macOS archive view with illustrative sample text](docs/assets/subline-demo.png)
+![Subline macOS live English captions and Japanese translations](docs/assets/subline-live-beta6.png)
 
-*Subline macOS archive view from a clean source preview based on public main, with hand-authored Japanese/Chinese sample text. The text illustrates the interface; it is not model output or performance evidence.*
+*Live captions in the locally installed beta.6 acceptance build: synthetic English test speech was captured through system audio and processed by the recognition and translation models. Output is unedited; this is not a benchmark. Beta.6 is not published; the public download below remains beta.5.*
+
+<details>
+<summary>Settings: independent recognition and translation languages</summary>
+
+![Subline beta.6 settings with Chinese interface, English recognition and Japanese translation target](docs/assets/subline-settings-beta6.png)
+
+*The same locally installed beta.6 build, with both model choices directly on the settings page.*
+
+</details>
 
 ## Features
 
@@ -75,7 +84,7 @@ Check source with `pnpm check`. Caption identity and macOS queue regressions can
 
 GitHub Actions runs checks on `main`; Pages deployment is disabled unless the repository variable `ENABLE_PAGES` is explicitly set to `true`.
 
-Private classroom recordings, transcripts, user settings, credentials and downloaded model weights are not included. Archives contain finalized text and completed translations, not original recordings; pending translations are not added to an already-saved snapshot. There is no cross-device sync. The screenshot uses hand-authored illustrative sample text. Upstream's small web VAD asset and runtime files remain part of its original source tree. Build and test outputs are reproducible local artifacts.
+Private classroom recordings, transcripts, user settings, credentials and downloaded model weights are not included. Archives contain finalized text and completed translations, not original recordings; pending translations are not added to an already-saved snapshot. There is no cross-device sync. Upstream's small web VAD asset and runtime files remain part of its original source tree. Build and test outputs are reproducible local artifacts.
 
 ## Attribution and distribution status
 

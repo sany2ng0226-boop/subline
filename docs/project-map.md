@@ -43,14 +43,16 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 - `packages/ui/src/composables/useTranscription.ts` 将临时行保存在独立的 `draftLine` ref，定稿行保存在 `lines`；临时行不参与归档或翻译。首次部分识别创建带稳定 `displayId` 的行，后续部分识别修改它；定稿通过 `Object.assign` 更新同一对象后放入 `lines`，再清空 `draftLine`。无部分识别的定稿也分配 `displayId`；译文仍按宿主段 ID 回填原行。停止录音等待宿主提交剩余文字后清除临时行，清屏同时清除临时行。
 - `stablePartial` 经 `MainScreen.vue` 传入 `components/TranscriptList.vue`。只有它与当前全文前缀匹配时，UI 才将前缀深色展示，其余尾部稍浅色；不匹配时全段浅色。缺少元数据时保留 `undefined`，让 iOS/Web 兼容原有的整段深色外观，不将其伪装为已确认前缀。
 - `TranscriptList.vue` 将已定稿行与临时行合成按时间正序的单一字幕流，并以 `displayId` 作为 Vue key；同一句从临时状态、定稿到翻译回填持续使用同一个 `article`，不再分设临时框、最新定稿框和历史区，也不使用文本框内部滚动。新行与译文的过渡只改 opacity。
-- `MainScreen.vue` 将识别语言与母语作为 `sourceLang` / `targetLang` 传入 `TranscriptList.vue`；定稿行在 `useTranscription.ts` 中保留段的 `lang`，显示时优先于识别语言设置。组件将 `zh` 标注为 `zh-Hans`，按 `:lang()` 为日语优先指定 Hiragino Sans、简体中文优先指定 PingFang SC；`auto` 不生成具体语言标注。译文标注当前仍使用母语设置，尚未逐行传入自动反向翻译的实际目标语种。
-- 字幕排版（字号、颜色层级、间距、草稿光标与淡入）由 `TranscriptList.vue` 的 scoped CSS 管理，颜色取自 `styles.css` 的 `--rt-*` 主题变量；外部规则见[开始一次转写](product/experience.md#开始一次转写)。
+- `MainScreen.vue` 将识别语言与独立翻译目标（`translation.targetLang`，旧值回退 `nativeLang`）作为 `sourceLang` / `targetLang` 传入 `TranscriptList.vue`；定稿行在 `useTranscription.ts` 中保留段的 `lang`，显示时优先于识别语言设置。组件将 `zh` 标注为 `zh-Hans`，按 `:lang()` 为日语优先指定 Hiragino Sans、简体中文优先指定 PingFang SC；`auto` 不生成具体语言标注。译文标注采用当前目标语言，不随界面语言改变；当前应用使用固定翻译目标，不启用会话反向翻译。
+- `useTranscription.ts` 在管线确认启动后记录 `recordStartEpoch`，将 `Segment.start` 的会话相对秒数换算为本地 `HH:MM:SS`；临时句先以首次文字到达时刻显示，定稿时替换为片段开始时间。格式化复用 `utils/datetime.ts` 的 `fmtClock`，归档快照保留已格式化的墙钟字符串，不保存或显示经过时长。
+- `TranscriptList.vue` 在实时行左侧渲染 `<time>`；归档详情共用的 `ConversationLine.vue` 使用同一 `timeline-time` 类。`styles.css` 将时间列设为固定 `8ch`、等宽数字及 `--rt-ink-3` 颜色；该 token 在明暗主题的背景与表面上均由 `tokens.test.ts` 守护至少 4.5:1 的对比度。`ArchiveLine.time` 可选，两组件在缺失或空值时省略时间列；不迁移旧记录，也不生成缺失的时间。
+- 字幕排版（字号、颜色层级、间距、草稿光标与淡入）由 `TranscriptList.vue` 的 scoped CSS 管理，颜色取自 `styles.css` 的 `--rt-*` 主题变量；实时和归档译文均有缩进与 2 像素左强调线，并遵循现有字号设置。外部规则见[开始一次转写](product/experience.md#开始一次转写)。
 - 底部跟随也在 `TranscriptList.vue`：只有用户向上滚动才退出跟随，跟随中的高度变化由 `ResizeObserver` 贴底，数据变化后的 `watch` + `nextTick` 贴底作为后台窗口无渲染帧时的兜底。上述共享 UI 状态与排版不增加识别计时器、推理或切句步骤。
 
 ### 翻译
 
 1. 宿主在定稿段到达时调用 `packages/core/src/translation/segment-translation.ts` 的共享编排。
-2. 共享编排根据母语、识别语言和会话内最近外语决定跳过、字形归一化或发起翻译。
+2. macOS、Web 与 iOS 宿主显式传入 `translation.targetLang`（兼容回退 `nativeLang`），共享编排按该目标决定跳过、字形归一化或发起翻译；源语言等于目标时不会反向翻译。只有未传 `targetLang` 的旧核心调用仍按母语、识别语言和会话内最近外语执行兼容规则。
 3. macOS 应用内 Hy-MT2 与 API 翻译通过 `packages/core/src/translation/context.ts` 管理同语言对的有限原文上下文；会话与配置变化由主进程重置。宿主执行具体引擎：macOS 将应用内 Hy-MT2 7B、M2M-100/API 请求放在纯 Node 子进程，Web 用 Transformers.js Worker 或直接调云端，iOS 调 Apple Translation 或直接调云端。
 4. macOS 主进程在发送翻译 IPC 前通过 `apps/macos/src/main/translation/request-queue.ts` 调度请求，负责并发、等待容量、排队过期及配置变更时的等待取消；具体限制与行级降级见[翻译规则](product/experience.md#翻译规则)。翻译子进程仍负责具体推理，ASR 定稿路径不等待翻译队列完成。
 5. pending、部分译文、成功或失败事件按段 ID 回到 UI 的原文行；共享编排负责部分译文的目标字形归一化，并忽略请求结束后的迟到更新。macOS 通过翻译子进程 IPC 回传应用内及本机 API Hy-MT2 7B 的流式结果；`packages/core/src/translation/translation-stream.ts` 负责读取 OpenAI 兼容 SSE，部分结果不结束队列请求。Web 与 iOS 未订阅部分回填，保持完整结果路径。流式显示与失败契约见[翻译规则](product/experience.md#翻译规则)。
@@ -60,6 +62,8 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 
 ### 设置、模型与归档
 
+- `packages/ui/src/screens/SettingsScreen.vue` 将识别语言与翻译目标置于单页顶部，随后展示识别模型与翻译模型；`TranslationSection.vue` 用同一选择器表示关闭、具体本地模型或 API 服务，选择 API 后才展开端点配置。`ModelsSection.vue` 通过 `kind`、`selectedId` 与 `compact` 就地展示所选模型状态和下载／删除操作，也复用于折叠的完整模型清单。`GeneralSection.vue` 放入“外观与辅助功能”折叠区，界面语言不再与翻译目标联动。这些设置改动属于尚未发布的源码候选，公开安装包状态见仓库 README。
+- `packages/core/src/settings.ts` 校验并持久化 `translation.targetLang`；旧设置缺少有效目标时优先继承其 `nativeLang`。`packages/ui/src/screens/Onboarding.vue` 在首次完成引导时将目标初始化为所选界面语言，后续设置页单独保存两者。翻译决策与迁移分别由 `segment-translation.test.ts` 和 `settings.test.ts` 覆盖。
 - `@rt/ui` 只持有表单和当前会话状态；设置、模型和归档持久化经 `AppBridge`。设置保存契约是 `SettingsPatch`：UI 只提交发生变化的字段，`@rt/core` 的 `mergeSettings` 将补丁合并到最新完整设置并统一校验；macOS 同步合并后写文件，Web 与 iOS 将异步写入串行化，并在每次实际执行时读取最新状态再合并。默认值、其它字段校验、归档摘要和排序也在 `@rt/core` 复用，各宿主只选择文件、Preferences 或 IndexedDB 作为存储后端。
 - Internal 归档入口由 `packages/ui/src/screens/ArchiveLibrary.vue` 管理文件夹、筛选、改名与移动，`MainScreen.vue` 负责手动保存弹窗；内容标题提取属于 `packages/core/src/archive.ts` 的 `suggestArchiveTitle`。产品规则见[清屏与归档](product/experience.md#清屏与归档)。
 - `apps/macos/src/main/archives.ts` 保留 `archives.json` 的记录数组格式，读取旧记录不做迁移；`archive-library.ts` 单独管理 `archive-library.json` 中的文件夹及记录元数据覆盖，改名和移动不重写归档正文。归档正文与元数据各自通过原子替换落盘，UI 等待保存成功后才清屏。
@@ -71,6 +75,7 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 
 - 根 `package.json` 的 `pnpm check` 运行 `@rt/core` 单元测试、macOS 评测语料导入器的纯逻辑测试，以及 macOS、Web、iOS 三端类型检查；它不下载语料或模型，也不执行耗时的识别精度门禁。
 - `packages/core/src/**/*.test.ts` 覆盖设置、归档、模型源、转写管线、定稿漂移统计和翻译决策等共享逻辑。
+- `packages/ui/src/components/timeline.test.ts` 检查实时与归档时间列渲染、译文层级及旧归档缺少时间时的兼容；`useTranscription.test.ts` 检查相对秒数到本地墙钟、跨午夜及归档时间保留，`tokens.test.ts` 检查两套主题的文字对比度。
 - `apps/macos/test` 包含无 GUI 管线、CER 评测和翻译脚本；入口命令由 `apps/macos/package.json` 的 `test-pipeline`、`eval-cer` 和 `test-translate` 定义。`eval-cer` 同时报告产品管线 CER、整段离线 CER 和“实时最长结果到定稿”的 Final 漂移，并可用 `--max-cer`、`--max-drift` 将任一模型的加权结果设为失败门槛。日语快捷命令 `eval-cer-ja` 评测固定语言的完整语料，`eval-cer-ja:gate` 则以 SenseVoice 的产品管线 CER 不超过 20%、Final 漂移不超过 5% 为回归门禁。
 - `apps/macos/scripts/fetch-fleurs-eval.mjs` 通过 `fetch-eval-fleurs` 从固定 revision 的 FLEURS `ja_jp` test split 确定性抽取 100 条 CC-BY-4.0 语料，生成 16 kHz 单声道 PCM WAV、参考文本、语言元数据和带署名及音频哈希的 manifest。源 Parquet 缓存在 `apps/macos/test-audio/cache`，用例写入 `apps/macos/test-audio/eval/fleurs-ja-test`；两处均被 Git 忽略，需要评测的环境自行生成。
 - `apps/macos/test/stage-latency.ts` 使用固定课堂音频、SenseVoice、默认合句规则、Hy-MT2 7B 与产品翻译队列作静音实时回放，分开记录识别提交、合句、排队与翻译延迟；入口为 `test-stage-latency`，指标边界、命令和私有素材要求见[macOS 无 GUI 评测](../apps/macos/test/README.md)。

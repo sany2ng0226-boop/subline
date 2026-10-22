@@ -8,7 +8,7 @@ export interface SegmentPayload {
   text: string;
   /** 语言代码，如 zh / ja / en */
   lang: string;
-  /** 段起始时间（秒） */
+  /** Session-relative audio start offset in seconds (not an epoch timestamp). */
   start: number;
   /** 段时长（秒） */
   duration: number;
@@ -114,8 +114,10 @@ export type LocalEngine = 'm2m100' | 'm2m100-1.2b' | 'hy-mt2-7b';
 export type TranslationEngine = LocalEngine | 'cloud';
 
 export interface TranslationSettings {
-  /** 是否开启翻译（目标恒为母语 nativeLang） */
+  /** 是否开启翻译 */
   enabled: boolean;
+  /** 翻译目标语言；旧设置由 nativeLang 迁移，独立于界面语言。 */
+  targetLang?: UiLang;
   engine: TranslationEngine;
   cloud: CloudTranslationConfig;
 }
@@ -126,7 +128,7 @@ export type FontSize = SettingsFontSize;
 
 export type ShortcutAction = 'toggleOverlay' | 'toggleRecording' | 'toggleClickThrough';
 
-/** 界面/母语语言码（界面文案 + 翻译目标）。zh=中文（繁体并入简体）。 */
+/** 界面与翻译目标共用的语言码类型（两个设置独立）。zh=中文（繁体并入简体）。 */
 export type UiLang = 'en' | 'ja' | 'ko' | 'zh';
 
 /**
@@ -172,7 +174,8 @@ export interface ModelInfo {
 
 /** 归档里的一行对话 */
 export interface ArchiveLine {
-  time: string;
+  /** Local HH:MM:SS, captured when transcribing; absent in legacy archives. */
+  time?: string;
   text: string;
   translation: string;
 }
@@ -226,7 +229,7 @@ export interface AppSettings {
   shortcuts?: Partial<Record<ShortcutAction, string | null>>;
   /** 是否已完成首次语言引导 */
   onboarded: boolean;
-  /** 母语：界面语言 + 翻译目标 */
+  /** 界面语言；保留原字段名以兼容已有设置。 */
   nativeLang: UiLang;
   /** 主页转写字体大小档位 */
   fontSize: FontSize;
