@@ -20,7 +20,7 @@
 
 ## 验证与发布边界
 
-**[下载 Subline 0.2.0-beta.5](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.5)**，适用于 Apple 芯片 Mac、macOS 14.2 或更新版本。**beta.5 正在准备发布，待发布资产上传后才能下载。** 此前已发布版本仍为 [beta.4](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.4)。
+**[下载 Subline 0.2.0-beta.5](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.5)**，适用于 Apple 芯片 Mac、macOS 14.2 或更新版本。已作为预发布版（prerelease）公开。**Subline.app 与 DMG 均已 Developer ID 签名、分别通过 Apple 公证并附上票据**；DMG 与包内应用均通过票据和 Gatekeeper 检查。公开链接无需登录即可下载，重新下载的文件 SHA-256 一致，产物复验通过。
 
 公开渠道安装的是 **Subline.app**，提供连续字幕与手动归档；文件夹归档和主页语言选择只在独立的 **Subline Internal** 中提供。
 
@@ -29,7 +29,7 @@
 3. 下载后在本机识别与翻译，**不需要 LM Studio、API Key 或另启模型服务**。按提示允许麦克风或系统音频录制。首次翻译需等待模型加载。
 4. 停止录音后，等译文完成，点击顶栏归档入口并保存；停止不会自动保存。
 
-2026-10-22 的修复候选已在原生应用中通过取消关闭、归档退出、丢弃退出、渲染进程／主进程崩溃后恢复，以及保留草稿的 SIGTERM 退出检查。Jack 已确认在其他应用前台时，实键 **⌥⌘R** 可以开始和停止录音。连续录音仅抽测约 **4.5 分钟**；60 分钟测试按用户要求取消，长时稳定性仍未验收。这些结论适用于修复候选；beta.5 发布与产物验证仍须单独完成。
+修复版本已完成短时录音、退出和崩溃恢复检查，并验证在其他应用前台时用 **⌥⌘R** 开始和停止录音。修复候选已实测日语系统音频原文与中文译文；本机 beta.5 更新后已恢复字幕。长时间持续录音尚未验证。
 
 此前已用空白用户数据目录完成引导和真实模型下载，并在 48 GB 内存的 Apple 芯片开发机测试系统音频转写与本地翻译。真人麦克风识别、远距离、多人噪声、整场活动、长时开发负载及其他内存容量尚未验收。识别仍可能出错。此次不代表 iOS / Web 已通过运行验收。
 
@@ -37,7 +37,7 @@
 
 ## Windows 候选版
 
-Windows 版目标为 **Windows 10/11 x64**：录音前选择麦克风或默认播放设备的系统声音，使用本地 SenseVoice 识别、Hy-MT2 7B 翻译，并手动保存文字归档。候选版本为 **0.2.0-beta.3-windows.1**，目前尚未公开发布或完成真实设备验收；Mac 发布目标见上文，其验收不代表 Windows 候选已通过。
+Windows 版目标为 **Windows 10/11 x64**：录音前选择麦克风或默认播放设备的系统声音，使用本地 SenseVoice 识别、Hy-MT2 7B 翻译，并手动保存文字归档。候选版本为 **0.2.0-beta.3-windows.1**，目前尚未公开发布或完成真实设备验收；Mac 发布版见上文，其验收不代表 Windows 候选已通过。
 
 本地翻译优先尝试随包提供的 NVIDIA CUDA 运行时，不可用时明确显示 CPU 降级；不会自动切到云服务。具体显卡、显存和内存未知，尚无经过验收的最低硬件配置，也不承诺 CPU 实时速度。首次模型下载需联网和用户确认。
 
@@ -58,7 +58,7 @@ npx pnpm@10.33.0 dev
 npx pnpm@10.33.0 --filter @rt/macos dist:preview
 ```
 
-默认产物：`apps/macos/release-preview/mac-arm64/Subline Internal.app`。构建不安装、不发布，也不自动完成公证。模型下载与麦克风／系统音频权限需在应用中确认。
+默认产物：`apps/macos/release-preview/mac-arm64/Subline Internal.app`。构建不安装、不发布；有可用签名身份和完整公证凭据时，electron-builder 会在签名后自动提交公证，无公证凭据则跳过提交。模型下载与麦克风／系统音频权限需在应用中确认。
 
 ## 数据与署名
 
@@ -201,7 +201,7 @@ pnpm --filter @rt/web dev   # 跑浏览器 PWA 开发服务器（→ @rt/web）
 
 iOS 见 [`apps/ios/native-plugin/INTEGRATION.md`](apps/ios/native-plugin/INTEGRATION.md)。其他脚本：`pnpm build`、`pnpm type-check`；单包 `pnpm --filter @rt/macos <script>`（如 `clean`、`test-translate`）。
 
-**打包（macOS）**——`pnpm dist` 构建未签名的 arm64 `.dmg` 到 `apps/macos/release/`（`pnpm dist:dir` 只生成未压缩 `.app`，调试用）。打开未签名产物见 [macOS](#macos) 小节；正式公开发布请用 Apple Developer ID 签名并公证。
+**打包（macOS）**——`pnpm dist` 构建 arm64 `.dmg` 到 `apps/macos/release/`（`pnpm dist:dir` 只生成未压缩 `.app`，调试用）。签名取决于本机可用身份；electron-builder 25.1.8 可通过 `APPLE_KEYCHAIN_PROFILE` 等受支持的完整凭据自动公证。发布前仍须检查最终应用的签名、公证票据与 Gatekeeper 结果，详见[公证配置](docs/release/notarize.md)。
 
 **网页部署**——GitHub Actions 工作流（`.github/workflows/ci.yml` 的 `deploy-web` job）在每次推送到 `main` 且质量门禁（`check`）全绿后部署到 GitHub Pages。ASR 特意用单线程 WASM，从而无需 COOP/COEP 头，可免费托管在 Pages。
 

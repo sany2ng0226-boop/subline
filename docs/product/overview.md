@@ -34,11 +34,11 @@ Subline 是基于上游开源项目 Realtime Translator 定制、面向中文、
 
 ### macOS
 
-macOS 公开测试渠道使用 Subline.app，目标为 Apple 芯片 Mac、macOS 14.2 及以上，不代表 GA 正式发布。已发布的公开版本为 [0.2.0-beta.4](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.4)；[0.2.0-beta.5](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.5) 正在准备发布，尚不能据此认定资产已上传。公开渠道提供连续字幕、手动归档、未归档草稿恢复、删除撤销与退出保护；主页语言选择和文件夹归档仍属于 Subline Internal。
+macOS 公开测试渠道使用 Subline.app，目标为 Apple 芯片 Mac、macOS 14.2 及以上，不代表 GA 正式发布。当前公开预发布版为 [0.2.0-beta.5](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.5)。公开渠道提供连续字幕、手动归档、未归档草稿恢复、删除撤销与退出保护；主页语言选择和文件夹归档仍属于 Subline Internal。
 
-历史 0.2.0-beta.1 公开测试包沿用 Classroom Translator 名称，0.2.0-beta.2 为 Subline Internal 测试包，两者均有各自产物的签名与公证验证记录。已发布 beta.4 也完成 Developer ID 签名、Apple 公证与应用票据验证。2026-10-22 本机安装的修复候选通过签名、stapler 和 Gatekeeper 的 Notarized Developer ID 检查；这不替代重新打包的 beta.5 发布验证。公证结论仅适用于验收的应用产物，不表示 DMG 容器单独获公证。
+历史 0.2.0-beta.1 公开测试包沿用 Classroom Translator 名称，0.2.0-beta.2 为 Subline Internal 测试包，两者均有各自产物的签名与公证验证记录。已发布 beta.4 也完成 Developer ID 签名、Apple 公证与应用票据验证。beta.5 的应用与 DMG 均完成 Developer ID 签名、分别通过 Apple 公证并附上票据；DMG 与包内应用均通过 stapler 和 Gatekeeper 检查。这一双重公证结论仅适用于本次验收产物，不追溯到旧版或自动沿用于后续构建。
 
-2026-10-22 修复候选已在原生应用验证空会话退出、取消关闭保留字幕、旧恢复草稿与新录音合并归档后退出、丢弃退出、渲染进程异常后重载恢复、主进程被强制终止后重启恢复，以及 SIGTERM 退出保留草稿。Jack 使用其他应用前台的真实键盘输入确认 `⌥⌘R` 可开始／停止录音。连续录音样本仅约 4.5 分钟，60 分钟测试按用户要求取消，不能据此认定长时间录音通过。
+修复版本已完成短时录音、退出和崩溃恢复检查，并验证其他应用前台时的 `⌥⌘R` 启停。修复候选已实测日语系统音频原文与中文译文；本机 beta.5 更新后已恢复字幕。长时间持续录音尚未验证。
 
 此前 Internal 包在空白用户数据目录走通引导、语言选择、模型确认与真实下载、麦克风启停；系统音频日中转写／本地翻译、手动归档、文件夹移动与重启读回也有验收记录。这些 Internal 文件夹结果不属于公开渠道能力。Hy-MT2 已在 48 GB 内存开发机运行；真实麦克风识别、多人噪声、整场活动的长时间负载和其他内存容量仍未验收。
 
