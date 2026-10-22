@@ -10,6 +10,7 @@ import { LANG_LABELS } from '../components/settings/form';
 import { settings, saveSettings, stepFontSize, fontAtMin, fontAtMax, cycleTheme, themePref } from '../composables/useSettings';
 import {
   lines,
+  recordingIds,
   partial,
   stablePartial,
   draftLine,
@@ -75,7 +76,7 @@ async function selectPrimaryLanguage(language: AsrLang): Promise<void> {
 }
 
 // 仅已定稿记录才算"有内容可清"：实时 partial 是瞬时的，清它没意义（归档也只存 lines）
-const hasContent = computed(() => lines.length > 0);
+const hasContent = computed(() => lines.length > 0 || recordingIds.length > 0);
 
 // 删除是破坏性操作：危险色、放在菜单最后并与其它项隔开
 const DANGER = 'var(--rt-live)';
@@ -714,8 +715,9 @@ function openMicSettings(): void {
     />
 
     <!-- 上次未归档内容的恢复条：非模态，不挡录音；恢复后放在当前内容之前 -->
+    <p v-if="recordingIds.length" class="px-5 py-2 text-xs text-[var(--rt-ink-3)]">{{ t('main.systemAudioNotice') }}</p>
     <div v-if="recoveryOffer" class="recovery-bar" role="status">
-      <span class="min-w-0">{{ t('main.recoveryNotice', { n: recoveryOffer.lines.length, time: fmtHourMinute(recoveryOffer.savedAt) }) }}</span>
+      <span class="min-w-0">{{ recoveryOffer.lines.length ? t('main.recoveryNotice', { n: recoveryOffer.lines.length, time: fmtHourMinute(recoveryOffer.savedAt) }) : t('main.recoveryAudioNotice', { n: recoveryOffer.audioIds?.length ?? 0 }) }}</span>
       <div class="flex shrink-0 items-center gap-4">
         <n-button text size="small" @click="discardRecovery">{{ t('main.recoveryDiscard') }}</n-button>
         <n-button text type="primary" size="small" @click="restoreRecovery">{{ t('main.recoveryRestore') }}</n-button>

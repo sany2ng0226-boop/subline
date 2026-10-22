@@ -3,12 +3,14 @@ interface QuitEvent { preventDefault(): void }
 export function createQuitFlow(options: {
   hasUnsavedContent(): boolean;
   confirmLeave(): Promise<boolean>;
+  prepare?(): Promise<void>;
   cleanup(): void;
   quit(): void;
   exit(code: number): void;
 }) {
   let leaveConfirmed = false;
   let pending: Promise<void> | undefined;
+  let preparing: Promise<void> | undefined;
   function commit(): void {
     if (leaveConfirmed) return;
     leaveConfirmed = true;
@@ -20,17 +22,24 @@ export function createQuitFlow(options: {
     }
   }
   return {
-    windowsClosed: commit,
+    isQuitting: () => leaveConfirmed,
+    windowsClosed(): void {
+      if (!options.prepare) { commit(); return; }
+      preparing ??= options.prepare().then(commit).catch((error) => console.error('Quit preparation failed', error))
+        .finally(() => { preparing = undefined; });
+    },
     handle(event: QuitEvent): void {
       if (leaveConfirmed) return;
       event.preventDefault();
       if (pending) return;
       if (!options.hasUnsavedContent()) {
-        commit();
+        if (!options.prepare) commit();
+        else pending = options.prepare().then(commit).catch((error) => console.error('Quit preparation failed', error))
+          .finally(() => { pending = undefined; });
         return;
       }
-      pending = Promise.resolve().then(options.confirmLeave).then((ok) => {
-        if (ok) commit();
+      pending = Promise.resolve().then(options.confirmLeave).then(async (ok) => {
+        if (ok) { await options.prepare?.(); commit(); }
       }).catch((error) => console.error('Quit confirmation failed', error)).finally(() => {
         pending = undefined;
       });

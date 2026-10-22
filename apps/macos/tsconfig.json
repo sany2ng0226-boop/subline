@@ -3,6 +3,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
+      "@rt/core": ["../../packages/core/src/index.ts"],
+      "@rt/ui": ["../../packages/ui/src/index.ts"],
       "@/*": [
         "src/renderer/src/*"
       ],

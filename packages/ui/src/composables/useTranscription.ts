@@ -29,6 +29,18 @@ function makeDraft(text: string): TranscriptLine {
   return { displayId: ++nextDisplayId, id: -1, time: fmtClock(Date.now()), text, translation: '', translating: false, failed: false };
 }
 export const recording = ref(false);
+export const recordingIds = reactive<string[]>([]);
+
+export function restoreRecordings(ids: string[]): void {
+  for (const id of ids) if (!recordingIds.includes(id)) recordingIds.push(id);
+}
+
+function discardAudio(ids: string[]): void {
+  if (!ids.length) return;
+  void bridge().discardRecordings?.(ids).catch((error) => {
+    errorText.value = error instanceof Error ? error.message : String(error);
+  });
+}
 
 // 软件未就绪：加载 ASR 模型中（录音管线就绪前）
 export const modelLoading = ref(false);
@@ -125,7 +137,7 @@ export function registerTranscriptionListeners(): void {
       // 经守卫收停：stopPipeline 在途期间用户点录音会被 recordBusy 挡住，避免 start/stop 交错
       if (recording.value) {
         recordBusy.value = true;
-        void stopRecording().finally(() => {
+        toggling = stopRecording().catch(() => {}).finally(() => {
           recordBusy.value = false;
         });
       }
@@ -173,12 +185,29 @@ export async function startRecording(): Promise<void> {
   // 计时基线在管线确认启动后才取：segment.start 的 0 点是管线启动之后，
   // 首次录音需加载模型耗时数秒，若在 await 前取值会让所有行的时钟偏早整个加载时长。
   recordStartEpoch = Date.now();
+  if (result.recordingId) restoreRecordings([result.recordingId]);
+  lastStopFailure = null;
   recording.value = true;
 }
 
+let lastStopFailure: Error | null = null;
+
 export async function stopRecording(): Promise<void> {
   recording.value = false;
-  await bridge().stopPipeline();
+  try {
+    const stopped = await bridge().stopPipeline();
+    if (!stopped.ok) throw new Error('Stopping the recording failed');
+    for (const id of stopped.emptyRecordingIds ?? []) {
+      const index = recordingIds.indexOf(id);
+      if (index >= 0) recordingIds.splice(index, 1);
+    }
+    lastStopFailure = null;
+  } catch (error) {
+    lastStopFailure = error instanceof Error ? error : new Error(String(error));
+    errorText.value = lastStopFailure.message;
+    errorCode.value = pipelineErrorCode(undefined, lastStopFailure.message);
+    throw lastStopFailure;
+  }
   partial.value = '';
   stablePartial.value = undefined;
   draftLine.value = null;
@@ -190,7 +219,10 @@ export function toggleRecording(): void {
   if (recordBusy.value) return;
   recordBusy.value = true;
   const action = recording.value ? stopRecording() : startRecording();
-  toggling = action.finally(() => {
+  toggling = action.catch((error) => {
+    errorText.value = error instanceof Error ? error.message : String(error);
+    errorCode.value = pipelineErrorCode(undefined, errorText.value);
+  }).finally(() => {
     recordBusy.value = false;
   });
 }
@@ -198,23 +230,27 @@ export function toggleRecording(): void {
 /** 等在途的启停结束；仍在录音则停止并等到收尾完成（关闭前归档用） */
 export async function ensureStopped(): Promise<void> {
   await toggling;
+  if (lastStopFailure) throw lastStopFailure;
   if (!recording.value) return;
   toggleRecording();
   await toggling;
+  if (lastStopFailure) throw lastStopFailure;
 }
 
 // 未归档：正在录音，或主页仍有定稿行（归档成功会清空主页，所以剩下的行都是上次归档后新增的）。
-export const hasUnsavedContent = computed(() => recording.value || recordBusy.value || lines.length > 0);
+export const hasUnsavedContent = computed(() => recording.value || recordBusy.value || lines.length > 0 || recordingIds.length > 0);
 
 /** 清空转写历史（归档成功后调用；不可撤销） */
 export function clearTranscript(): void {
   dismissUndo();
   lines.splice(0, lines.length);
+  recordingIds.splice(0);
   resetDraft();
 }
 
 // 主页「删除」可撤销：被删的行暂存在内存里，直到撤销、开始新录音或再次清空。
 let clearedLines: TranscriptLine[] = [];
+let clearedRecordingIds: string[] = [];
 export const canUndoDelete = ref(false);
 
 // 最近一次归档成功的时刻：主页清空后顶栏显示「已归档 · HH:mm」；删除内容后不再沿用旧时刻。
@@ -224,18 +260,23 @@ export const lastArchivedAt = ref<number | null>(null);
 export function deleteTranscript(): void {
   lastArchivedAt.value = null;
   clearedLines = lines.splice(0, lines.length);
+  clearedRecordingIds = recordingIds.splice(0);
   resetDraft();
-  canUndoDelete.value = clearedLines.length > 0;
+  canUndoDelete.value = clearedLines.length > 0 || clearedRecordingIds.length > 0;
 }
 
 /** 撤销最近一次删除 */
 export function undoDelete(): void {
-  if (!canUndoDelete.value || lines.length) return;
+  if (!canUndoDelete.value || lines.length || recordingIds.length) return;
   lines.push(...clearedLines);
+  restoreRecordings(clearedRecordingIds);
+  clearedRecordingIds = [];
   dismissUndo();
 }
 
 export function dismissUndo(): void {
+  discardAudio(clearedRecordingIds);
+  clearedRecordingIds = [];
   clearedLines = [];
   canUndoDelete.value = false;
 }

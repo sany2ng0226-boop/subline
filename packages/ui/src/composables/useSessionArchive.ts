@@ -6,6 +6,7 @@ import { fmtDateTime } from '../utils/datetime';
 import { archiveErrorKey } from '../utils/archiveError';
 import {
   lines,
+  recordingIds,
   recording,
   recordBusy,
   errorText,
@@ -48,28 +49,39 @@ export async function suggestArchiveName(): Promise<string> {
 }
 
 /** 保存当前主页内容为归档，成功后清空主页 */
-export async function archiveSession(name: string, folderId?: string | null): Promise<void> {
-  await bridge().saveArchive(name.trim() || defaultArchiveName(), archiveSnapshot(), foldersEnabled() ? folderId : undefined);
-  clearTranscript();
-  lastArchivedAt.value = Date.now();
-  // 归档后立即清掉崩溃暂存（关窗前归档后宿主马上退出，等不到下一次写入）
-  persistRecoveryNow();
+let savingArchive: Promise<void> | null = null;
+export function archiveSession(name: string, folderId?: string | null): Promise<void> {
+  if (savingArchive) return savingArchive;
+  savingArchive = (async () => {
+    await ensureStopped();
+    const wasBusy = recordBusy.value;
+    recordBusy.value = true;
+    try {
+      await bridge().saveArchive(name.trim() || defaultArchiveName(), archiveSnapshot(), foldersEnabled() ? folderId : undefined, [...recordingIds]);
+      clearTranscript();
+      lastArchivedAt.value = Date.now();
+      persistRecoveryNow();
+    } finally { recordBusy.value = wasBusy; }
+  })().finally(() => { savingArchive = null; });
+  return savingArchive;
 }
 
 // The host may require a save dialog; cancellation must leave the transcript intact.
 async function archiveBeforeClose(): Promise<boolean> {
   try {
+    if (savingArchive) await savingArchive;
     await ensureStopped();
     // 撤销期内选「归档并退出」：把刚清空的内容找回来再归档，而不是让它随退出消失
-    if (!lines.length && canUndoDelete.value) undoDelete();
+    if (!lines.length && !recordingIds.length && canUndoDelete.value) undoDelete();
     restoreRecovery();
-    if (!lines.length) return true;
+    if (!lines.length && !recordingIds.length) return true;
+    recordBusy.value = true;
     const name = await suggestArchiveName();
     const destination = await bridge().chooseArchiveSavePath?.(name);
     if (destination?.status === 'cancelled') return false;
     if (destination?.status === 'selected') {
       // Include final captions and translations that arrived while the save dialog was open.
-      await bridge().saveArchiveBeforeClose!(destination.token, archiveSnapshot());
+      await bridge().saveArchiveBeforeClose!(destination.token, archiveSnapshot(), [...recordingIds]);
       clearTranscript();
       lastArchivedAt.value = Date.now();
       persistRecoveryNow();
@@ -82,6 +94,8 @@ async function archiveBeforeClose(): Promise<boolean> {
     errorText.value = i18n.global.t(archiveErrorKey(error, 'archive.operationFailed'));
     console.error('[archive:before-close]', error);
     return false;
+  } finally {
+    recordBusy.value = false;
   }
 }
 

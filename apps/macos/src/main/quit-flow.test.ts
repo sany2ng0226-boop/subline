@@ -71,6 +71,70 @@ describe('quit flow', () => {
     expect(options.confirmLeave).not.toHaveBeenCalled();
     expect(options.quit).toHaveBeenCalledOnce();
   });
+  it.each([false, true])('does not start cleanup or the forced-exit timer while preparing durable audio: guarded=%s', async (guarded) => {
+    const { options, event } = setup();
+    let finish!: () => void;
+    const prepare = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const flow = createQuitFlow({ ...options, hasUnsavedContent: () => guarded, prepare });
+    flow.handle(event);
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(options.cleanup).not.toHaveBeenCalled();
+    expect(options.quit).not.toHaveBeenCalled();
+    expect(options.exit).not.toHaveBeenCalled();
+    expect(flow.isQuitting()).toBe(false);
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(options.cleanup).toHaveBeenCalledOnce();
+    expect(options.quit).toHaveBeenCalledOnce();
+    expect(flow.isQuitting()).toBe(true);
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(options.exit).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(options.exit).toHaveBeenCalledExactlyOnceWith(0);
+  });
+  it('a termination request can finish audio and quit despite a pending native confirmation', async () => {
+    const { options, event } = setup();
+    let answer!: (ok: boolean) => void;
+    let finish!: () => void;
+    options.confirmLeave.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+    const prepare = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const flow = createQuitFlow({ ...options, prepare });
+    flow.handle(event);
+    await Promise.resolve();
+    expect(options.confirmLeave).toHaveBeenCalledOnce();
+    flow.windowsClosed();
+    flow.windowsClosed();
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(options.cleanup).not.toHaveBeenCalled();
+    expect(options.exit).not.toHaveBeenCalled();
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(options.cleanup).toHaveBeenCalledOnce();
+    expect(options.quit).toHaveBeenCalledOnce();
+    answer(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(options.cleanup).toHaveBeenCalledOnce();
+  });
+  it('keeps the app alive and allows retry when audio preparation fails', async () => {
+    const { options, event } = setup();
+    const prepare = vi.fn(async (): Promise<void> => { throw new Error('audio flush failed'); });
+    const flow = createQuitFlow({ ...options, prepare });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      flow.handle(event);
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(options.cleanup).not.toHaveBeenCalled();
+      expect(options.quit).not.toHaveBeenCalled();
+      expect(options.exit).not.toHaveBeenCalled();
+      expect(flow.isQuitting()).toBe(false);
+      prepare.mockResolvedValue(undefined);
+      flow.handle(event);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(options.cleanup).toHaveBeenCalledOnce();
+    } finally { log.mockRestore(); }
+  });
 });
 
 describe('single instance', () => {

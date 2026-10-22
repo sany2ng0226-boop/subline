@@ -48,6 +48,7 @@ export interface PartialPayload {
  * 本地化文案；无码或未知码时回退 error 原文（宿主自由文本，可能非界面语言）。
  */
 export type PipelineErrorCode =
+  | 'recording-write-failed'
   | 'mic-permission' // 麦克风权限被拒/未授予
   | 'system-audio-permission' // 系统音频录制权限被拒
   | 'audio-capture-failed' // 音频采集链路建立失败（无输入设备/被占用等）
@@ -64,6 +65,9 @@ export interface StatusPayload {
 
 export interface StartResult {
   ok: boolean;
+  captureSource?: AudioSource;
+  captureToken?: string;
+  recordingId?: string;
   error?: string;
   /** 错误码（ok 为 false 时可选携带） */
   code?: PipelineErrorCode;
@@ -188,6 +192,18 @@ export interface ArchiveLibrary {
   lastFolderId: string | null;
 }
 
+/** Local speech-quality capture of system audio, independent of recognition success. */
+export interface AudioAttachment {
+  id: string;
+  source: 'system';
+  format: 'wav';
+  sampleRate: number;
+  channels: number;
+  durationMs: number;
+  startedAt: number;
+  bytes: number;
+}
+
 /** 一条完整归档记录（持久化） */
 export interface ArchiveRecord {
   id: string;
@@ -195,6 +211,7 @@ export interface ArchiveRecord {
   folderId?: string | null;
   createdAt: number;
   lines: ArchiveLine[];
+  audio?: AudioAttachment[];
 }
 
 /** 归档列表项（不含完整内容，仅摘要） */
@@ -205,6 +222,7 @@ export interface ArchiveSummary {
   folderId?: string | null;
   /** 最后一条对话的原文，列表里弱色小字显示 */
   lastLine: string;
+  audioCount?: number;
 }
 
 /** 识别设置：识别语言 + 选用的 ASR 模型。 */

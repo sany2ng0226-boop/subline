@@ -10,6 +10,13 @@ import { audioLevel } from '@rt/core';
 import type { AppBridge, StartResult, PipelineErrorCode, StatusPayload } from '@rt/core';
 import type { ElectronApi } from '@shared/types';
 
+export const CAPTURE_FLUSH_TIMEOUT_MS = 2_000;
+type CaptureState = {
+  node: AudioWorkletNode;
+  accepting: boolean;
+  flush?: { id: number; complete: () => void };
+};
+
 export function createMacBridge(api: ElectronApi): AppBridge {
   let audioContext: AudioContext | null = null;
   let mediaStream: MediaStream | null = null;
@@ -18,15 +25,82 @@ export function createMacBridge(api: ElectronApi): AppBridge {
   const publishLevel = (level: number) => levelListeners.forEach(cb => cb(level));
   // 重入守卫：正在进行的启动 promise，供并发/重复调用复用，避免双路采集与旧流引用被覆盖泄漏
   let starting: Promise<StartResult> | null = null;
+  let stopping: Promise<{ ok: boolean; emptyRecordingIds?: string[] }> | null = null;
+  let releasing: Promise<void> | null = null;
+  let captureState: CaptureState | null = null;
+  let nextFlushId = 0;
 
-  async function releaseCapture(): Promise<void> {
+  function flushCapture(state: CaptureState): Promise<void> {
+    // Older injected hosts and lightweight mocks may not expose a bidirectional port.
+    if (typeof state.node.port.postMessage !== 'function') return Promise.resolve();
+    const id = ++nextFlushId;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        state.accepting = false;
+        state.flush = undefined;
+        reject(new Error('Audio capture did not flush its final samples before stopping'));
+      }, CAPTURE_FLUSH_TIMEOUT_MS);
+      state.flush = { id, complete: () => {
+        clearTimeout(timer);
+        state.accepting = false;
+        state.flush = undefined;
+        resolve();
+      } };
+      try { state.node.port.postMessage({ type: 'flush', id }); }
+      catch (error) {
+        clearTimeout(timer);
+        state.accepting = false;
+        state.flush = undefined;
+        reject(error);
+      }
+    });
+  }
+
+  function releaseCapture(): Promise<void> {
+    if (releasing) return releasing;
     const stream = mediaStream;
-    mediaStream = null;
-    stream?.getTracks().forEach((track) => track.stop());
     const context = audioContext;
-    audioContext = null;
-    await context?.close().catch(() => undefined);
+    const state = captureState;
+    releasing = (async () => {
+      try {
+        if (state) await flushCapture(state);
+      } finally {
+        if (state) state.accepting = false;
+        if (captureState === state) captureState = null;
+        if (mediaStream === stream) mediaStream = null;
+        stream?.getTracks().forEach((track) => track.stop());
+        if (audioContext === context) audioContext = null;
+        await context?.close().catch(() => undefined);
+        publishLevel(0);
+      }
+    })().finally(() => { releasing = null; });
+    return releasing;
+  }
+
+  async function stopCaptureAndPipeline(): Promise<{ ok: boolean; emptyRecordingIds?: string[] }> {
+    let captureError: Error | undefined;
+    try { await releaseCapture(); }
+    catch (error) { captureError = error instanceof Error ? error : new Error(String(error)); }
+    let result: { ok: boolean; emptyRecordingIds?: string[] };
+    try { result = await api.stopPipeline(); }
+    catch (error) {
+      if (captureError) throw new AggregateError([captureError, error], 'Audio capture and recording finalization failed');
+      throw error;
+    }
+    if (captureError) throw captureError;
+    if (!result.ok) throw new Error('Recording finalization failed');
+    return result;
+  }
+
+  function stopPipeline(): Promise<{ ok: boolean; emptyRecordingIds?: string[] }> {
+    if (stopping) return stopping;
     publishLevel(0);
+    // A stop requested during permission/model setup must also release the eventual capture.
+    stopping = (async () => {
+      if (starting) await starting.catch(() => undefined);
+      return stopCaptureAndPipeline();
+    })().finally(() => { stopping = null; });
+    return stopping;
   }
 
   /** 权限类采集失败（用户拒绝 / 未授权）。 */
@@ -58,34 +132,43 @@ export function createMacBridge(api: ElectronApi): AppBridge {
   async function beginCapture(): Promise<StartResult> {
     const r = await api.startPipeline();
     if (!r.ok) return r;
-    const source = (await api.getSettings()).audioSource;
+    const source = r.captureSource ?? (await api.getSettings()).audioSource;
     try {
       mediaStream =
         source === 'system'
           ? await captureSystemAudio()
           : await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
-      for (const track of mediaStream.getAudioTracks()) {
+      const stream = mediaStream;
+      for (const track of stream.getAudioTracks()) {
         track.addEventListener('ended', () => {
-          if (!mediaStream) return;
-          void releaseCapture().then(() => api.stopPipeline()).catch(() => undefined).finally(() => {
+          if (mediaStream !== stream) return;
+          void stopPipeline().catch(() => undefined).finally(() => {
             statusListeners.forEach((listener) => listener({ state: 'error', code: 'audio-interrupted',
               error: '音频输入已中断，请检查播放或输入设备后重新开始。' }));
           });
         }, { once: true });
       }
-      audioContext = new AudioContext({ sampleRate: 16000 });
-      await audioContext.audioWorklet.addModule('audio-worklet.js');
-      const audioSource = audioContext.createMediaStreamSource(mediaStream);
-      const capture = new AudioWorkletNode(audioContext, 'capture-processor');
-      capture.port.onmessage = (e: MessageEvent<Float32Array>) => {
-        api.sendAudio(e.data);
+      const context = new AudioContext({ sampleRate: 16000 });
+      audioContext = context;
+      await context.audioWorklet.addModule('audio-worklet.js');
+      const audioSource = context.createMediaStreamSource(mediaStream);
+      const capture = new AudioWorkletNode(context, 'capture-processor');
+      const state: CaptureState = { node: capture, accepting: true };
+      captureState = state;
+      capture.port.onmessage = (e: MessageEvent<Float32Array | { type: 'flushed'; id: number }>) => {
+        if (audioContext !== context || mediaStream !== stream || !state.accepting) return;
+        if (!(e.data instanceof Float32Array)) {
+          if (e.data?.type === 'flushed' && state.flush?.id === e.data.id) state.flush.complete();
+          return;
+        }
+        if (r.captureToken) api.sendAudio(e.data, r.captureToken);
+        else api.sendAudio(e.data);
         publishLevel(audioLevel(e.data));
       };
       audioSource.connect(capture);
       return r;
     } catch (err) {
-      await releaseCapture();
-      await api.stopPipeline();
+      await stopCaptureAndPipeline().catch(() => undefined);
       const error = err instanceof Error ? err.message : String(err);
       // 系统音频路径：区分「录制权限被拒」与「采集链路建立失败」；麦克风路径沿用原语义。
       if (source === 'system') {
@@ -105,6 +188,7 @@ export function createMacBridge(api: ElectronApi): AppBridge {
     // 构建期注入的发布版本串；define 缺失的环境（如单测导入）下不暴露
     appVersion: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : undefined,
     async startPipeline() {
+      if (stopping) await stopping;
       if (starting) return starting;
       if (mediaStream) return { ok: true }; // 已在采集中，重复调用直接返回
       starting = beginCapture();
@@ -115,16 +199,7 @@ export function createMacBridge(api: ElectronApi): AppBridge {
       }
     },
 
-    async stopPipeline() {
-      publishLevel(0);
-      // 等在途启动先完成再拆除：保证「stop 晚于 start 调用」必然「stop 晚于 start 生效」，
-      // 不会在 beginCapture 取到麦克风前拆了个寂寞、留下持续采集的流。
-      if (starting) {
-        await starting.catch(() => undefined);
-      }
-      await releaseCapture();
-      return api.stopPipeline();
-    },
+    stopPipeline,
 
     // ===== 以下全部直通 window.api =====
     onShortcut: api.onShortcut ? (cb) => api.onShortcut!(cb) : undefined,
@@ -150,13 +225,16 @@ export function createMacBridge(api: ElectronApi): AppBridge {
     cancelModelDownload: (kind, id) => api.cancelModelDownload(kind, id),
     getTranslationSetupStatus: (modelId) => api.getTranslationSetupStatus(modelId),
     downloadTranslationModel: (modelId) => api.downloadTranslationModel(modelId),
-    saveArchive: (name, lines, folderId) => api.saveArchive(name, lines, folderId),
+    saveArchive: (name, lines, folderId, audioIds) => api.saveArchive(name, lines, folderId, audioIds),
     chooseArchiveSavePath: api.chooseArchiveSavePath && api.saveArchiveBeforeClose
       ? (name) => api.chooseArchiveSavePath!(name)
       : undefined,
     saveArchiveBeforeClose: api.saveArchiveBeforeClose
-      ? (token, lines) => api.saveArchiveBeforeClose!(token, lines)
+      ? (token, lines, audioIds) => api.saveArchiveBeforeClose!(token, lines, audioIds)
       : undefined,
+    listUnarchivedRecordings: api.listUnarchivedRecordings ? () => api.listUnarchivedRecordings!() : undefined,
+    discardRecordings: api.discardRecordings ? (ids) => api.discardRecordings!(ids) : undefined,
+    getArchiveAudioUrl: api.getArchiveAudioUrl ? (archiveId, recordingId) => api.getArchiveAudioUrl!(archiveId, recordingId) : undefined,
     getArchiveLibrary: () => api.getArchiveLibrary!(),
     createArchiveFolder: (name) => api.createArchiveFolder!(name),
     renameArchiveFolder: (id, name) => api.renameArchiveFolder!(id, name),

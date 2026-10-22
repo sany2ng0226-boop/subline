@@ -16,10 +16,12 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 // 否则 out 里会留下 require("@rt/core") 在运行时找不到而崩溃。
 export default defineConfig({
   main: {
+    resolve: { alias: { '@rt/core': resolve(root, '../../packages/core/src/index.ts') } },
     define: { __SUBLINE_VARIANT__: JSON.stringify(process.env['SUBLINE_VARIANT'] === 'dev' ? 'dev' : 'release') },
     plugins: [externalizeDepsPlugin({ exclude: ['@rt/core'] })],
   },
   preload: {
+    resolve: { alias: { '@rt/core': resolve(root, '../../packages/core/src/index.ts') } },
     plugins: [externalizeDepsPlugin({ exclude: ['@rt/core'] })],
   },
   renderer: {
@@ -30,6 +32,7 @@ export default defineConfig({
     },
     resolve: {
       alias: {
+        '@rt/core': resolve(root, '../../packages/core/src/index.ts'),
         // UI has no build step; injected workspace copies can lag behind its source.
         '@rt/ui/styles': resolve(root, '../../packages/ui/src/styles.css'),
         '@rt/ui': resolve(root, '../../packages/ui/src/index.ts'),

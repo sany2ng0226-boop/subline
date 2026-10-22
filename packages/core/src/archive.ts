@@ -10,6 +10,7 @@ export function toSummary(r: ArchiveRecord): ArchiveSummary {
     ...(r.folderId !== undefined ? { folderId: r.folderId } : {}),
     createdAt: r.createdAt,
     lastLine: r.lines.length > 0 ? r.lines[r.lines.length - 1].text : '',
+    ...(r.audio?.length ? { audioCount: r.audio.length } : {}),
   };
 }
 

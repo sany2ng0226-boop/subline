@@ -62,7 +62,7 @@ export interface AppBridge {
    */
   prewarmPipeline?(): void;
   /** 停止整个实时会话（含音频采集） */
-  stopPipeline(): Promise<{ ok: boolean }>;
+  stopPipeline(): Promise<{ ok: boolean; emptyRecordingIds?: string[] }>;
   /**
    * 本平台是否支持本地（离线）翻译引擎。省略/undefined 视为 true。
    * Web 在 iOS/iPadOS 上为 false：WebKit 单标签页内存装不下本地翻译模型（会崩），只提供
@@ -150,10 +150,13 @@ export interface AppBridge {
    */
   cancelModelDownload(kind: ModelKind, modelId: string): Promise<void>;
   /** 归档：保存一次对话，返回更新后的列表 */
-  saveArchive(name: string, lines: ArchiveLine[], folderId?: string | null): Promise<ArchiveSummary[]>;
+  saveArchive(name: string, lines: ArchiveLine[], folderId?: string | null, audioIds?: string[]): Promise<ArchiveSummary[]>;
   /** A selected destination is represented by a host-owned token, never an arbitrary path. */
   chooseArchiveSavePath?(name: string): Promise<{ status: 'selected'; token: string } | { status: 'cancelled' | 'unsupported' }>;
-  saveArchiveBeforeClose?(token: string, lines: ArchiveLine[]): Promise<void>;
+  saveArchiveBeforeClose?(token: string, lines: ArchiveLine[], audioIds?: string[]): Promise<void>;
+  listUnarchivedRecordings?(): Promise<string[]>;
+  discardRecordings?(ids: string[]): Promise<void>;
+  getArchiveAudioUrl?(archiveId: string, recordingId: string): Promise<string>;
   getArchiveLibrary?(): Promise<ArchiveLibrary>;
   createArchiveFolder?(name: string): Promise<ArchiveLibrary>;
   renameArchiveFolder?(id: string, name: string): Promise<ArchiveLibrary>;

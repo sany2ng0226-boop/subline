@@ -24,6 +24,12 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 3. macOS 和 Web 将音频送入 `@rt/core` 的共享转写管线，分别在 utility process 和 WASM Worker 中执行 VAD 与 ASR；iOS 原生插件在自身 ASR 队列中执行对应的 VAD、部分识别与定稿。
 4. macOS 在识别后使用 `packages/core/src/asr/sentence-assembler.ts` 按规则合并文字片段，不注入模型切句判断器；默认启用日语短谓语句提前提交，等待上限为 12 秒、累计音频上限为 14 秒，不改变 ASR 识别窗口或翻译模型。部分文本与合并后的定稿段经 `AppBridge` 事件返回 `@rt/ui`。Web 与 iOS 直接发布自身管线的定稿段；UI 将定稿段追加为对话行。
 
+### 系统原音保存与停录
+
+- `apps/macos/src/renderer/public/audio-worklet.js` 在停止前发送未满块的尾部 PCM 并返回 flush 确认；`mac-bridge.ts` 等确认后再释放采集与调用主进程停录。主进程核对当前窗口和采集 token，系统音源的相同识别输入同时交给 `AudioRecordingStore`，麦克风输入不写原音。
+- `apps/macos/src/main/audio-recordings.ts` 把 16 kHz 单声道 PCM16 写入当前 profile 的 `recordings` 目录，每段独立 WAV、写入队列有界；停录等待 ASR flush 确认及 WAV 头、fsync 收尾，失败阻止归档退出。`ArchiveRecord.audio` 只存附件元数据，音频正文不进入 JSON。
+- `useTranscription.ts` 的 `recordingIds` 与字幕一起参与未归档判断及删除／撤销；`useRecovery.ts` 将录音 ID 纳入快照并查询未归档录音，支持没有字幕的原音恢复。`useSessionArchive.ts` 保存最新字幕和全部录音 ID，多个录音段可绑定同一归档。主进程保存及清理时保护其他归档仍引用的附件；音频取址和协议 resolver 均核对归档附件成员关系。
+
 ### 音频音量显示
 
 - `packages/core/src/audio-level.ts` 提供输入 PCM 的音量归一化，macOS 的 `mac-bridge.ts` 在发送识别音频时通过可选 `AppBridge.onAudioLevel` 发布音量事件；它不改写音频或识别管线。
@@ -55,14 +61,16 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 
 - `@rt/ui` 只持有表单和当前会话状态；设置、模型和归档持久化经 `AppBridge`。设置保存契约是 `SettingsPatch`：UI 只提交发生变化的字段，`@rt/core` 的 `mergeSettings` 将补丁合并到最新完整设置并统一校验；macOS 同步合并后写文件，Web 与 iOS 将异步写入串行化，并在每次实际执行时读取最新状态再合并。默认值、其它字段校验、归档摘要和排序也在 `@rt/core` 复用，各宿主只选择文件、Preferences 或 IndexedDB 作为存储后端。
 - Internal 归档入口由 `packages/ui/src/screens/ArchiveLibrary.vue` 管理文件夹、筛选、改名与移动，`MainScreen.vue` 负责手动保存弹窗；内容标题提取属于 `packages/core/src/archive.ts` 的 `suggestArchiveTitle`。产品规则见[清屏与归档](product/experience.md#清屏与归档)。
-- Dev 归档退出通过 `packages/core/src/bridge.ts` 的两个可选契约，经 preload 与 `mac-bridge.ts` 连接主进程：`chooseArchiveSavePath(name)` 打开原生保存窗口，返回 `selected` 与主进程持有的路径 token，或 `cancelled` / `unsupported`；`useSessionArchive.ts` 在选完路径后取得最新 `archiveSnapshot()`，再调用 `saveArchiveBeforeClose(token, lines)`。`index.ts` 仅接受已确认路径的 token，先原子写入文本，再调用 `saveArchive` 保存 Dev 内记录，两者完成才让 Promise 成功；UI 此后清空字幕并回执退出。取消或写入异常保持窗口，`unsupported` 或宿主未实现时走原归档路径。Dev 的关闭前归档回执不设人工选择超时，其他渠道保留原有 30 秒超时；请求同时核对窗口发送者与 ID，窗口销毁或渲染进程退出按失败结束。此项仅完成 Dev 源码修改，未构建、安装或测试；产品边界见[Dev 归档并退出](product/experience.md#dev-归档并退出仅源码实现)。
+- Dev 归档退出通过 `packages/core/src/bridge.ts` 的两个可选契约，经 preload 与 `mac-bridge.ts` 连接主进程：`chooseArchiveSavePath(name)` 打开原生保存窗口，返回 `selected` 与主进程持有的路径 token，或 `cancelled` / `unsupported`；`useSessionArchive.ts` 在选完路径后取得最新 `archiveSnapshot()`，再调用 `saveArchiveBeforeClose(token, lines, audioIds)`。`index.ts` 仅接受已确认路径的 token，先原子写入文本，再调用 `saveArchive` 保存 Dev 内记录，两者完成才让 Promise 成功；UI 此后清空字幕并回执退出。取消或写入异常保持窗口，`unsupported` 或宿主未实现时走原归档路径。Dev 的关闭前归档回执不设人工选择超时，其他渠道保留原有 30 秒超时；请求同时核对窗口发送者与 ID，窗口销毁或渲染进程退出按失败结束。此项为 Dev 分支改动，未发布、未安装，原生保存窗口尚未实机验收；产品边界见[Dev 归档并退出](product/experience.md#dev-归档并退出)。
 - `apps/macos/src/main/archives.ts` 保留 `archives.json` 的记录数组格式，读取旧记录不做迁移；`ArchiveLine.time` 为可选字段，使缺少行时间的旧记录继续可读。`archive-library.ts` 单独管理 `archive-library.json` 中的文件夹及记录元数据覆盖，改名和移动不重写归档正文。归档正文与元数据各自通过原子替换落盘，UI 等待保存成功后才清屏。
+- `ArchiveRecord.audio` 保存 WAV 附件元数据；`packages/ui/src/components/ArchiveAudioPlayer.vue` 由 `ArchiveScreen.vue` 和 `ArchiveLibrary.vue` 的详情共用，通过可选 `AppBridge.getArchiveAudioUrl` 异步取址。原生控件使用 `preload="none"`，不自动播放；无附件、能力缺失与读取失败各有文案，失败可重试。`apps/macos/src/main/archive-audio-response.ts` 将受限的 `subline-audio://archive/<archiveId>/<recordingId>` GET / HEAD 请求交给宿主 resolver 校验后，以异步文件流返回 WAV；支持单个字节范围和后缀范围，不接受编码路径、额外路径或多范围请求，流队列按字节限制预读。对应 `.test.ts` 使用临时合成 WAV 覆盖完整读取、HEAD、拖动范围及拒绝路径；本项先落 Dev 分支，未发布、未安装；隐藏 Electron 合成验证已覆盖退出后新进程重开、解码、静音播放和进度拖动，真实系统采音未重测。产品规则见[归档原音回听](product/experience.md#归档原音回听先落-dev-分支)。
 - 文件夹能力同时受 UI 的 `__INTERNAL_BUILD__`、可选 `AppBridge.getArchiveLibrary` 能力和桌面主进程的 Internal 应用身份、Windows 候选版或隔离预览 profile 检查约束；稳定渠道、Web 与 iOS 保留原路径。
 - `apps/macos/src/main/settings.ts` 仅对新建设置预选本地 `hy-mt2-7b`，翻译默认保持关闭；已有设置由共享兼容逻辑读取。正式应用名为 Subline，应用标识仍为 `io.github.sany2ng0226.classroomtranslator`，独立数据目录为 `~/Library/Application Support/Classroom Translator`。
 - 模型清单、大小、语言、平台可用性和有序下载源的单一事实源是 `packages/core/src/model-registry.ts`。各宿主将文件下载到本端模型目录或 Cache Storage，再由对应推理运行时离线装载。Hy-MT2 使用 Tencent 固定 revision 的 Q4_K_M 文件，注册表声明精确字节数及 SHA-256；macOS 下载流程据此校验。
 
 ## 测试与构建位置
 
+- `tsconfig.base.json` 与 macOS `tsconfig.json` 直接把 `@rt/core` / `@rt/ui` 解析到工作区源码；`electron.vite.config.ts` 的 main、preload、renderer 同样显式解析 core，renderer 另直接解析 UI。源码型包不能依赖可能滞后的 `node_modules` 注入副本，否则新增组件和契约会漏入检查或构建。
 - 根 `package.json` 的 `pnpm check` 运行 `@rt/core` 单元测试、macOS 评测语料导入器的纯逻辑测试，以及 macOS、Web、iOS 三端类型检查；它不下载语料或模型，也不执行耗时的识别精度门禁。
 - `packages/core/src/**/*.test.ts` 覆盖设置、归档、模型源、转写管线、定稿漂移统计和翻译决策等共享逻辑。
 - `apps/macos/test` 包含无 GUI 管线、CER 评测和翻译脚本；入口命令由 `apps/macos/package.json` 的 `test-pipeline`、`eval-cer` 和 `test-translate` 定义。`eval-cer` 同时报告产品管线 CER、整段离线 CER 和“实时最长结果到定稿”的 Final 漂移，并可用 `--max-cer`、`--max-drift` 将任一模型的加权结果设为失败门槛。日语快捷命令 `eval-cer-ja` 评测固定语言的完整语料，`eval-cer-ja:gate` 则以 SenseVoice 的产品管线 CER 不超过 20%、Final 漂移不超过 5% 为回归门禁。

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
 import { listSummaries, makeArchiveId } from '@rt/core';
-import type { ArchiveLine, ArchiveRecord, ArchiveSummary } from '../shared/types';
+import type { ArchiveLine, ArchiveRecord, ArchiveSummary, AudioAttachment } from '../shared/types';
 
 let cached: ArchiveRecord[] | null = null;
 
@@ -71,6 +71,10 @@ export function getArchive(id: string): ArchiveRecord | null {
   return load().find((r) => r.id === id) ?? null;
 }
 
+export function archivedRecordingIds(): Set<string> {
+  return new Set(load().flatMap((record) => record.audio?.map((audio) => audio.id) ?? []));
+}
+
 let mutationChain: Promise<unknown> = Promise.resolve();
 function mutate(update: (records: ArchiveRecord[]) => ArchiveRecord[]): Promise<ArchiveSummary[]> {
   const pending = mutationChain.then(async () => {
@@ -83,12 +87,13 @@ function mutate(update: (records: ArchiveRecord[]) => ArchiveRecord[]): Promise<
   return pending;
 }
 
-export function saveArchive(name: string, lines: ArchiveLine[], createdAt: number, folderId?: string | null): Promise<ArchiveSummary[]> {
+export function saveArchive(name: string, lines: ArchiveLine[], createdAt: number, folderId?: string | null, audio?: AudioAttachment[]): Promise<ArchiveSummary[]> {
   return mutate((records) => [...records, {
     id: makeArchiveId(createdAt),
     name: name.trim() || new Date(createdAt).toISOString(),
     createdAt,
     lines,
+    ...(audio?.length ? { audio } : {}),
     ...(folderId !== undefined ? { folderId } : {}),
   }]);
 }
