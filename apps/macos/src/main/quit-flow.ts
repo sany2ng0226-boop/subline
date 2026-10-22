@@ -20,6 +20,7 @@ export function createQuitFlow(options: {
     }
   }
   return {
+    isQuitting: () => leaveConfirmed,
     windowsClosed: commit,
     handle(event: QuitEvent): void {
       if (leaveConfirmed) return;

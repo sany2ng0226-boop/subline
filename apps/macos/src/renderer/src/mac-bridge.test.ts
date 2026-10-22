@@ -10,17 +10,21 @@ function fixture(source: 'mic' | 'system' = 'system', hasAudio = true) {
     getTracks: () => hasAudio ? [audio, video] : [video] };
   const devices = { getDisplayMedia: vi.fn(async () => stream), getUserMedia: vi.fn(async () => stream) };
   const close = vi.fn(async () => {});
+  const captures: Array<{ port: { onmessage: ((event: { data: Float32Array }) => void) | null } }> = [];
   vi.stubGlobal('navigator', { mediaDevices: devices });
   vi.stubGlobal('AudioContext', class {
     audioWorklet = { addModule: vi.fn(async () => {}) };
     createMediaStreamSource() { return { connect: vi.fn() }; }
     close = close;
   });
-  vi.stubGlobal('AudioWorkletNode', class { port = { onmessage: null }; });
+  vi.stubGlobal('AudioWorkletNode', class {
+    port = { onmessage: null };
+    constructor() { captures.push(this); }
+  });
   const api = { startPipeline: vi.fn(async () => ({ ok: true })), stopPipeline: vi.fn(async () => ({ ok: true })),
     getSettings: vi.fn(async () => ({ audioSource: source })), sendAudio: vi.fn(),
     platform: 'windows', audioSources: ['system', 'mic'], onStatus: vi.fn(() => vi.fn()) };
-  return { bridge: createMacBridge(api as unknown as ElectronApi), api, devices, audio, video, ended, close };
+  return { bridge: createMacBridge(api as unknown as ElectronApi), api, devices, audio, video, ended, close, captures };
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -77,6 +81,24 @@ describe('desktop audio lifecycle', () => {
     await stop;
     expect(f.audio.stop).toHaveBeenCalledOnce();
     expect(f.close).toHaveBeenCalledOnce();
+  });
+  it('drops queued audio frames after release and waits for the ASR acknowledgement', async () => {
+    const f = fixture();
+    await f.bridge.startPipeline();
+    const data = new Float32Array([1]);
+    f.captures[0]!.port.onmessage!({ data });
+    expect(f.api.sendAudio).toHaveBeenCalledOnce();
+    let finish!: (value: { ok: boolean }) => void;
+    f.api.stopPipeline.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const done = vi.fn();
+    const stop = f.bridge.stopPipeline().then(done);
+    await vi.waitFor(() => expect(f.api.stopPipeline).toHaveBeenCalledOnce());
+    f.captures[0]!.port.onmessage!({ data });
+    expect(f.api.sendAudio).toHaveBeenCalledOnce();
+    expect(done).not.toHaveBeenCalled();
+    finish({ ok: true });
+    await stop;
+    expect(done).toHaveBeenCalledOnce();
   });
 });
 

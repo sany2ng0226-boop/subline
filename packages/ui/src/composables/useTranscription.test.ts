@@ -112,3 +112,35 @@ it('reports a denied microphone as a permission error, not a recognizer failure'
   callbacks.onStatus({ state: 'error', error: 'NotAllowedError: Permission denied' });
   expect(state.errorCode.value).toBe('mic-permission');
 });
+
+it('surfaces a failed stop and blocks archive until a later successful recording', async () => {
+  const { setBridge, bridge } = await import('../bridge');
+  const current = bridge();
+  setBridge({ ...current, stopPipeline: async () => { throw new Error('ASR flush timed out'); } });
+  await state.startRecording();
+  state.toggleRecording();
+  await expect(state.ensureStopped()).rejects.toThrow('ASR flush timed out');
+  expect(state.recordBusy.value).toBe(false);
+  expect(state.errorText.value).toBe('ASR flush timed out');
+  await expect(state.ensureStopped()).rejects.toThrow('ASR flush timed out');
+  setBridge(current);
+  await state.startRecording();
+  await expect(state.ensureStopped()).resolves.toBeUndefined();
+});
+
+it('waits for an automatic error-triggered stop before allowing archive', async () => {
+  const { setBridge, bridge } = await import('../bridge');
+  let finish!: () => void;
+  setBridge({ ...bridge(), stopPipeline: () => new Promise<void>((resolve) => { finish = resolve; }) });
+  await state.startRecording();
+  callbacks.onStatus({ state: 'error', error: 'audio interrupted' });
+  let stopped = false;
+  const pending = state.ensureStopped().then(() => { stopped = true; });
+  await Promise.resolve();
+  expect(stopped).toBe(false);
+  callbacks.onSegment({ id: 50, text: 'final buffered words', start: 0, duration: 1 });
+  finish();
+  await pending;
+  expect(state.lines[0].text).toBe('final buffered words');
+  expect(state.recordBusy.value).toBe(false);
+});

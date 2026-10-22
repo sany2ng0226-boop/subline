@@ -24,6 +24,13 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 3. macOS 和 Web 将音频送入 `@rt/core` 的共享转写管线，分别在 utility process 和 WASM Worker 中执行 VAD 与 ASR；iOS 原生插件在自身 ASR 队列中执行对应的 VAD、部分识别与定稿。
 4. macOS 在识别后使用 `packages/core/src/asr/sentence-assembler.ts` 按规则合并文字片段，不注入模型切句判断器；默认启用日语短谓语句提前提交，等待上限为 12 秒、累计音频上限为 14 秒，不改变 ASR 识别窗口或翻译模型。部分文本与合并后的定稿段经 `AppBridge` 事件返回 `@rt/ui`。Web 与 iOS 直接发布自身管线的定稿段；UI 将定稿段追加为对话行。
 
+### 停录、恢复与退出
+
+- `apps/macos/src/main/asr-stop.ts` 为停录发送带请求 ID 的 `flush`，等待 `asr-process.ts` 在最后定稿消息之后返回 `flushed`；识别报错、子进程退出或等待超过 15 秒会拒绝停录。`index.ts` 仅在确认后发送停止成功。渲染桥 `mac-bridge.ts` 先释放采集，并丢弃已释放 AudioWorklet 的排队音频；`useTranscription.ts` 保留停录错误，让关闭前归档的 `ensureStopped()` 能阻止后续保存和退出。
+- `packages/ui/src/composables/useRecovery.ts` 跟踪未归档快照和未处理的恢复选项；`useSessionArchive.ts` 把待恢复草稿纳入关闭保护，并在关闭前归档时先恢复仍可撤销的删除、再合入旧草稿。`apps/macos/src/main/recovery-store.ts` 串行处理读、写和清除，以临时文件、fsync 和原子替换保存最多 20 MiB 的 JSON；清除是队列屏障，退出和重载前用 `flush()` 排空队列。
+- `apps/macos/src/main/renderer-recovery.ts` 在字幕渲染进程退出后先停止会话、等待持久化队列，再重载窗口；60 秒内最多自动重载两次。`index.ts` 负责停止 ASR、翻译及防休眠并接入 `render-process-gone`。重载只恢复草稿选择，不自动继续录音。
+- `apps/macos/src/main/quit-flow.ts` 合并在途的关闭确认，确认后清理并重新进入 Electron 退出流程，3 秒后以 `app.exit()` 兜底。`index.ts` 收到 `SIGTERM` / `SIGINT` 时跳过交互确认，排空已有恢复写入后退出，不将终止信号视为主动丢弃草稿。全局录音快捷键注册与派发由 `global-shortcuts.ts` 管理。外部规则见[清屏与归档](product/experience.md#清屏与归档)及[未归档内容恢复](product/experience.md#未归档内容恢复)。
+
 ### 音频音量显示
 
 - `packages/core/src/audio-level.ts` 提供输入 PCM 的音量归一化，macOS 的 `mac-bridge.ts` 在发送识别音频时通过可选 `AppBridge.onAudioLevel` 发布音量事件；它不改写音频或识别管线。

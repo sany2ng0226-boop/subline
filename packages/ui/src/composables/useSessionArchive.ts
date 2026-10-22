@@ -17,7 +17,7 @@ import {
   canUndoDelete,
   undoDelete,
 } from './useTranscription';
-import { persistRecoveryNow } from './useRecovery';
+import { persistRecoveryNow, recoveryOffer, restoreRecovery } from './useRecovery';
 
 declare const __INTERNAL_BUILD__: boolean;
 const internalBuild = typeof __INTERNAL_BUILD__ !== 'undefined' && __INTERNAL_BUILD__;
@@ -62,6 +62,8 @@ async function archiveBeforeClose(): Promise<boolean> {
     await ensureStopped();
     // 撤销期内选「归档并退出」：把刚清空的内容找回来再归档，而不是让它随退出消失
     if (!lines.length && canUndoDelete.value) undoDelete();
+    // Leaving must resolve the older draft too, before the host clears recovery.
+    restoreRecovery();
     if (!lines.length) return true;
     const folderId = foldersEnabled() ? (await bridge().getArchiveLibrary!()).lastFolderId : undefined;
     await archiveSession(await suggestArchiveName(), folderId);
@@ -80,7 +82,7 @@ async function archiveBeforeClose(): Promise<boolean> {
 export function registerCloseGuard(): void {
   const { t, locale } = i18n.global;
   watch(
-    () => [hasUnsavedContent.value, recording.value || recordBusy.value, canUndoDelete.value, locale.value] as const,
+    () => [hasUnsavedContent.value || !!recoveryOffer.value, recording.value || recordBusy.value, canUndoDelete.value, locale.value] as const,
     ([unsaved, live, undoable]) => {
       const detail = live ? 'main.closeDetailRecording' : unsaved ? 'main.closeDetail' : 'main.closeUndoable';
       bridge().setCloseGuard?.(unsaved || undoable ? {

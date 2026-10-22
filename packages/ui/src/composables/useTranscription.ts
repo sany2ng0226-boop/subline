@@ -125,7 +125,7 @@ export function registerTranscriptionListeners(): void {
       // 经守卫收停：stopPipeline 在途期间用户点录音会被 recordBusy 挡住，避免 start/stop 交错
       if (recording.value) {
         recordBusy.value = true;
-        void stopRecording().finally(() => {
+        toggling = stopRecording().catch(() => {}).finally(() => {
           recordBusy.value = false;
         });
       }
@@ -173,12 +173,23 @@ export async function startRecording(): Promise<void> {
   // 计时基线在管线确认启动后才取：segment.start 的 0 点是管线启动之后，
   // 首次录音需加载模型耗时数秒，若在 await 前取值会让所有行的时钟偏早整个加载时长。
   recordStartEpoch = Date.now();
+  lastStopFailure = null;
   recording.value = true;
 }
 
+let lastStopFailure: Error | null = null;
+
 export async function stopRecording(): Promise<void> {
   recording.value = false;
-  await bridge().stopPipeline();
+  try {
+    await bridge().stopPipeline();
+    lastStopFailure = null;
+  } catch (error) {
+    lastStopFailure = error instanceof Error ? error : new Error(String(error));
+    errorText.value = lastStopFailure.message;
+    errorCode.value = pipelineErrorCode(undefined, lastStopFailure.message);
+    throw lastStopFailure;
+  }
   partial.value = '';
   stablePartial.value = undefined;
   draftLine.value = null;
@@ -190,7 +201,10 @@ export function toggleRecording(): void {
   if (recordBusy.value) return;
   recordBusy.value = true;
   const action = recording.value ? stopRecording() : startRecording();
-  toggling = action.finally(() => {
+  toggling = action.catch((error) => {
+    errorText.value = error instanceof Error ? error.message : String(error);
+    errorCode.value = pipelineErrorCode(undefined, errorText.value);
+  }).finally(() => {
     recordBusy.value = false;
   });
 }
@@ -198,9 +212,11 @@ export function toggleRecording(): void {
 /** 等在途的启停结束；仍在录音则停止并等到收尾完成（关闭前归档用） */
 export async function ensureStopped(): Promise<void> {
   await toggling;
+  if (lastStopFailure) throw lastStopFailure;
   if (!recording.value) return;
   toggleRecording();
   await toggling;
+  if (lastStopFailure) throw lastStopFailure;
 }
 
 // 未归档：正在录音，或主页仍有定稿行（归档成功会清空主页，所以剩下的行都是上次归档后新增的）。

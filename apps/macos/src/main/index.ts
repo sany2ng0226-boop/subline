@@ -2,6 +2,8 @@ import type { SettingsPatch } from '@rt/core';
 import { createGlobalShortcuts, dispatchShortcut } from './global-shortcuts';
 import { createQuitFlow, setupSingleInstance } from './quit-flow';
 import { createRecoveryStore } from './recovery-store';
+import { createRendererRecovery } from './renderer-recovery';
+import { createAsrStopController } from './asr-stop';
 import { resolveLeaveSession } from './leave-session';
 import { createAlwaysOnTopController } from './always-on-top';
 import { createDisplaySleepBlocker } from './display-sleep';
@@ -314,6 +316,33 @@ function createWindow(): void {
     },
   });
   alwaysOnTop.apply(loadSettings().alwaysOnTop);
+  const target = win;
+  const rendererRecovery = createRendererRecovery({
+    isQuitting: quitFlow.isQuitting,
+    isDestroyed: () => target.isDestroyed() || target.webContents.isDestroyed(),
+    stopSession: () => {
+      closeGuard = null;
+      sessionActive = false;
+      reconfigureAsr();
+      reconfigureTranslate();
+    },
+    flushRecovery: () => recoveryStore.flush(),
+    reload: () => target.webContents.reload(),
+    reportFailure: () => {
+      const messages = {
+        zh: '字幕窗口反复异常退出。已保存的恢复草稿仍保留，请退出后重新打开 Subline。',
+        ja: '字幕ウィンドウが繰り返し終了しました。保存済みの復元データは保持されています。Subline を終了して開き直してください。',
+        ko: '자막 창이 반복적으로 종료되었습니다. 저장된 복구 초안은 유지됩니다. Subline을 종료한 후 다시 열어 주세요.',
+        en: 'The caption window exited repeatedly. Saved recovery drafts are preserved. Quit and reopen Subline.',
+      };
+      dialog.showErrorBox('Subline', messages[loadSettings().nativeLang] ?? messages.en);
+    },
+    log: (error) => console.error('Renderer recovery failed', error),
+  });
+  win.webContents.on('render-process-gone', (_event, details) => {
+    console.error('Caption renderer exited', details.reason);
+    void rendererRecovery.handle();
+  });
   win.on('closed', () => displaySleep.stop());
   win.on('close', (event) => quitFlow.handle(event));
   win.on('page-title-updated', (event) => {
@@ -917,12 +946,22 @@ ipcMain.handle(
   },
 );
 
-ipcMain.handle('pipeline:stop', () => {
+const asrStop = createAsrStopController();
+ipcMain.handle('pipeline:stop', async () => {
   displaySleep.stop();
-  asrChild?.postMessage({ type: 'flush' });
-  sessionActive = false;
-  sendToRenderer('pipeline:status', { state: 'stopped' });
-  return { ok: true };
+  try {
+    if (asrChild) await asrStop.stop(asrChild);
+    sessionActive = false;
+    sendToRenderer('pipeline:status', { state: 'stopped' });
+    return { ok: true };
+  } catch (error) {
+    sessionActive = false;
+    sendToRenderer('pipeline:status', {
+      state: 'error', code: 'asr-crashed',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 });
 
 const isPrimaryInstance = setupSingleInstance({
@@ -954,6 +993,19 @@ const quitFlow = createQuitFlow({
   quit: () => app.quit(),
   exit: (code) => app.exit(code),
 });
+
+// Process termination cannot wait for a dialog, especially after a renderer crash.
+// Keep the last durable draft instead of treating the signal as an explicit discard.
+let terminating = false;
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(signal, () => {
+    if (terminating || !isPrimaryInstance) return;
+    terminating = true;
+    closeGuard = null;
+    void recoveryStore.flush().catch((error) => console.error('Termination recovery flush failed', error))
+      .finally(() => quitFlow.windowsClosed());
+  });
+}
 
 app.whenReady().then(() => {
   if (!isPrimaryInstance) return;

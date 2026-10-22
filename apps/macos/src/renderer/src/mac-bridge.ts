@@ -73,11 +73,14 @@ export function createMacBridge(api: ElectronApi): AppBridge {
           });
         }, { once: true });
       }
-      audioContext = new AudioContext({ sampleRate: 16000 });
-      await audioContext.audioWorklet.addModule('audio-worklet.js');
-      const audioSource = audioContext.createMediaStreamSource(mediaStream);
-      const capture = new AudioWorkletNode(audioContext, 'capture-processor');
+      const context = new AudioContext({ sampleRate: 16000 });
+      audioContext = context;
+      await context.audioWorklet.addModule('audio-worklet.js');
+      const audioSource = context.createMediaStreamSource(mediaStream);
+      const capture = new AudioWorkletNode(context, 'capture-processor');
       capture.port.onmessage = (e: MessageEvent<Float32Array>) => {
+        // Queued worklet messages must not reach ASR after capture has been released.
+        if (audioContext !== context || !mediaStream) return;
         api.sendAudio(e.data);
         publishLevel(audioLevel(e.data));
       };

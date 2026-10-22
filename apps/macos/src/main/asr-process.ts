@@ -30,6 +30,7 @@ parentPort.on('message', (e: { data: MainToAsr }) => {
         break;
       case 'flush':
         pipeline?.flush();
+        post({ type: 'flushed', requestId: msg.requestId });
         break;
       case 'reset':
         pipeline?.reset();
