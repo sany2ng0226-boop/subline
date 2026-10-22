@@ -23,4 +23,4 @@ Subline Dev always registers `Alt+Shift+Command+R` for recording, even if its sa
 
 ## Verification boundary
 
-Packaging, signing, and simultaneous-launch verification are performed manually by the package owner; the automated implementation work does not run those steps.
+The Dev directory build is signed without notarization and is intended for local validation. Installed application interactions and isolation from the release app must be checked separately from automated tests.
