@@ -8,9 +8,18 @@
 
 基于 [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator)，由 [Jack](https://github.com/sany2ng0226-boop) 维护，保留上游作者署名、元数据及 Git 历史。当前定制集中在日中双语阅读、本地翻译与记录整理。
 
-![Subline macOS 归档界面与示例文字](docs/assets/subline-demo.png)
+![Subline macOS 实时英语字幕与日语译文](docs/assets/subline-live-beta6.png)
 
-*基于公开 main 源码的干净预览，展示 Subline macOS 的真实归档界面；日中双语内容为手写示例，用于说明界面，不是模型输出或性能证据。*
+*本机已安装的 beta.6 验收构建：实际采集英语合成测试语音的系统音频，并由识别与翻译模型生成字幕。输出未经改写，不作为性能测量。Beta.6 尚未发布，下方公开下载仍为 beta.5。*
+
+<details>
+<summary>设置：识别语言与翻译目标独立选择</summary>
+
+![Subline beta.6 中文界面、英语识别和日语翻译目标设置](docs/assets/subline-settings-beta6.png)
+
+*同一本机 beta.6 构建；识别模型与翻译模型直接显示在设置首页。*
+
+</details>
 
 ## 当前源码节点
 
