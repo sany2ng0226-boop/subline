@@ -144,3 +144,18 @@ it('waits for an automatic error-triggered stop before allowing archive', async 
   expect(state.lines[0].text).toBe('final buffered words');
   expect(state.recordBusy.value).toBe(false);
 });
+
+it('converts session-relative seconds into wall-clock time and preserves it in archives', async () => {
+  const epoch = new Date(2026, 9, 22, 19, 38, 10).getTime();
+  const now = vi.spyOn(Date, 'now').mockReturnValue(epoch);
+  try {
+    await state.startRecording();
+    callbacks.onPartial({ text: 'Draft' });
+    expect(state.draftLine.value?.time).toBe('19:38:10');
+    callbacks.onSegment({ id: 90, text: 'Final', start: 4, duration: 2, lang: 'en' });
+    expect(state.lines[0].time).toBe('19:38:14');
+    expect(state.archiveSnapshot()[0].time).toBe('19:38:14');
+    callbacks.onSegment({ id: 91, text: 'Later', start: 22250, duration: 2, lang: 'en' });
+    expect(state.lines[1].time).toBe('01:49:00');
+  } finally { now.mockRestore(); }
+});

@@ -17,6 +17,17 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@rt/core": [
+        "./packages/core/src/index.ts"
+      ],
+      "@rt/ui": [
+        "./packages/ui/src/index.ts"
+      ],
+      "@rt/ui/styles": [
+        "./packages/ui/src/styles.css"
+      ]
+    }
   }
 }

@@ -8,7 +8,7 @@ export interface SegmentPayload {
   text: string;
   /** 语言代码，如 zh / ja / en */
   lang: string;
-  /** 段起始时间（秒） */
+  /** Session-relative audio start offset in seconds (not an epoch timestamp). */
   start: number;
   /** 段时长（秒） */
   duration: number;
@@ -174,7 +174,8 @@ export interface ModelInfo {
 
 /** 归档里的一行对话 */
 export interface ArchiveLine {
-  time: string;
+  /** Local HH:MM:SS, captured when transcribing; absent in legacy archives. */
+  time?: string;
   text: string;
   translation: string;
 }
