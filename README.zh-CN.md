@@ -10,14 +10,16 @@
 
 ![Subline macOS 实时英语字幕与日语译文](docs/assets/subline-live-beta6.png)
 
-*本机已安装的 beta.6 验收构建：实际采集英语合成测试语音的系统音频，并由识别与翻译模型生成字幕。输出未经改写，不作为性能测量。Beta.6 尚未发布，下方公开下载仍为 beta.5。*
+*本机已安装的 beta.6+d5a44a6 验收构建：实际采集英语合成测试语音的系统音频，并由识别与翻译模型生成字幕。输出未经改写，不作为性能测量。本次复现了已知问题：第二段译文重复了上一段内容。Beta.6 尚未发布，下方公开下载仍为 beta.5。*
 
 <details>
-<summary>设置：识别语言与翻译目标独立选择</summary>
+<summary>设置：模型选择、下载管理与独立目标语言</summary>
 
-![Subline beta.6 中文界面、英语识别和日语翻译目标设置](docs/assets/subline-settings-beta6.png)
+![Subline beta.6 识别模型内直接选择、下载与删除](docs/assets/subline-settings-beta6.png)
 
-*同一本机 beta.6 构建；识别模型与翻译模型直接显示在设置首页。*
+![Subline beta.6 翻译模型选择器](docs/assets/subline-translation-models-beta6.png)
+
+*同一已安装构建；模型的选择、下载状态和下载／删除操作集中在各自的选择器中，已下载模型可直接选用。*
 
 </details>
 
