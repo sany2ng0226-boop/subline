@@ -14,7 +14,7 @@ Subline 是基于上游开源项目 Realtime Translator 定制、面向中文、
 ## 本地处理与隐私边界
 
 - 各端的语音识别都在当前设备上运行，应用不把音频发送给识别服务。
-- 选择本地翻译时，译文也在当前设备上生成。macOS 新安装默认使用应用内 Hy-MT2 7B（GGUF Q4_K_M），并保留 M2M-100；Web 使用 M2M-100；iOS 使用 Apple Translation。macOS 的 Hy-MT2 不需要 LM Studio 或单独启动 API 服务，推理运行时随应用提供，权重在确认后下载。
+- 选择本地翻译时，译文也在当前设备上生成。macOS 新安装默认关闭翻译，选择本地翻译时预选应用内 Hy-MT2 7B（GGUF Q4_K_M），并保留 M2M-100；Web 使用 M2M-100；iOS 使用 Apple Translation。macOS 的 Hy-MT2 不需要 LM Studio 或单独启动 API 服务，推理运行时随应用提供，权重在确认后下载。
 - 选择云端翻译时，需要翻译的已定稿文本段会发送到用户配置的 OpenAI 兼容端点；macOS 的 API 翻译与应用内 Hy-MT2 都会附带最近两段同语言对的原文上下文，每段最多 400 字符。同语言跳过及仅需中文字形归一化的段不发送。端点可以是本机运行的 LM Studio 等兼容服务，此时文本发送到本机地址。在设置中测试连接会发送固定的 `hello` 测试文本。音频始终不发送，端点的数据处理规则由对应服务商决定。
 - 应用启动时不自动下载识别或翻译权重。用户确认下载后，应用才从模型源获取文件；Web 的 Silero VAD 是随应用外壳提供的内置例外。
 - 设置、模型和会话归档只保存在当前设备或当前浏览器站点存储中，产品没有跨设备同步。
@@ -27,16 +27,20 @@ Subline 是基于上游开源项目 Realtime Translator 定制、面向中文、
 | 音频源 | 麦克风；macOS 14.2+ 可选系统音频 | 仅麦克风 | 仅麦克风 |
 | 语音识别 | SenseVoice；可按语言选 Paraformer、ReazonSpeech 或 Parakeet | SenseVoice | SenseVoice；可按语言选 Paraformer、ReazonSpeech 或 Parakeet |
 | 识别运行时 | sherpa-onnx Node，独立 ASR 子进程 | sherpa-onnx 原生插件 | sherpa-onnx 单线程 WASM Worker |
-| 本地翻译 | Hy-MT2 7B（默认，Apple 芯片 Metal）；M2M-100 418M 或 1.2B | Apple Translation，iOS 18+ | M2M-100 418M；iOS/iPadOS WebKit 上禁用 |
+| 本地翻译 | Hy-MT2 7B（本地翻译预选，Apple 芯片 Metal）；M2M-100 418M 或 1.2B | Apple Translation，iOS 18+ | M2M-100 418M；iOS/iPadOS WebKit 上禁用 |
 | 云端翻译 | 支持 | 支持 | 支持 |
 | 主要存储 | Electron `userData` 中的文件和模型目录 | Preferences（设置/归档）与 Application Support（ASR 模型） | IndexedDB（设置/归档）与 Cache Storage（模型/应用外壳） |
 | 离线使用 | 所需模型已下载时可用 | ASR 模型已下载时可离线转写；本地翻译还需对应的 Apple 翻译语言包 | 应用外壳和所需模型已缓存时可用 |
 
 ### macOS
 
-macOS 测试版名为 Subline，当前分发目标为 Apple 芯片 Mac。稳定渠道当前仍为 0.2.0-beta.1 朋友测试版，不代表 GA 正式发布。已发出的稳定渠道产物仍以旧名 Classroom Translator 构建，已完成 Developer ID 签名和 Apple 公证，公证票据已附在 `.app` 上，并通过签名、stapler 和 Gatekeeper 验收。当前 Subline Internal 预览包为 0.2.0-beta.2，也已独立完成 Developer ID 签名和 Apple 公证，导出的 `.app` 通过 stapler 验证及 Gatekeeper 的 Notarized Developer ID 检查。上述结论仅适用于各自验收的应用产物，不等于 DMG 容器另获独立公证。Hy-MT2 已在 48 GB 内存的开发机运行，其他内存容量的最低要求尚未验收。
+macOS 公开测试渠道使用 Subline.app，目标为 Apple 芯片 Mac、macOS 14.2 及以上，不代表 GA 正式发布。已发布的公开版本为 [0.2.0-beta.4](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.4)；[0.2.0-beta.5](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.5) 正在准备发布，尚不能据此认定资产已上传。公开渠道提供连续字幕、手动归档、未归档草稿恢复、删除撤销与退出保护；主页语言选择和文件夹归档仍属于 Subline Internal。
 
-当前预览包已在本机空白用户数据目录中走通首次引导、日语选择、模型下载确认、由应用下载 SenseVoice 与 Hy-MT2，以及麦克风启停的流程。系统音频的日语转写、中文本地翻译、手动归档、文件夹移动与重启读回也已在该新包中验收。真实麦克风识别、多人噪声环境与整场活动的长时间开发负载尚未验收，不能据此承诺线下活动或黑客松中的识别效果与稳定性。
+历史 0.2.0-beta.1 公开测试包沿用 Classroom Translator 名称，0.2.0-beta.2 为 Subline Internal 测试包，两者均有各自产物的签名与公证验证记录。已发布 beta.4 也完成 Developer ID 签名、Apple 公证与应用票据验证。2026-10-22 本机安装的修复候选通过签名、stapler 和 Gatekeeper 的 Notarized Developer ID 检查；这不替代重新打包的 beta.5 发布验证。公证结论仅适用于验收的应用产物，不表示 DMG 容器单独获公证。
+
+2026-10-22 修复候选已在原生应用验证空会话退出、取消关闭保留字幕、旧恢复草稿与新录音合并归档后退出、丢弃退出、渲染进程异常后重载恢复、主进程被强制终止后重启恢复，以及 SIGTERM 退出保留草稿。Jack 使用其他应用前台的真实键盘输入确认 `⌥⌘R` 可开始／停止录音。连续录音样本仅约 4.5 分钟，60 分钟测试按用户要求取消，不能据此认定长时间录音通过。
+
+此前 Internal 包在空白用户数据目录走通引导、语言选择、模型确认与真实下载、麦克风启停；系统音频日中转写／本地翻译、手动归档、文件夹移动与重启读回也有验收记录。这些 Internal 文件夹结果不属于公开渠道能力。Hy-MT2 已在 48 GB 内存开发机运行；真实麦克风识别、多人噪声、整场活动的长时间负载和其他内存容量仍未验收。
 
 macOS 版是 Electron 应用。麦克风由渲染进程采集；系统音频通过 CoreAudio Tap 回环采集，因此只在 macOS 14.2 及以上显示音源切换。ASR 与本地翻译分别运行在隔离子进程中，某个推理进程崩溃不会连带关闭主窗口。Hy-MT2 通过随应用提供的 node-llama-cpp Metal 后端执行，用户无需安装编译工具；应用不在运行时编译或下载可执行推理组件。稳定渠道的设置、归档和模型缓存位于 `~/Library/Application Support/Classroom Translator`；内部验证渠道名为 Subline Internal，使用独立的 `~/Library/Application Support/Classroom Translator Internal`。改名后数据目录和应用标识保持旧值，已有设置、归档、模型及系统授予的麦克风/系统音频权限照常沿用。两者可并排安装，不自动迁移或共用配置、归档和模型缓存。两个渠道来自同一代码库，内部验收后再发布稳定渠道；Internal 的签名、公证状态按各自产物验收，不能沿用稳定版的公证结论。
 
