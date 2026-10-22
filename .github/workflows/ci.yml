@@ -46,6 +46,9 @@ jobs:
       - name: Unit tests (@rt/core)
         run: pnpm --filter @rt/core test
 
+      - name: UI and production renderer regressions
+        run: pnpm exec vitest run --config packages/ui/vitest.config.ts packages/ui/src apps/macos/renderer-build.test.ts
+
       - name: Caption, queue and latency accounting regressions
         run: pnpm exec vitest run packages/ui/src/composables/useTranscription.test.ts apps/macos/src/main/translation/request-queue.test.ts apps/macos/test/stage-metrics.test.ts
 
