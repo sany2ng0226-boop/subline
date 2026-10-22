@@ -8,7 +8,7 @@
 
 ![Subline macOS live English captions and Japanese translations](docs/assets/subline-live-beta6.png)
 
-*Live captions in the locally installed beta.6+d5a44a6 acceptance build: synthetic English test speech was captured through system audio and processed by the recognition and translation models. Output is unedited; this is not a benchmark. This run reproduces a known issue: the second translation repeats the preceding context. Beta.6 is not published; the public download below remains beta.5.*
+*Live captions in the locally installed beta.6+61ba50a acceptance build: synthetic English test speech was captured through system audio and processed by the recognition and translation models. Output is unedited; this is not a benchmark. All six segments in this regression run translated their current source; the previous context-repeat case no longer reproduced. Beta.6 is not published; the public download below remains beta.5.*
 
 <details>
 <summary>Settings: model selection, downloads and independent languages</summary>
@@ -26,7 +26,7 @@
 - Continuous caption rows: provisional text is extended, corrected and confirmed in place; translations return to the same row.
 - Stable-prefix / tentative-tail styling, language-specific native Japanese and Simplified Chinese fonts, and a narrower bilingual reading layout.
 - Rule-based Japanese sentence assembly before translation. Local-model sentence judging remains an offline experiment, not the default recording path.
-- Built-in macOS Hy-MT2 7B Metal inference and source-only context, also supported by optional OpenAI-compatible endpoints.
+- Built-in macOS Hy-MT2 7B Metal inference with independent per-segment translation, alongside optional OpenAI-compatible endpoints.
 - macOS translation backpressure: one active request, at most three waiting, and a 15-second waiting deadline. Overloaded or expired translations fail visibly while their transcripts remain available.
 - Separate stable and Internal macOS channels with isolated settings, archives and model caches.
 - Internal archive folders, content-derived editable titles, rename and move, with persistence across restarts. Saving is manual; stopping recording does not automatically archive the session.
@@ -49,7 +49,7 @@ Earlier checks covered clean-profile onboarding, real model downloads, system-au
 
 The older **Classroom Translator 0.2.0-beta.1** and **Subline Internal 0.2.0-beta.2** remain historical builds. Upstream downloads below belong to upstream. Internal and public channels use separate settings, archives and model caches; replacing Subline.app preserves the public channel's existing data.
 
-The optional API translation backend remains available for an existing local server or a user-configured remote service. Local Hy-MT2 keeps the same source-only context, rule-based sentence assembly and translation backpressure. Changing the inference runtime does not guarantee byte-for-byte identical translations.
+The optional API translation backend remains available for an existing local server or a user-configured remote service. Local Hy-MT2 translates only the current segment in a fresh session; rule-based sentence assembly and translation backpressure remain in place. Changing the inference runtime does not guarantee byte-for-byte identical translations.
 
 ## Windows candidate status
 
