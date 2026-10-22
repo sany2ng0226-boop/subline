@@ -192,14 +192,18 @@ function retry(m: ModelInfo): void {
           class="flex items-center gap-3 border-b border-neutral-200 py-3 dark:border-[#2b2c33]"
         >
           <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <span class="truncate font-medium">{{ displayName(m) }}</span>
+              <span v-if="getTranslationModel(m.id)?.tier === 'ultra'" class="quality-badge">
+                {{ t('modelsScreen.ultra') }}
+              </span>
               <n-tag v-if="m.inUse" size="small" type="success" :bordered="false">
                 {{ t('modelsScreen.inUse') }}
               </n-tag>
             </div>
             <div class="mt-0.5 text-xs text-[var(--rt-ink-3)]">
               <span class="tabular-nums">{{ sizeText(m) }}</span>
+              <span v-if="getTranslationModel(m.id)?.tier === 'ultra'"> · {{ t('modelsScreen.ultraDesc') }}</span>
               <span v-if="isDownloading(m.kind, m.id)"> · {{ t('download.downloading') }}</span>
               <span v-else-if="!m.downloaded"> · {{ t('modelsScreen.notDownloaded') }}</span>
             </div>
@@ -274,3 +278,15 @@ function retry(m: ModelInfo): void {
     />
   </div>
 </template>
+
+<style scoped>
+.quality-badge {
+  color: var(--rt-accent-ink);
+  background: var(--rt-surface);
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+</style>

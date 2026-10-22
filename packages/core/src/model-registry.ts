@@ -94,6 +94,7 @@ export interface AsrModelEntry extends CommonModelFields {
 /** 本地翻译模型条目。 */
 export interface TranslationModelEntry extends CommonModelFields {
   kind: 'translation';
+  tier?: 'ultra';
   /** 该模型全部需下载文件（权重 + tokenizer/config；不逐文件记字节）。 */
   files: ModelFileSpec[];
   id: LocalEngine;
@@ -305,6 +306,7 @@ export const MODELS: readonly ModelEntry[] = [
   {
     kind: 'translation',
     id: 'hy-mt2-7b',
+    tier: 'ultra',
     nameKey: 'models.hy_mt2_7b',
     modelId: 'tencent/Hy-MT2-7B-GGUF',
     dtype: 'q4_k_m',
