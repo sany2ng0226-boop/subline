@@ -12,8 +12,8 @@ const { t } = useI18n();
 const props = defineProps<{ form: SettingsFormData }>();
 
 // 平台是否支持本地翻译（Web 在 iOS 上为 false：WebKit 内存装不下本地模型）。
-// 不可用时仅从「翻译方式」下拉里去掉「本地模型」项（仍保留 无 / 云端）。iOS 上持久化的 engine
-// 也已被 bridge 收敛为 cloud（applyPlatformConstraints），故表单不会停在无法选中的本地项。
+// 不可用时从模型下拉去掉本地模型（仍保留 不翻译 / API 服务）。iOS 上持久化的 engine
+// 也已被 bridge 收敛为 cloud（applyPlatformConstraints）。
 const localTranslationAvailable = bridge().localTranslationAvailable !== false;
 
 // 本平台可选的本地翻译模型（iOS 走系统翻译、无可选权重模型时为空：方式仍可选本地，但不渲染模型下拉）。
@@ -32,11 +32,6 @@ type CloudTestState = 'idle' | 'testing' | 'ok' | 'error';
 const cloudTest = ref<CloudTestState>('idle');
 const cloudTestError = ref('');
 const loopback = computed(() => isLoopbackEndpoint(props.form.cloud.baseURL));
-
-function useLocalHy(): void {
-  props.form.translationModel = 'hy-mt2-7b';
-  props.form.translationMode = 'local';
-}
 
 // Remote services need a key; loopback services can run without authentication.
 const cloudFilled = computed(
@@ -70,10 +65,21 @@ watch(
   },
 );
 
-// 三态：无 / 本地模型（仅本平台支持本地翻译时）/ 云端。选中方式即开启翻译，选「无」即关闭。
-const modeOptions = computed(() => [
-  { label: t('settings.engineNone'), value: 'none' },
-  ...(localTranslationAvailable ? [{ label: t('settings.engineLocal'), value: 'local' }] : []),
+const selection = computed<string>({
+  get: () => props.form.translationMode === 'local' ? props.form.translationModel : props.form.translationMode,
+  set: (value) => {
+    if (value === 'none' || value === 'cloud') props.form.translationMode = value;
+    else {
+      props.form.translationModel = value as SettingsFormData['translationModel'];
+      props.form.translationMode = 'local';
+    }
+  },
+});
+const modelChoices = computed(() => [
+  { label: t('onboarding.noTranslation'), value: 'none' },
+  ...(localTranslationAvailable
+    ? localModelOptions.value.length ? localModelOptions.value : [{ label: t('settings.engineLocal'), value: props.form.translationModel }]
+    : []),
   { label: t('settings.engineCloud'), value: 'cloud' },
 ]);
 
@@ -165,20 +171,11 @@ const modelOptions = computed(() => {
 
 <template>
   <div>
-    <n-form-item :label="t('settings.engine')">
-      <n-select v-model:value="form.translationMode" :options="modeOptions" />
+    <n-form-item :label="t('settings.translationModel')" :show-feedback="false">
+      <n-select v-model:value="selection" :options="modelChoices" />
     </n-form-item>
 
-    <n-button v-if="bridge().platform === 'macos'" size="small" class="mb-4" @click="useLocalHy">
-      {{ t('settings.useLocalHy') }}
-    </n-button>
-
-    <!-- 本地方式且本平台有可选权重模型时，显示「翻译模型」下拉；iOS 走系统翻译时不渲染 -->
-    <n-form-item v-if="form.translationMode === 'local' && localModelOptions.length" :label="t('settings.translationModel')">
-      <n-select v-model:value="form.translationModel" :options="localModelOptions" />
-    </n-form-item>
-
-    <template v-if="form.translationMode === 'cloud'">
+    <div v-if="form.translationMode === 'cloud'" class="pt-5">
       <n-alert :type="loopback ? 'info' : 'warning'" :show-icon="true" class="mb-3.5">{{ t(loopback ? 'settings.localApiInfo' : 'settings.cloudWarn') }}</n-alert>
       <n-form-item :label="t('settings.baseUrl')">
         <n-auto-complete
@@ -234,6 +231,6 @@ const modelOptions = computed(() => {
           >{{ cloudTestError }}</p>
         </template>
       </div>
-    </template>
+    </div>
   </div>
 </template>

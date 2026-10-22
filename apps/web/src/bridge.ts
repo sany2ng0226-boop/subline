@@ -220,6 +220,9 @@ export function createWebBridge(): AppBridge {
       const current = await readSettingsOnce();
       const saved = applyPlatformConstraints(mergeSettings(current, queuedPatch));
       await (await db()).put(KV_STORE, saved, SETTINGS_KEY);
+      if (current.translation.targetLang !== saved.translation.targetLang) {
+        resetReverseTranslationContext(reverseCtx);
+      }
       cachedSettings = saved;
       return saved;
     });
@@ -264,6 +267,7 @@ export function createWebBridge(): AppBridge {
       segment: seg,
       enabled: s.translation.enabled,
       nativeLang: s.nativeLang,
+      targetLang: s.translation.targetLang ?? s.nativeLang,
       asrLanguage: s.asr.language,
       reverse: reverseCtx,
       translate: (req) => {

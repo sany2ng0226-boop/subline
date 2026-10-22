@@ -44,6 +44,20 @@ for (const [name, createBridge, write] of [
       expect(await bridge.getSettings()).toEqual(four);
       expect(write).toHaveBeenCalledTimes(4);
     });
+    it('migrates a legacy target and persists target selection independently of interface language', async () => {
+      const legacy = { ...makeDefaults(['zh']), translation: { enabled: false, engine: 'cloud',
+        cloud: { baseURL: '', apiKey: '', model: '' } } };
+      storage.get.mockResolvedValue(legacy);
+      storage.nativeGet.mockResolvedValue({ value: JSON.stringify(legacy) });
+      const bridge = createBridge();
+      expect((await bridge.getSettings()).translation.targetLang).toBe('zh');
+      await bridge.saveSettings({ translation: { targetLang: 'ja' } });
+      const saved = await bridge.saveSettings({ nativeLang: 'en' });
+      expect(saved.translation.targetLang).toBe('ja');
+      const args = write.mock.calls.at(-1)!;
+      const persisted = name === 'web' ? args[1] : JSON.parse(args[0].value);
+      expect(persisted).toMatchObject({ nativeLang: 'en', translation: { targetLang: 'ja' } });
+    });
     it('serializes pending writes and snapshots patches before callers mutate them', async () => {
       const bridge = createBridge();
       await bridge.getSettings();

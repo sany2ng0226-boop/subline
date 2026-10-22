@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 import { NButton, NTag, NPopconfirm, NTooltip, NProgress } from 'naive-ui';
 import { Download, Trash2, X, RotateCw } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
-import { getAsrModel, getTranslationModel, type ModelInfo } from '@rt/core';
+import { getAsrModel, getTranslationModel, type ModelKind, type ModelInfo } from '@rt/core';
 import { bridge } from '../../bridge';
 import { recording, recordBusy, modelLoading } from '../../composables/useTranscription';
 import {
@@ -21,12 +21,16 @@ import { humanBytes } from '../../utils/bytes';
 import ModelDownloadModal from '../ModelDownloadModal.vue';
 
 const { t } = useI18n();
+const props = defineProps<{ kind?: ModelKind; selectedId?: string; compact?: boolean }>();
 
 // 模型列表来自应用级单例：首次探测后跨挂载复用快照，进入页面秒开；
 // 下载完成/失败/取消由单例内部监听刷新，删除/取消在本组件显式 refreshModels。
 const { models, refreshModels } = useModels();
-const asrModels = computed(() => models.value.filter((m) => m.kind === 'asr'));
-const translationModels = computed(() => models.value.filter((m) => m.kind === 'translation'));
+const visibleModels = computed(() => models.value.filter((model) =>
+  (!props.kind || model.kind === props.kind) && (!props.selectedId || model.id === props.selectedId),
+));
+const asrModels = computed(() => visibleModels.value.filter((model) => model.kind === 'asr'));
+const translationModels = computed(() => visibleModels.value.filter((model) => model.kind === 'translation'));
 
 // 录音 / 启停在途 / 模型加载中一律禁用删除，避免删掉正在使用或正在装载的模型。
 const deleteDisabled = computed(() => recording.value || recordBusy.value || modelLoading.value);
@@ -92,18 +96,19 @@ function retry(m: ModelInfo): void {
 
 <template>
   <div>
-    <section v-if="asrModels.length" class="mb-6">
-      <h2 class="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--rt-ink-3)]">
+    <section v-if="asrModels.length" :class="compact ? '' : 'mb-6'">
+      <h2 v-if="!compact" class="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--rt-ink-3)]">
         {{ t('modelsScreen.asrGroup') }}
       </h2>
       <ul>
         <li
           v-for="m in asrModels"
           :key="m.id"
-          class="flex items-center gap-3 border-b border-neutral-200 py-3 dark:border-[#2b2c33]"
+          class="flex items-center gap-3 py-3"
+          :class="compact ? '' : 'border-b border-neutral-200 dark:border-[#2b2c33]'"
         >
           <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
+            <div v-if="!compact" class="flex items-center gap-2">
               <span class="truncate font-medium">{{ displayName(m) }}</span>
               <n-tag v-if="m.inUse" size="small" type="success" :bordered="false">
                 {{ t('modelsScreen.inUse') }}
@@ -112,7 +117,7 @@ function retry(m: ModelInfo): void {
             <div class="mt-0.5 text-xs text-[var(--rt-ink-3)]">
               <span class="tabular-nums">{{ sizeText(m) }}</span>
               <span v-if="isDownloading(m.kind, m.id)"> · {{ t('download.downloading') }}</span>
-              <span v-else-if="!m.downloaded"> · {{ t('modelsScreen.notDownloaded') }}</span>
+              <span v-else> · {{ t(m.downloaded ? 'settings.downloaded' : 'modelsScreen.notDownloaded') }}</span>
             </div>
           </div>
           <!-- 下载中：进度条 + 取消 X -->
@@ -182,17 +187,18 @@ function retry(m: ModelInfo): void {
     </section>
 
     <section v-if="translationModels.length">
-      <h2 class="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--rt-ink-3)]">
+      <h2 v-if="!compact" class="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--rt-ink-3)]">
         {{ t('modelsScreen.translationGroup') }}
       </h2>
       <ul>
         <li
           v-for="m in translationModels"
           :key="m.id"
-          class="flex items-center gap-3 border-b border-neutral-200 py-3 dark:border-[#2b2c33]"
+          class="flex items-center gap-3 py-3"
+          :class="compact ? '' : 'border-b border-neutral-200 dark:border-[#2b2c33]'"
         >
           <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
+            <div v-if="!compact" class="flex items-center gap-2">
               <span class="truncate font-medium">{{ displayName(m) }}</span>
               <n-tag v-if="m.inUse" size="small" type="success" :bordered="false">
                 {{ t('modelsScreen.inUse') }}
@@ -201,7 +207,7 @@ function retry(m: ModelInfo): void {
             <div class="mt-0.5 text-xs text-[var(--rt-ink-3)]">
               <span class="tabular-nums">{{ sizeText(m) }}</span>
               <span v-if="isDownloading(m.kind, m.id)"> · {{ t('download.downloading') }}</span>
-              <span v-else-if="!m.downloaded"> · {{ t('modelsScreen.notDownloaded') }}</span>
+              <span v-else> · {{ t(m.downloaded ? 'settings.downloaded' : 'modelsScreen.notDownloaded') }}</span>
             </div>
           </div>
           <div v-if="isDownloading(m.kind, m.id)" class="flex w-32 items-center gap-2">

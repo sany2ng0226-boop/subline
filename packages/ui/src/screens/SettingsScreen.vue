@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue';
-import { NButton, NFormItem, NSwitch, NTooltip } from 'naive-ui';
-import { ArrowLeft, SlidersHorizontal, Mic, Languages, HardDrive } from '@lucide/vue';
+import { computed, reactive, ref, watch } from 'vue';
+import { NButton, NFormItem, NSelect, NSwitch, NTooltip } from 'naive-ui';
+import { ArrowLeft } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
-import { getAsrModel, getTranslationModel, DEFAULT_TRANSLATION_MODEL_ID } from '@rt/core';
+import { UI_LANGS, asrModelsFor, getAsrModel, getTranslationModel, DEFAULT_ASR_MODEL_ID, DEFAULT_TRANSLATION_MODEL_ID } from '@rt/core';
 import { settings, saveSettings, pendingSettingsSave, alwaysOnTopSupported, setAlwaysOnTop } from '../composables/useSettings';
 import { bridge } from '../bridge';
-import type { SettingsFormData } from '../components/settings/form';
+import { LANG_LABELS, type SettingsFormData } from '../components/settings/form';
+import { humanBytes } from '../utils/bytes';
 import GeneralSection from '../components/settings/GeneralSection.vue';
-import AsrSection from '../components/settings/AsrSection.vue';
 import TranslationSection from '../components/settings/TranslationSection.vue';
 import ModelsSection from '../components/settings/ModelsSection.vue';
 import ModelDownloadModal from '../components/ModelDownloadModal.vue';
@@ -23,20 +23,11 @@ const appVersion = bridge().appVersion;
 // 置顶开关：宿主不支持（Web / iOS）时不显示
 const canPin = alwaysOnTopSupported();
 
-// 左侧竖排 tab：通用 / 语音识别 / 翻译 / 模型管理，标签复用现有 i18n key。
-type Tab = 'general' | 'asr' | 'translation' | 'models';
-const tabs = [
-  { key: 'general', icon: SlidersHorizontal, labelKey: 'settings.generalSection' },
-  { key: 'asr', icon: Mic, labelKey: 'settings.asrSection' },
-  { key: 'translation', icon: Languages, labelKey: 'settings.translationSection' },
-  { key: 'models', icon: HardDrive, labelKey: 'settings.modelManagement' },
-] as const;
-const tab = ref<Tab>('general');
-
 const current = settings.value!;
 const currentEngine = current.translation.engine;
 const form = reactive<SettingsFormData>({
   nativeLang: current.nativeLang,
+  targetLang: current.translation.targetLang ?? current.nativeLang,
   fontSize: current.fontSize,
   theme: current.theme,
   asr: { ...current.asr },
@@ -49,6 +40,19 @@ const form = reactive<SettingsFormData>({
       : DEFAULT_TRANSLATION_MODEL_ID,
   cloud: { ...current.translation.cloud },
   announceCaptions: current.announceCaptions,
+});
+
+const languageOptions = UI_LANGS.map((value) => ({ label: LANG_LABELS[value], value }));
+const asrLanguageOptions = computed(() => [
+  { label: t('settings.asrLanguageAuto'), value: 'auto' }, ...languageOptions,
+]);
+const asrModelOptions = computed(() => asrModelsFor(form.asr.language, bridge().platform).map((model) => ({
+  label: `${t(model.nameKey)} (${humanBytes(model.approxBytes)})`, value: model.id,
+})));
+watch(() => form.asr.language, (language) => {
+  if (!asrModelsFor(language, bridge().platform).some((model) => model.id === form.asr.model)) {
+    form.asr.model = DEFAULT_ASR_MODEL_ID;
+  }
 });
 
 // 本地翻译模型未缓存时的就地下载弹窗
@@ -70,8 +74,9 @@ function persist(): Promise<unknown> {
   const snapshot = JSON.parse(JSON.stringify(form));
   const changed = changedFields(snapshot, submitted);
   submitted = snapshot;
-  const { translationMode, translationModel, cloud, ...patch } = changed;
+  const { translationMode, translationModel, targetLang, cloud, ...patch } = changed;
   const translation: Record<string, any> = {};
+  if (targetLang !== undefined) translation.targetLang = targetLang;
   if (translationMode !== undefined || translationModel !== undefined) {
     translation.enabled = snapshot.translationMode !== 'none';
     if (snapshot.translationMode !== 'none') {
@@ -87,6 +92,7 @@ function persist(): Promise<unknown> {
 watch(
   [
     () => form.nativeLang,
+    () => form.targetLang,
     () => form.fontSize,
     () => form.theme,
     () => form.announceCaptions,
@@ -157,7 +163,7 @@ watch(
   },
 );
 
-// 确认下载 → 转后台下载（设置早已生效，不离开设置页；进度/取消在「模型管理」页行内呈现）
+// 确认下载 → 转后台下载（设置早已生效，不离开设置页；进度/取消在所选模型下方呈现）
 function onDownloadConfirm(tasks: DownloadTask[]): void {
   startDownloads(tasks);
 }
@@ -179,39 +185,31 @@ function onDownloadConfirm(tasks: DownloadTask[]): void {
       <span class="text-[15px] font-semibold">{{ t('settings.title') }}</span>
     </header>
 
-    <!-- 窄屏（<sm）tab 栏横排在顶部、可横向滚动；≥sm 竖排在左侧 -->
-    <div class="flex min-h-0 flex-1 flex-col sm:flex-row">
-      <!-- tab 栏：桌面端底部 flex-1 撑开后放版本号；窄屏版本号移到内容区底部 -->
-      <nav
-        class="flex shrink-0 gap-1 overflow-x-auto border-b border-neutral-200 px-3 py-2 dark:border-[#3a3b44] sm:w-44 sm:flex-col sm:overflow-x-visible sm:border-b-0 sm:border-r sm:py-4"
-      >
-        <button
-          v-for="item in tabs"
-          :key="item.key"
-          type="button"
-          class="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-left text-sm sm:w-full"
-          :class="
-            tab === item.key
-              ? 'bg-neutral-100 font-medium text-neutral-900 dark:bg-[#2b2c33] dark:text-neutral-100'
-              : 'text-neutral-500 hover:bg-neutral-100/60 dark:text-neutral-400 dark:hover:bg-[#26272e]'
-          "
-          @click="tab = item.key"
-        >
-          <component :is="item.icon" :size="16" />
-          <span>{{ t(item.labelKey) }}</span>
-        </button>
-        <div class="hidden flex-1 sm:block" />
-        <p
-          v-if="appVersion"
-          class="hidden text-center text-[11px] text-[var(--rt-ink-3)] select-text sm:block"
-        >
-          {{ t('settings.version') }} {{ appVersion }}
-        </p>
-      </nav>
+    <div class="min-h-0 flex-1 overflow-y-auto">
+      <div class="mx-auto w-full max-w-[720px] px-5 py-6 sm:px-8">
+        <div class="grid gap-x-6 sm:grid-cols-2">
+          <n-form-item :label="t('settings.asrLanguage')">
+            <n-select v-model:value="form.asr.language" :options="asrLanguageOptions" />
+          </n-form-item>
+          <n-form-item :label="t('settings.targetLang')">
+            <n-select v-model:value="form.targetLang" :options="languageOptions" />
+          </n-form-item>
+        </div>
 
-      <div class="flex-1 overflow-y-auto">
-        <div class="mx-auto w-full max-w-[560px] px-5 py-6">
-          <template v-if="tab === 'general'">
+        <section class="mb-6 border-b border-neutral-200 pb-5 dark:border-[#3a3b44]">
+          <n-form-item :label="t('settings.asrModel')" :show-feedback="false">
+            <n-select v-model:value="form.asr.model" :options="asrModelOptions" />
+          </n-form-item>
+          <models-section kind="asr" :selected-id="form.asr.model" compact />
+        </section>
+        <section class="mb-6 border-b border-neutral-200 pb-5 dark:border-[#3a3b44]">
+          <translation-section :form="form" />
+          <models-section v-if="form.translationMode === 'local'" kind="translation" :selected-id="form.translationModel" compact />
+        </section>
+
+        <details class="mb-5">
+          <summary class="cursor-pointer py-2 text-sm font-medium">{{ t('settings.appearance') }}</summary>
+          <div class="pt-4">
             <general-section :form="form" />
             <n-form-item :label="t('settings.announceCaptions')" :show-feedback="false">
               <n-switch v-model:value="form.announceCaptions" />
@@ -220,22 +218,19 @@ function onDownloadConfirm(tasks: DownloadTask[]): void {
             <n-form-item v-if="canPin" class="mt-6" :label="t('settings.alwaysOnTop')" :show-feedback="false">
               <n-switch :value="settings?.alwaysOnTop ?? false" @update:value="setAlwaysOnTop" />
             </n-form-item>
-          </template>
-          <asr-section v-else-if="tab === 'asr'" :form="form" />
-          <translation-section v-else-if="tab === 'translation'" :form="form" />
-          <models-section v-else-if="tab === 'models'" />
-
-          <p
-            v-if="appVersion"
-            class="mt-8 text-center text-[11px] text-[var(--rt-ink-3)] select-text sm:hidden"
-          >
-            {{ t('settings.version') }} {{ appVersion }}
-          </p>
-        </div>
+          </div>
+        </details>
+        <details>
+          <summary class="cursor-pointer py-2 text-sm font-medium">{{ t('settings.modelManagement') }}</summary>
+          <div class="pt-3"><models-section /></div>
+        </details>
+        <p v-if="appVersion" class="mt-8 text-xs text-[var(--rt-ink-3)] select-text">
+          {{ t('settings.version') }} {{ appVersion }}
+        </p>
       </div>
     </div>
 
-    <!-- 选择识别模型/本地翻译引擎时的就地下载：确认后转后台下载（进度在「模型管理」页行内呈现）；
+    <!-- 选择识别模型/本地翻译引擎时的就地下载：确认后转后台下载（进度在所选模型下方呈现）；
          取消不回退设置（值已落盘），缺失模型留到点击录音时再按需下载 -->
     <model-download-modal
       v-model:show="downloadModalOpen"

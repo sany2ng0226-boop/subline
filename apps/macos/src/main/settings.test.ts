@@ -79,3 +79,17 @@ it.each(['dark', 'light'] as const)('persists follow-system after %s and reloads
     fs.rmSync(profile.path, { recursive: true, force: true });
   }
 });
+
+it('migrates a saved target and persists a separate target across interface changes', async () => {
+  readFileSync.mockReturnValue(JSON.stringify({ settingsVersion: 2, nativeLang: 'zh' }));
+  const { loadSettings, saveSettings } = await import('./settings');
+  expect(loadSettings().translation.targetLang).toBe('zh');
+  saveSettings({ translation: { targetLang: 'ja' } });
+  const saved = saveSettings({ nativeLang: 'en' });
+  expect(saved.translation.targetLang).toBe('ja');
+  const persisted = JSON.parse(writeFileSync.mock.calls.at(-1)![1]);
+  expect(persisted).toMatchObject({ nativeLang: 'en', translation: { targetLang: 'ja' } });
+  readFileSync.mockReturnValue(JSON.stringify(persisted));
+  vi.resetModules();
+  expect((await import('./settings')).loadSettings().translation.targetLang).toBe('ja');
+});
