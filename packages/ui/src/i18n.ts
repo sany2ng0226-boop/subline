@@ -133,6 +133,8 @@ const messages = {
       senseVoice: 'SenseVoice (Multilingual)',
     },
     modelsScreen: {
+      ultra: 'Ultra quality',
+      ultraDesc: 'Best translation quality, larger download',
       asrGroup: 'Speech recognition models',
       cancelDownload: 'Cancel download',
       delete: 'Delete',
@@ -341,6 +343,8 @@ const messages = {
       senseVoice: 'SenseVoice（多言語）',
     },
     modelsScreen: {
+      ultra: '超高品質',
+      ultraDesc: '翻訳品質は最高ですが、サイズが大きめです',
       asrGroup: '音声認識モデル',
       cancelDownload: 'ダウンロードを中止',
       delete: '削除',
@@ -548,6 +552,8 @@ const messages = {
       senseVoice: 'SenseVoice (다국어)',
     },
     modelsScreen: {
+      ultra: '최고 품질',
+      ultraDesc: '최고의 번역 품질, 더 큰 다운로드 용량',
       asrGroup: '음성 인식 모델',
       cancelDownload: '다운로드 취소',
       delete: '삭제',
@@ -752,6 +758,8 @@ const messages = {
       senseVoice: 'SenseVoice（多语言）',
     },
     modelsScreen: {
+      ultra: '超高质量',
+      ultraDesc: '翻译质量最好，体积较大',
       asrGroup: '语音识别模型',
       cancelDownload: '取消下载',
       delete: '删除',
