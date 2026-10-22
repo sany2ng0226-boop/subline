@@ -20,7 +20,7 @@
 
 ## 验证与发布边界
 
-**[下载 Subline Internal 0.2.0-beta.2](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.2)**，适用于 Apple 芯片 Mac、macOS 14.2 或更新版本。本包包含当前连续字幕和文件夹归档。应用已完成 Developer ID 签名、Apple 公证并附上票据，最终 DMG 内的应用通过签名、stapler 和 Gatekeeper 验证；DMG 容器没有单独公证。
+**[下载 Subline Internal 0.2.0-beta.4](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.4)**，适用于 Apple 芯片 Mac、macOS 14.2 或更新版本。本包包含当前连续字幕和文件夹归档。应用已完成 Developer ID 签名、Apple 公证并附上票据，最终 DMG 内的应用通过签名、stapler 和 Gatekeeper 验证；DMG 容器没有单独公证。
 
 1. 下载 arm64 `.dmg`，将 **Subline Internal.app** 拖入“应用程序”，正常打开并选择母语，无需移除隔离属性或降低安全设置。
 2. 在主页选择日语，开始录音，确认首次下载 SenseVoice 与 Hy-MT2 模型，合计约 **4.5 GiB**。需联网并预留额外磁盘空间；应用会核验固定文件的大小和 SHA-256。
@@ -33,7 +33,7 @@
 
 ## Windows 候选版
 
-Windows 版目标为 **Windows 10/11 x64**：录音前选择麦克风或默认播放设备的系统声音，使用本地 SenseVoice 识别、Hy-MT2 7B 翻译，并手动保存文字归档。候选版本为 **0.2.0-beta.3-windows.1**，目前尚未公开发布或完成真实设备验收；上方已签名、公证的 Mac beta.2 下载保持不变。
+Windows 版目标为 **Windows 10/11 x64**：录音前选择麦克风或默认播放设备的系统声音，使用本地 SenseVoice 识别、Hy-MT2 7B 翻译，并手动保存文字归档。候选版本为 **0.2.0-beta.3-windows.1**，目前尚未公开发布或完成真实设备验收；上方已签名、公证的 Mac beta.4 下载保持不变。
 
 本地翻译优先尝试随包提供的 NVIDIA CUDA 运行时，不可用时明确显示 CPU 降级；不会自动切到云服务。具体显卡、显存和内存未知，尚无经过验收的最低硬件配置，也不承诺 CPU 实时速度。首次模型下载需联网和用户确认。
 

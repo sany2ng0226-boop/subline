@@ -20,7 +20,7 @@
 
 ## macOS build and distribution status
 
-**[Download Subline Internal 0.2.0-beta.2](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.2)** — Apple Silicon Mac, macOS 14.2 or newer. This beta includes the current continuous-caption UI and archive folders. The application is Developer ID signed and Apple notarized, with the ticket attached to the app; the final DMG's contained app passed signature, stapler and Gatekeeper checks. The DMG container is not independently notarized.
+**[Download Subline Internal 0.2.0-beta.4](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.4)** — Apple Silicon Mac, macOS 14.2 or newer. This beta includes the current continuous-caption UI and archive folders. The application is Developer ID signed and Apple notarized, with the ticket attached to the app; the final DMG's contained app passed signature, stapler and Gatekeeper checks. The DMG container is not independently notarized.
 
 1. Download the arm64 `.dmg` from the release above and drag **Subline Internal.app** into Applications.
 2. Open it normally and accept the standard macOS first-open confirmation if shown. Choose your native language. No quarantine-removal command or security-setting change is required.
@@ -36,7 +36,7 @@ The optional API translation backend remains available for an existing local ser
 
 ## Windows candidate status
 
-Windows work targets **Windows 10/11 x64**, with microphone **or** default system-playback audio selected before recording, local SenseVoice recognition, Hy-MT2 7B translation and manual text archives. The candidate version is **0.2.0-beta.3-windows.1**; it is not yet a published or real-device-qualified Windows release. The signed macOS beta.2 above remains available and unchanged.
+Windows work targets **Windows 10/11 x64**, with microphone **or** default system-playback audio selected before recording, local SenseVoice recognition, Hy-MT2 7B translation and manual text archives. The candidate version is **0.2.0-beta.3-windows.1**; it is not yet a published or real-device-qualified Windows release. The signed macOS beta.4 above remains available and unchanged.
 
 Windows tries the packaged NVIDIA CUDA runtime first and reports CPU fallback when CUDA or GPU allocation is unavailable. It never switches to a cloud service automatically. Hardware capacity and actual performance remain unqualified; having an NVIDIA GPU alone does not establish compatibility. Model downloads require confirmation and an internet connection.
 
