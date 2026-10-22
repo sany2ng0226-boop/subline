@@ -4,7 +4,7 @@ import { NButton, NFormItem, NSwitch, NTooltip } from 'naive-ui';
 import { ArrowLeft, SlidersHorizontal, Mic, Languages, HardDrive } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { getAsrModel, getTranslationModel, DEFAULT_TRANSLATION_MODEL_ID } from '@rt/core';
-import { settings, saveSettings, alwaysOnTopSupported, setAlwaysOnTop } from '../composables/useSettings';
+import { settings, saveSettings, pendingSettingsSave, alwaysOnTopSupported, setAlwaysOnTop } from '../composables/useSettings';
 import { bridge } from '../bridge';
 import type { SettingsFormData } from '../components/settings/form';
 import GeneralSection from '../components/settings/GeneralSection.vue';
@@ -129,7 +129,7 @@ watch(
     if (mode !== 'local') return;
     const spec = getTranslationModel(form.translationModel);
     if (!spec) return;
-    await saveChain;
+    await pendingSettingsSave();
     try {
       const tasks = await missingTranslationDownload(spec.id);
       if (form.translationMode === 'local' && form.translationModel === spec.id) offerDownload(tasks);
@@ -142,7 +142,7 @@ watch(
 watch(
   () => form.asr.model,
   async (modelId) => {
-    await saveChain;
+    await pendingSettingsSave();
     try {
       const { asrReady } = await bridge().getSetupStatus(modelId);
       if (asrReady) return;

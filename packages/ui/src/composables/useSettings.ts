@@ -55,6 +55,10 @@ export async function loadSettings(): Promise<AppSettings> {
 
 let settingsSaves: Promise<unknown> = Promise.resolve();
 
+export function pendingSettingsSave(): Promise<unknown> {
+  return settingsSaves;
+}
+
 /** Queue explicit patches; never infer intent by comparing a stale full snapshot. */
 export function saveSettings(next: SettingsPatch): Promise<AppSettings> {
   const patch: SettingsPatch = JSON.parse(JSON.stringify(next));
