@@ -1,3 +1,4 @@
+import { recordingAccelerator, type BuildVariant } from './variant';
 import type { AppSettings } from '@rt/core';
 
 export function dispatchShortcut(
@@ -15,6 +16,7 @@ interface Dependencies {
     unregister(key: string): void;
   };
   platform: string;
+  variant?: BuildVariant;
   readSettings(): AppSettings;
   dispatch(action: 'toggleRecording'): void;
   log(error: unknown): void;
@@ -29,8 +31,8 @@ export function createGlobalShortcuts(deps: Dependencies) {
         registered = null;
       }
       const key = deps.readSettings().shortcuts?.toggleRecording;
-      if (key === null) return;
-      const accelerator = key ?? `Alt+${deps.platform === 'darwin' ? 'Command' : 'Control'}+R`;
+      const accelerator = recordingAccelerator(deps.variant ?? 'release', deps.platform, key);
+      if (accelerator === null) return;
       try {
         if (deps.globalShortcut.register(accelerator, () => deps.dispatch('toggleRecording'))) {
           registered = accelerator;

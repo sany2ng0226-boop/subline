@@ -39,3 +39,7 @@ apps/macos/build/icon.ico
 apps/macos/build/icon-windows.png
 apps/macos/build/.icon-ico/
 work/
+
+apps/macos/release-dev/
+apps/macos/build/icon-dev.icns
+apps/macos/build/icon-dev.png

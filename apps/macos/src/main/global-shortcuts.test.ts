@@ -61,3 +61,15 @@ describe('recording global shortcut', () => {
     expect(deps.globalShortcut.register).toHaveBeenCalledTimes(2);
   });
 });
+
+ it('dev never registers the release accelerator from saved settings', () => {
+  const register = vi.fn(() => true);
+  const controller = createGlobalShortcuts({
+    globalShortcut: { register, unregister: vi.fn() },
+    platform: 'darwin', variant: 'dev',
+    readSettings: () => ({ shortcuts: { toggleRecording: 'Alt+Command+R' } }) as AppSettings,
+    dispatch: vi.fn(), log: vi.fn(),
+  });
+  controller.start();
+  expect(register).toHaveBeenCalledExactlyOnceWith('Alt+Shift+Command+R', expect.any(Function));
+});

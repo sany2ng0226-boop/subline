@@ -10,7 +10,9 @@ import { fileURLToPath } from 'node:url';
 const appDir = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..'); // apps/macos
 const root = path.resolve(appDir, '..', '..'); // 工作区根
 const deployDir = path.join(root, '.deploy-macos'); // 自包含副本（已 gitignore）
-const releaseDir = process.env.RT_RELEASE_DIR
+const dev = process.argv.includes('--dev');
+if (dev && process.argv.includes('--preview')) throw new Error('Choose dev or preview');
+const releaseDir = dev ? path.join(appDir, 'release-dev') : process.env.RT_RELEASE_DIR
   ? path.resolve(process.env.RT_RELEASE_DIR)
   : path.join(appDir, process.argv.includes('--preview') ? 'release-preview' : 'release');
 const dirOnly = process.argv.includes('--dir');
@@ -19,10 +21,10 @@ const preview = process.argv.includes('--preview');
 const run = (cmd, cwd) => execSync(cmd, { cwd, stdio: 'inherit' });
 
 console.log('▶ 1/4 构建 (electron-vite)');
-run(preview ? 'RT_INTERNAL_BUILD=1 pnpm run build' : 'pnpm run build', appDir);
+run(dev ? 'SUBLINE_VARIANT=dev pnpm run build' : preview ? 'RT_INTERNAL_BUILD=1 pnpm run build' : 'pnpm run build', appDir);
 
 console.log('▶ 2/4 生成应用图标 (从共享 assets/ 重建 build/icon.icns)');
-run('pnpm run icons', appDir);
+run(dev ? 'pnpm run icons --dev' : 'pnpm run icons', appDir);
 
 console.log('▶ 3/4 导出自包含副本 (pnpm deploy)');
 rmSync(deployDir, { recursive: true, force: true });
@@ -36,8 +38,8 @@ const target = dirOnly ? '--dir' : '';
 // 覆盖（-c.extraMetadata.version），决定 dmg 文件名与 App 的 CFBundleShortVersionString。
 const { version } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 run(
-  `./node_modules/.bin/electron-builder --mac ${target} -c.extraMetadata.version="${version}" ` +
-  (preview ? '-c.appId=io.github.sany2ng0226.classroomtranslator.preview -c.productName="Subline Internal" -c.extraMetadata.name=realtime-translator-internal -c.extraMetadata.productName="Subline Internal" ' : '-c.extraMetadata.name=realtime-translator -c.extraMetadata.productName="Subline" ') +
+  `${dev ? 'CSC_NAME="JIANG ZIYANG (R9LRJU53ZG)" CSC_IDENTITY_AUTO_DISCOVERY=true ' : ''}./node_modules/.bin/electron-builder --mac ${target} -c.extraMetadata.version="${version}" ` +
+  (dev ? '-c.appId=io.github.sany2ng0226.classroomtranslator.dev -c.productName="Subline Dev" -c.extraMetadata.name=subline-dev -c.extraMetadata.productName="Subline Dev" -c.extraMetadata.sublineVariant=dev -c.mac.icon=build/icon-dev.icns -c.mac.notarize=false -c.forceCodeSigning=true ' : preview ? '-c.appId=io.github.sany2ng0226.classroomtranslator.preview -c.productName="Subline Internal" -c.extraMetadata.name=realtime-translator-internal -c.extraMetadata.productName="Subline Internal" ' : '-c.extraMetadata.name=realtime-translator -c.extraMetadata.productName="Subline" ') +
   `-c.directories.output="${releaseDir}"`,
   deployDir
 );

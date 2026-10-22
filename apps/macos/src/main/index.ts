@@ -1,3 +1,4 @@
+import { variantIdentity, shouldMigrateLegacyProfile, recordingAccelerator, type BuildVariant } from './variant';
 import type { SettingsPatch } from '@rt/core';
 import { createGlobalShortcuts, dispatchShortcut } from './global-shortcuts';
 import { createQuitFlow, setupSingleInstance } from './quit-flow';
@@ -69,9 +70,17 @@ import type {
   MicPermission,
 } from '../shared/types';
 
+declare const __SUBLINE_VARIANT__: BuildVariant;
+const buildVariant = __SUBLINE_VARIANT__;
+
 // A development preview must not reuse a running installation's settings or archives.
 const previewProfile = !app.isPackaged ? process.env['RT_PREVIEW_PROFILE'] : undefined;
-if (previewProfile) {
+if (buildVariant === 'dev') {
+  const identity = variantIdentity(buildVariant, app.getPath('appData'));
+  fs.mkdirSync(identity.userData, { recursive: true });
+  app.setName(identity.name);
+  app.setPath('userData', identity.userData);
+} else if (previewProfile) {
   fs.mkdirSync(path.resolve(previewProfile), { recursive: true });
   app.setPath('userData', path.resolve(previewProfile));
   app.setName('Subline Preview');
@@ -86,9 +95,9 @@ const LEGACY_PROFILE_DIRS: Record<string, string> = {
   'Realtime Translator Internal': 'Classroom Translator Internal',
   'Realtime Translator': 'Classroom Translator',
 };
-if (app.isPackaged && process.platform === 'win32') {
+if (buildVariant !== 'dev' && app.isPackaged && process.platform === 'win32') {
   app.setPath('userData', path.join(app.getPath('appData'), 'Subline Windows Candidate'));
-} else if (app.isPackaged && LEGACY_PROFILE_DIRS[app.getName()]) {
+} else if (buildVariant !== 'dev' && app.isPackaged && LEGACY_PROFILE_DIRS[app.getName()]) {
   app.setPath('userData', path.join(app.getPath('appData'), LEGACY_PROFILE_DIRS[app.getName()]));
 }
 const smokeFlag = process.platform === 'win32' ? process.argv.indexOf('--candidate-smoke') : -1;
@@ -98,8 +107,8 @@ if (smokeFlag >= 0) {
   app.setPath('userData', fs.mkdtempSync(path.join(app.getPath('temp'), 'subline-candidate-smoke-')));
 }
 
-if (app.isPackaged && process.platform !== 'win32' && app.getName() === 'Subline'
-  && !process.env['RT_PREVIEW_PROFILE'] && !process.argv.includes('--candidate-smoke')) {
+if (shouldMigrateLegacyProfile(buildVariant, app.isPackaged, process.platform, app.getName(),
+  Boolean(process.env['RT_PREVIEW_PROFILE']) || process.argv.includes('--candidate-smoke'))) {
   migrateLegacyProfile({
     targetDir: app.getPath('userData'),
     sourceDirs: ['Classroom Translator Internal', '@rt/macos'].map((name) => path.join(app.getPath('appData'), name)),
@@ -108,8 +117,9 @@ if (app.isPackaged && process.platform !== 'win32' && app.getName() === 'Subline
 
 // 模型存放目录：
 // - 打包后 app.getAppPath() 指向只读的 app.asar，必须写到可写的 userData；
-// - 开发时用仓库根目录的 models/，便于复用已下载的模型。
-const MODELS_DIR = !app.isPackaged && process.env['RT_MODELS_DIR']
+// - Dev variant always keeps writable caches in its own profile, including unpackaged runs.
+// - 普通开发时用仓库根目录的 models/，便于复用已下载的模型。
+const MODELS_DIR = buildVariant === 'dev' ? path.join(app.getPath('userData'), 'models') : !app.isPackaged && process.env['RT_MODELS_DIR']
   ? path.resolve(process.env['RT_MODELS_DIR'])
   : app.isPackaged
   ? path.join(app.getPath('userData'), 'models')
@@ -229,7 +239,10 @@ function systemAudioAvailable(): boolean {
  * 与 preload 上报的 audioSources 保持一致（避免 UI 拿到本机不可用的 'system'）。
  */
 function effectiveSettings(): AppSettings {
-  const s = loadSettings();
+  const stored = loadSettings();
+  const s = buildVariant === 'dev'
+    ? { ...stored, shortcuts: { ...stored.shortcuts, toggleRecording: recordingAccelerator(buildVariant, process.platform) } }
+    : stored;
   if (s.audioSource === 'system' && !systemAudioAvailable()) {
     return { ...s, audioSource: 'mic' };
   }
@@ -852,6 +865,7 @@ ipcMain.handle('recovery:clear', () => recoveryStore.clearRecovery());
 const shortcuts = createGlobalShortcuts({
   globalShortcut,
   platform: process.platform,
+  variant: buildVariant,
   readSettings: loadSettings,
   dispatch: (action) => {
     dispatchShortcut(BrowserWindow.getAllWindows(), action);
@@ -926,7 +940,7 @@ ipcMain.handle('pipeline:stop', () => {
 });
 
 const isPrimaryInstance = setupSingleInstance({
-  skip: process.argv.includes('--candidate-smoke') || !!process.env['RT_PREVIEW_PROFILE'],
+  skip: buildVariant !== 'dev' && (process.argv.includes('--candidate-smoke') || !!process.env['RT_PREVIEW_PROFILE']),
   requestLock: () => app.requestSingleInstanceLock(),
   quit: () => app.quit(),
   onSecondInstance: (callback) => { app.on('second-instance', callback); },

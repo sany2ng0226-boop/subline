@@ -19,8 +19,9 @@ const repoRoot = join(macosRoot, '..', '..'); // 仓库根
 const assets = join(repoRoot, 'assets'); // 共享图标源
 
 const svg = join(assets, 'icon.svg'); // 满版母版（共享）
-const pngMaster = join(assets, 'icon.png'); // macOS 取景后的 1024 主图（圆角内缩）
-const icns = join(macosRoot, 'build', 'icon.icns');
+const dev = process.argv.includes('--dev');
+const pngMaster = dev ? join(macosRoot, 'build', 'icon-dev.png') : join(assets, 'icon.png'); // macOS 取景后的 1024 主图（圆角内缩）
+const icns = join(macosRoot, 'build', dev ? 'icon-dev.icns' : 'icon.icns');
 const iconOutput = join(macosRoot, 'build', '.icon-icns');
 
 // macOS 取景：满版母版缩进 848 + 圆角(rx196) + 居中于 1024 透明画布（留 88 边，符合 Big Sur 网格）
@@ -51,7 +52,7 @@ const shadow = await sharp(
 const outline = Buffer.from(
   `<svg width="1024" height="1024"><rect x="${MARGIN + 1}" y="${MARGIN + 1}" width="${INNER - 2}" height="${INNER - 2}" rx="${RX - 1}" ry="${RX - 1}" fill="none" stroke="#000" stroke-opacity="0.08" stroke-width="2"/></svg>`
 );
-const framed = await sharp({
+let framed = await sharp({
   create: { width: 1024, height: 1024, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
 })
   .composite([
@@ -62,11 +63,17 @@ const framed = await sharp({
   .png()
   .toBuffer();
 
+if (dev) {
+  framed = await sharp(framed).composite([{ input: Buffer.from(
+    '<svg width="1024" height="1024"><rect x="500" y="690" width="460" height="240" rx="55" fill="#d71920" stroke="white" stroke-width="12"/><text x="730" y="858" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="155" font-weight="900" fill="white">DEV</text></svg>'
+  ) }]).png().toBuffer();
+}
+
 // 各尺寸从已取景的 1024 缩放（避免重复栅格化 SVG）
 const render = (size, out) => sharp(framed).resize(size, size).png().toFile(out);
 
 await render(1024, pngMaster);
-console.log('✓ assets/icon.png (1024)');
+console.log(`✓ ${pngMaster} (1024)`);
 
 // macOS 26.2 的 iconutil 会把自己刚解出的标准 iconset 也误报为 Invalid Iconset。
 // electron-builder 自带的 app-builder 使用独立转换器，产物同时兼容旧版 macOS。
@@ -82,4 +89,4 @@ try {
 } finally {
   rmSync(iconOutput, { recursive: true, force: true });
 }
-console.log('✓ build/icon.icns');
+console.log(`✓ ${icns}`);
