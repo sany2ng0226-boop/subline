@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { NSelect, NInput, NAutoComplete, NFormItem, NAlert, NButton, type SelectOption } from 'naive-ui';
+import { NInput, NAutoComplete, NFormItem, NAlert, NButton, type SelectOption } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { translationModelsFor, isLoopbackEndpoint } from '@rt/core';
 import { bridge } from '../../bridge';
-import { humanBytes } from '../../utils/bytes';
+import ModelPicker from './ModelPicker.vue';
 import type { SettingsFormData } from './form';
 
 const { t } = useI18n();
@@ -19,7 +19,10 @@ const localTranslationAvailable = bridge().localTranslationAvailable !== false;
 // 本平台可选的本地翻译模型（iOS 走系统翻译、无可选权重模型时为空：方式仍可选本地，但不渲染模型下拉）。
 const localModelOptions = computed(() =>
   translationModelsFor(bridge().platform).map((m) => ({
-    label: `${t(m.nameKey)}（${humanBytes(m.approxDownloadBytes)}）`,
+    label: t(m.nameKey),
+    modelId: m.id,
+    sizeBytes: m.approxDownloadBytes,
+    ultra: m.tier === 'ultra',
     value: m.id,
   })),
 );
@@ -172,7 +175,7 @@ const modelOptions = computed(() => {
 <template>
   <div>
     <n-form-item :label="t('settings.translationModel')" :show-feedback="false">
-      <n-select v-model:value="selection" :options="modelChoices" />
+      <model-picker v-model:value="selection" kind="translation" :options="modelChoices" />
     </n-form-item>
 
     <div v-if="form.translationMode === 'cloud'" class="pt-5">

@@ -7,7 +7,7 @@ import type { DownloadTask } from '../composables/useModelDownloads';
 
 const { t } = useI18n();
 // 下载确认弹窗（仅确认态）：列出待下载模型 + 合计体积，征询后由父组件转后台下载
-// （下载进度/取消/失败重试均移到行内或主屏，见 useModelDownloads / ModelsSection / MainScreen）。
+// （下载进度/取消/失败重试均移到行内或主屏，见 useModelDownloads / ModelPicker / MainScreen）。
 const props = defineProps<{ tasks: DownloadTask[] }>();
 const show = defineModel<boolean>('show', { default: false });
 const emit = defineEmits<{ confirm: [tasks: DownloadTask[]]; cancel: [] }>();

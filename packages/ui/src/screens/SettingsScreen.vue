@@ -1,20 +1,15 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, reactive, watch } from 'vue';
 import { NButton, NFormItem, NSelect, NSwitch, NTooltip } from 'naive-ui';
 import { ArrowLeft } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
-import { UI_LANGS, asrModelsFor, getAsrModel, getTranslationModel, DEFAULT_ASR_MODEL_ID, DEFAULT_TRANSLATION_MODEL_ID } from '@rt/core';
-import { settings, saveSettings, pendingSettingsSave, alwaysOnTopSupported, setAlwaysOnTop } from '../composables/useSettings';
+import { UI_LANGS, asrModelsFor, getTranslationModel, DEFAULT_ASR_MODEL_ID, DEFAULT_TRANSLATION_MODEL_ID } from '@rt/core';
+import { settings, saveSettings, alwaysOnTopSupported, setAlwaysOnTop } from '../composables/useSettings';
 import { bridge } from '../bridge';
 import { LANG_LABELS, type SettingsFormData } from '../components/settings/form';
-import { humanBytes } from '../utils/bytes';
 import GeneralSection from '../components/settings/GeneralSection.vue';
 import TranslationSection from '../components/settings/TranslationSection.vue';
-import ModelsSection from '../components/settings/ModelsSection.vue';
-import ModelDownloadModal from '../components/ModelDownloadModal.vue';
-import { missingTranslationDownload } from '../composables/translationDownload';
-import { type DownloadTask, startDownloads } from '../composables/useModelDownloads';
-
+import ModelPicker from '../components/settings/ModelPicker.vue';
 const { t } = useI18n();
 const emit = defineEmits<{ close: [] }>();
 
@@ -47,17 +42,13 @@ const asrLanguageOptions = computed(() => [
   { label: t('settings.asrLanguageAuto'), value: 'auto' }, ...languageOptions,
 ]);
 const asrModelOptions = computed(() => asrModelsFor(form.asr.language, bridge().platform).map((model) => ({
-  label: `${t(model.nameKey)} (${humanBytes(model.approxBytes)})`, value: model.id,
+  label: t(model.nameKey), value: model.id, modelId: model.id, sizeBytes: model.approxBytes,
 })));
 watch(() => form.asr.language, (language) => {
   if (!asrModelsFor(language, bridge().platform).some((model) => model.id === form.asr.model)) {
     form.asr.model = DEFAULT_ASR_MODEL_ID;
   }
 });
-
-// 本地翻译模型未缓存时的就地下载弹窗
-const downloadModalOpen = ref(false);
-const downloadTasks = ref<DownloadTask[]>([]);
 
 // Compare against the form's last submission, not live settings changed by other controls.
 let submitted = JSON.parse(JSON.stringify(form));
@@ -117,56 +108,6 @@ watch(
   { deep: true },
 );
 
-// 选择即触发下载确认（识别模型 / 本地翻译引擎一致）：设置值本身已经保存通道 a 落盘，
-// 弹窗只负责「顺手下载」；取消不回退任何设置，缺失的模型留到点击录音时再按需下载。
-// 打开前先 await 保存链，确保本次变更已落盘再查就绪状态（保存通道 a 的 watch 声明在前，
-// await 到的正是那次保存）；弹窗已在展示（含下载中）时不打断、不覆盖任务。
-function offerDownload(tasks: DownloadTask[]): void {
-  if (downloadModalOpen.value || tasks.length === 0) return;
-  downloadTasks.value = tasks;
-  downloadModalOpen.value = true;
-}
-
-// 切到本地方式、或本地方式下切换模型时，检查该本地模型是否就绪、未就绪则弹下载确认。
-// 任务的 nameKey/sizeBytes 取自所选 spec；平台无对应本地模型（如 iOS 系统翻译）则跳过。
-watch(
-  [() => form.translationMode, () => form.translationModel],
-  async ([mode]) => {
-    if (mode !== 'local') return;
-    const spec = getTranslationModel(form.translationModel);
-    if (!spec) return;
-    await pendingSettingsSave();
-    try {
-      const tasks = await missingTranslationDownload(spec.id);
-      if (form.translationMode === 'local' && form.translationModel === spec.id) offerDownload(tasks);
-    } catch {
-      /* 查询失败：留到点击录音时按需下载 */
-    }
-  },
-);
-
-watch(
-  () => form.asr.model,
-  async (modelId) => {
-    await pendingSettingsSave();
-    try {
-      const { asrReady } = await bridge().getSetupStatus(modelId);
-      if (asrReady) return;
-      const spec = getAsrModel(modelId);
-      if (!spec) return;
-      offerDownload([
-        { kind: 'asr', modelId: spec.id, nameKey: spec.nameKey, sizeBytes: spec.approxBytes },
-      ]);
-    } catch {
-      /* 查询失败：不弹窗；缺模型会在点击录音时按需下载 */
-    }
-  },
-);
-
-// 确认下载 → 转后台下载（设置早已生效，不离开设置页；进度/取消在所选模型下方呈现）
-function onDownloadConfirm(tasks: DownloadTask[]): void {
-  startDownloads(tasks);
-}
 </script>
 
 <template>
@@ -198,13 +139,11 @@ function onDownloadConfirm(tasks: DownloadTask[]): void {
 
         <section class="mb-6 border-b border-neutral-200 pb-5 dark:border-[#3a3b44]">
           <n-form-item :label="t('settings.asrModel')" :show-feedback="false">
-            <n-select v-model:value="form.asr.model" :options="asrModelOptions" />
+            <model-picker v-model:value="form.asr.model" kind="asr" :options="asrModelOptions" />
           </n-form-item>
-          <models-section kind="asr" :selected-id="form.asr.model" compact />
         </section>
         <section class="mb-6 border-b border-neutral-200 pb-5 dark:border-[#3a3b44]">
           <translation-section :form="form" />
-          <models-section v-if="form.translationMode === 'local'" kind="translation" :selected-id="form.translationModel" compact />
         </section>
 
         <details class="mb-5">
@@ -220,22 +159,11 @@ function onDownloadConfirm(tasks: DownloadTask[]): void {
             </n-form-item>
           </div>
         </details>
-        <details>
-          <summary class="cursor-pointer py-2 text-sm font-medium">{{ t('settings.modelManagement') }}</summary>
-          <div class="pt-3"><models-section /></div>
-        </details>
         <p v-if="appVersion" class="mt-8 text-xs text-[var(--rt-ink-3)] select-text">
           {{ t('settings.version') }} {{ appVersion }}
         </p>
       </div>
     </div>
 
-    <!-- 选择识别模型/本地翻译引擎时的就地下载：确认后转后台下载（进度在所选模型下方呈现）；
-         取消不回退设置（值已落盘），缺失模型留到点击录音时再按需下载 -->
-    <model-download-modal
-      v-model:show="downloadModalOpen"
-      :tasks="downloadTasks"
-      @confirm="onDownloadConfirm"
-    />
   </div>
 </template>

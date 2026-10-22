@@ -8,14 +8,16 @@
 
 ![Subline macOS live English captions and Japanese translations](docs/assets/subline-live-beta6.png)
 
-*Live captions in the locally installed beta.6 acceptance build: synthetic English test speech was captured through system audio and processed by the recognition and translation models. Output is unedited; this is not a benchmark. Beta.6 is not published; the public download below remains beta.5.*
+*Live captions in the locally installed beta.6+d5a44a6 acceptance build: synthetic English test speech was captured through system audio and processed by the recognition and translation models. Output is unedited; this is not a benchmark. This run reproduces a known issue: the second translation repeats the preceding context. Beta.6 is not published; the public download below remains beta.5.*
 
 <details>
-<summary>Settings: independent recognition and translation languages</summary>
+<summary>Settings: model selection, downloads and independent languages</summary>
 
-![Subline beta.6 settings with Chinese interface, English recognition and Japanese translation target](docs/assets/subline-settings-beta6.png)
+![Subline beta.6 recognition model picker with selection, download and delete controls](docs/assets/subline-settings-beta6.png)
 
-*The same locally installed beta.6 build, with both model choices directly on the settings page.*
+![Subline beta.6 translation model picker](docs/assets/subline-translation-models-beta6.png)
+
+*The same installed build. Each model picker combines selection, download status and download/delete controls; downloaded models can be selected directly.*
 
 </details>
 

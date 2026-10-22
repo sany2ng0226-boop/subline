@@ -39,6 +39,7 @@ export type LocalModelFile = ModelFileSpec;
 
 export interface LocalModelSpec {
   id: LocalEngine;
+  tier?: TranslationModelEntry['tier'];
   /** UI 端 i18n 显示名 key（形如 models.m2m100）。 */
   nameKey: string;
   /** HuggingFace 仓库标识：既是 Transformers.js 的模型 id，也是缓存布局的根目录名。 */
@@ -89,6 +90,7 @@ export const LOCAL_TRANSLATION_MODELS: readonly LocalModelSpec[] = MODELS.filter
 ).map((m) => ({
   id: m.id,
   nameKey: m.nameKey,
+  tier: m.tier,
   modelId: m.modelId,
   dtype: m.dtype,
   files: m.files,

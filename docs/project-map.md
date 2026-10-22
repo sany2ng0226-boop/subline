@@ -62,7 +62,9 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 
 ### 设置、模型与归档
 
-- `packages/ui/src/screens/SettingsScreen.vue` 将识别语言与翻译目标置于单页顶部，随后展示识别模型与翻译模型；`TranslationSection.vue` 用同一选择器表示关闭、具体本地模型或 API 服务，选择 API 后才展开端点配置。`ModelsSection.vue` 通过 `kind`、`selectedId` 与 `compact` 就地展示所选模型状态和下载／删除操作，也复用于折叠的完整模型清单。`GeneralSection.vue` 放入“外观与辅助功能”折叠区，界面语言不再与翻译目标联动。这些设置改动属于尚未发布的源码候选，公开安装包状态见仓库 README。
+- `packages/ui/src/screens/SettingsScreen.vue` 将识别语言与翻译目标置于单页顶部，随后展示识别模型与翻译模型；`GeneralSection.vue` 放入“外观与辅助”折叠区，界面语言与翻译目标分别保存。新模型选择交互的安装与发布状态以仓库 README 和实际验收为准。
+- `components/settings/ModelPicker.vue` 统一两类模型的选择、状态、下载确认、进度、取消、重试和确认删除；`model-picker.ts` 将注册表选项与宿主模型快照合成行，仅已下载的本地模型可选，没有 `modelId` 的“不翻译”／API／系统翻译选项不受下载门槛限制。下载只启动后台任务，不发选择变更，完成后需用户再选；取消不改变当前模型。录音、启停或装载模型时禁止切换与删除；状态查询或操作失败就地显示错误与重试。独立的 `ModelsSection.vue` 与模型管理入口已移除。
+- `TranslationSection.vue` 将关闭、具体本地模型／系统翻译和 API 服务映射到统一 `ModelPicker`，仅选择 API 时展开连接字段。`composables/useModels.ts` 共享模型状态快照、合并并发探测，并在下载完成／失败／取消后刷新；删除或取消由调用处补充刷新。模型质量徽章读取 `model-registry.ts` 的 `tier` 元数据。
 - `packages/core/src/settings.ts` 校验并持久化 `translation.targetLang`；旧设置缺少有效目标时优先继承其 `nativeLang`。`packages/ui/src/screens/Onboarding.vue` 在首次完成引导时将目标初始化为所选界面语言，后续设置页单独保存两者。翻译决策与迁移分别由 `segment-translation.test.ts` 和 `settings.test.ts` 覆盖。
 - `@rt/ui` 只持有表单和当前会话状态；设置、模型和归档持久化经 `AppBridge`。设置保存契约是 `SettingsPatch`：UI 只提交发生变化的字段，`@rt/core` 的 `mergeSettings` 将补丁合并到最新完整设置并统一校验；macOS 同步合并后写文件，Web 与 iOS 将异步写入串行化，并在每次实际执行时读取最新状态再合并。默认值、其它字段校验、归档摘要和排序也在 `@rt/core` 复用，各宿主只选择文件、Preferences 或 IndexedDB 作为存储后端。
 - Internal 归档入口由 `packages/ui/src/screens/ArchiveLibrary.vue` 管理文件夹、筛选、改名与移动，`MainScreen.vue` 负责手动保存弹窗；内容标题提取属于 `packages/core/src/archive.ts` 的 `suggestArchiveTitle`。产品规则见[清屏与归档](product/experience.md#清屏与归档)。
