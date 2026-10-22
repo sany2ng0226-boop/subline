@@ -5,6 +5,10 @@
 - 调用 `dev-memory` skill 读取与当前任务相关的开发记忆。
 - 调用 `docs` skill 建立与当前任务相关的项目文档上下文。
 
+## 开发与验收
+
+- Subline 日常迭代按 `docs/dev-memory/development-workflow.md` 执行：Dev 热更新优先、检查集中去重、最终打包验收后再按授权同步正式版，截图最后更新。
+
 ## 开发收尾
 
 - 派 `memory-writer` 子代理沉淀值得长期保留的开发记忆。

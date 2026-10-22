@@ -2,6 +2,14 @@
 
 `Subline Dev` is a locally packaged macOS variant that can be installed and run beside the release `Subline.app`. The release packaging path and identity remain unchanged.
 
+## Development workflow
+
+1. Quit the installed **Subline Dev** before running `pnpm dev` from the repository root. It delegates to `SUBLINE_VARIANT=dev electron-vite dev --watch`: source development uses the Dev identity and profile, with renderer hot reload and main/preload rebuilds on edits, without deploy, packaging or signing. The installed Dev and source Dev share a single-instance lock; release Subline remains separate.
+2. Iterate in source development, then consolidate the checks relevant to the changed modules. Run the required quality gate once the changes settle, avoiding duplicate checks already covered by that gate.
+3. Quit source Dev, then run `pnpm --filter @rt/macos dist:dev:dir` for one final signed Dev app and install it for acceptance. This command already builds the source; do not run `pnpm build` immediately beforehand.
+4. In the installed app, reproduce the original issue and check key persistence across restart, native interactions and release isolation. A packaged app is still required for final macOS system-audio, permission and integration QA; source development and automated tests do not replace it.
+5. Apply the same verified changes to the formal app only within Jack's authorization, then capture screenshots of the final accepted state.
+
 ## Packaging
 
 - `pnpm --filter @rt/macos dist:dev` builds a signed app and DMG.

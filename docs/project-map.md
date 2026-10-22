@@ -74,6 +74,8 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 
 ## 测试与构建位置
 
+- 根 `pnpm dev` 委托 macOS 的 `SUBLINE_VARIANT=dev electron-vite dev --watch`，复用独立 Dev 身份和 profile，渲染器热更新，主进程／preload 随编辑重新构建，不执行 deploy、打包或签名。启动前退出已安装的 Subline Dev，两者共用身份、数据与单实例锁；发布版 Subline 仍独立。
+- 开发流程为 Dev 热更新迭代 → 汇总改动范围内检查与必要质量门禁，避免重复覆盖 → 一次最终签名 Dev 目录构建与安装 → 原问题回归、重启持久化及原生交互验收 → 获授权后将同一改动应用于正式版 → 最终截图。`pnpm --filter @rt/macos dist:dev:dir` 已包含构建，无需紧邻执行 `pnpm build`；macOS 系统音频、权限与集成的最终验收仍使用打包安装的应用。详见 [Dev 工作流](../apps/macos/DEV-VARIANT.md#development-workflow)。
 - `tsconfig.base.json` 与 macOS `tsconfig.json` 直接把 `@rt/core` / `@rt/ui` 解析到工作区源码；`electron.vite.config.ts` 的 main、preload、renderer 同样显式解析 core，renderer 另直接解析 UI。源码型包不能依赖可能滞后的 `node_modules` 注入副本，否则新增组件和契约会漏入检查或构建。
 - 根 `package.json` 的 `pnpm check` 运行 `@rt/core` 单元测试、macOS 评测语料导入器的纯逻辑测试，以及 macOS、Web、iOS 三端类型检查；它不下载语料或模型，也不执行耗时的识别精度门禁。
 - `packages/core/src/**/*.test.ts` 覆盖设置、归档、模型源、转写管线、定稿漂移统计和翻译决策等共享逻辑。

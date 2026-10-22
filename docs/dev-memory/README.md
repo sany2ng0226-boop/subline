@@ -5,3 +5,4 @@
 - [asr-eval](asr-eval.md) — ASR 识别准确率 CER 评测基建（eval-cer）的用法、用例格式、指标解读与首批发现
 - [pipeline-recant](pipeline-recant.md) — agreement 管线「模型翻供」三缺陷的定性与修复（重基/定稿择长/标点容忍对齐/停滞分流）
 - [workspace-build](workspace-build.md) — 源码型 workspace 包的应用构建解析与生产 bundle 回归门禁
+- [development-workflow](development-workflow.md) — Dev 热更新、共享检查证据、打包与安装验收顺序
