@@ -1,6 +1,6 @@
 // settings 纯逻辑的单元测试：默认值的母语推断、字段补齐与语言/模型校验。
 import { describe, expect, it } from 'vitest';
-import { UI_LANGS, makeDefaults, withDefaults } from './settings';
+import { UI_LANGS, makeDefaults, mergeSettings, withDefaults } from './settings';
 
 describe('UI_LANGS', () => {
   it('按 key 字母序渲染', () => {
@@ -94,6 +94,7 @@ describe('withDefaults 字段补齐与校验', () => {
     expect(s.asr).toEqual({ language: 'ja', model: 'zipformer-ja-reazonspeech' });
     expect(s.translation).toEqual({
       enabled: true,
+      targetLang: 'ja',
       engine: 'cloud',
       cloud: { baseURL: 'https://api.example.com/v1', apiKey: 'k', model: 'm' },
     });
@@ -222,5 +223,32 @@ describe('announceCaptions', () => {
     expect(d.announceCaptions).toBe(false);
     expect(withDefaults({ announceCaptions: 'yes' }, d).announceCaptions).toBe(false);
     expect(withDefaults({ announceCaptions: true }, d).announceCaptions).toBe(true);
+  });
+});
+
+describe('independent translation target', () => {
+  it('defaults to the initial interface language', () => {
+    for (const language of UI_LANGS) {
+      expect(makeDefaults([language]).translation.targetLang).toBe(language);
+    }
+  });
+
+  it('migrates legacy targets from the saved language before using device defaults', () => {
+    const defaults = makeDefaults(['en']);
+    const migrated = withDefaults({ nativeLang: 'zh', translation: { enabled: true } }, defaults);
+    expect(migrated.translation.targetLang).toBe('zh');
+    expect(withDefaults({ translation: {} }, defaults).translation.targetLang).toBe('en');
+    expect(withDefaults({ nativeLang: 'ja', translation: { targetLang: 'fr' } }, defaults)
+      .translation.targetLang).toBe('ja');
+  });
+
+  it('preserves an explicit target through JSON, unrelated saves, and interface language changes', () => {
+    const defaults = makeDefaults(['zh']);
+    const selected = mergeSettings(defaults, { translation: { targetLang: 'ja' } });
+    const changedUi = mergeSettings(selected, { nativeLang: 'en' });
+    const saved = mergeSettings(changedUi, { translation: { enabled: true } });
+    const reloaded = withDefaults(JSON.parse(JSON.stringify(saved)), makeDefaults(['ko']));
+    expect(reloaded.nativeLang).toBe('en');
+    expect(reloaded.translation).toMatchObject({ enabled: true, targetLang: 'ja' });
   });
 });

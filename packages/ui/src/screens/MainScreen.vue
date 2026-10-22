@@ -270,7 +270,7 @@ function toggleAudioSource(): void {
   void saveSettings({ audioSource: s.audioSource === 'system' ? 'mic' : 'system' });
 }
 
-// 移动端「...」溢出菜单（翻译开/关已移至设置的「翻译方式」，此处不再有翻译项）
+// 移动端「...」溢出菜单（翻译开/关由设置的「翻译模型」选择控制，此处不再有翻译项）
 const mobileMenuOptions = computed<DropdownMixedOption[]>(() => [
   { key: 'font-smaller', label: t('main.fontSmaller'), icon: () => h(AArrowDown, { size: 16 }), disabled: fontAtMin.value },
   { key: 'font-larger', label: t('main.fontLarger'), icon: () => h(AArrowUp, { size: 16 }), disabled: fontAtMax.value },
@@ -733,7 +733,7 @@ function openMicSettings(): void {
       :empty-hint="t('main.emptyHint')"
       :translate-on="translateOn"
       :source-lang="settings?.asr.language"
-      :target-lang="settings?.nativeLang"
+      :target-lang="settings?.translation.targetLang ?? settings?.nativeLang"
       :announce="settings?.announceCaptions"
     />
 

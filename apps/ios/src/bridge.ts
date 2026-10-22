@@ -106,6 +106,9 @@ export function createIosBridge(): AppBridge {
       const current = await readSettingsOnce();
       const saved = applyPlatformConstraints(mergeSettings(current, queuedPatch));
       await Preferences.set({ key: SETTINGS_KEY, value: JSON.stringify(saved) });
+      if (current.translation.targetLang !== saved.translation.targetLang) {
+        resetReverseTranslationContext(reverseCtx);
+      }
       cachedSettings = saved;
       return saved;
     });
@@ -154,6 +157,7 @@ export function createIosBridge(): AppBridge {
       segment: seg,
       enabled: s.translation.enabled,
       nativeLang: s.nativeLang,
+      targetLang: s.translation.targetLang ?? s.nativeLang,
       asrLanguage: s.asr.language,
       reverse: reverseCtx,
       translate: async (req) => {

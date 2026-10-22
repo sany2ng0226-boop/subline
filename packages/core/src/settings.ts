@@ -26,12 +26,13 @@ function defaultNativeLang(systemLangs: string[]): UiLang {
 
 /** 生成默认设置；母语按传入的系统语言推断 */
 export function makeDefaults(systemLangs: string[]): AppSettings {
+  const nativeLang = defaultNativeLang(systemLangs);
   return {
     settingsVersion: 2,
     uiScale: 1,
     contrast: 'standard',
     onboarded: false,
-    nativeLang: defaultNativeLang(systemLangs),
+    nativeLang,
     fontSize: 'small',
     theme: 'system',
     alwaysOnTop: false,
@@ -41,6 +42,7 @@ export function makeDefaults(systemLangs: string[]): AppSettings {
     announceCaptions: false,
     translation: {
       enabled: false,
+      targetLang: nativeLang,
       engine: DEFAULT_TRANSLATION_MODEL_ID,
       // 云端三项默认留空：主页设置里由预设选择或手动输入填入（占位符仅作示例提示）
       cloud: {
@@ -105,6 +107,9 @@ export function withDefaults(raw: unknown, defaults: AppSettings): AppSettings {
       s.audioSource === 'mic' || s.audioSource === 'system' ? s.audioSource : d.audioSource,
     announceCaptions: typeof s.announceCaptions === 'boolean' ? s.announceCaptions : d.announceCaptions,
     translation: {
+      // 旧设置的目标来自其原界面语言，不能被当前设备的默认语言覆盖。
+      targetLang: asUiLang(t.targetLang) ?? asUiLang(s.nativeLang)
+        ?? d.translation.targetLang ?? d.nativeLang,
       enabled: typeof t.enabled === 'boolean' ? t.enabled : d.translation.enabled,
       // 引擎：'cloud' 或注册表中的本地模型 id 原样保留，其余（未知/旧值）回落默认本地模型。
       engine:

@@ -220,3 +220,37 @@ it('normalizes partial translations and ignores late partial callbacks after com
   expect(events[events.length - 1]?.text).toBe('这是完整翻译');
   const count = events.length; publish?.('過期'); expect(events).toHaveLength(count);
 });
+
+describe('explicit translation target', () => {
+  it('translates English to Japanese while the interface language is Chinese', async () => {
+    const { requests } = await run({
+      segment: seg('en', 'Hello'), nativeLang: 'zh', targetLang: 'ja', asrLanguage: 'en',
+    });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ source: 'en', targetLang: 'ja', targetCode: 'ja' });
+  });
+
+  it('keeps the selected target in auto mode and skips speech already in that language', async () => {
+    const reverse = createReverseTranslationContext();
+    reverse.lastForeignLang = 'en';
+    const chinese = await run({
+      segment: seg('zh', '你好'), nativeLang: 'zh', targetLang: 'ja', asrLanguage: 'auto', reverse,
+    });
+    expect(chinese.requests[0]).toMatchObject({ source: 'zh', targetLang: 'ja' });
+    const japanese = await run({
+      segment: seg('ja', 'こんにちは'), nativeLang: 'zh', targetLang: 'ja', asrLanguage: 'auto', reverse,
+    });
+    expect(japanese.requests).toEqual([]);
+    expect(japanese.emitted).toEqual([]);
+    expect(reverse.lastForeignLang).toBe('en');
+  });
+
+  it('drops previous source context when the explicit target changes', async () => {
+    const context = new TranslationContext();
+    await run({ segment: seg('en', 'First sentence'), nativeLang: 'zh', targetLang: 'ja', context });
+    const next = await run({
+      segment: seg('en', 'Next sentence'), nativeLang: 'zh', targetLang: 'ko', context,
+    });
+    expect(next.requests[0]).toMatchObject({ targetLang: 'ko', context: [] });
+  });
+});

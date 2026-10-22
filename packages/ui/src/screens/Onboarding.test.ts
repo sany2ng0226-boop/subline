@@ -61,7 +61,7 @@ it.each(['zh', 'ja', 'en'] as const)('offers exactly two model choices with regi
   } finally { app.unmount(); }
 });
 
-it.each([false, true])('saves selected ASR and translation settings, preserving target derivation (translation %s)', async (enabled) => {
+it.each([false, true])('saves selected ASR and translation settings, initializing the translation target (translation %s)', async (enabled) => {
   const { app, setup } = await mount();
   try {
     const model = ASR_MODELS.find(m => m.platforms.includes('macos') && !m.languages.includes('auto'))!;
@@ -72,7 +72,7 @@ it.each([false, true])('saves selected ASR and translation settings, preserving 
     await vi.waitFor(() => expect(state.downloads).toHaveBeenCalledOnce());
     expect(state.save).toHaveBeenCalledWith(expect.objectContaining({
       onboarded: true, nativeLang: 'ja', asr: { model: model.id, language: model.languages[0] },
-      translation: { ...settings.value!.translation, enabled, engine: enabled ? 'hy-mt2-7b' : settings.value!.translation.engine },
+      translation: { ...settings.value!.translation, targetLang: 'ja', enabled, engine: enabled ? 'hy-mt2-7b' : settings.value!.translation.engine },
     }));
     expect(state.downloads).toHaveBeenCalledWith([expect.objectContaining({ kind: 'asr', modelId: model.id })]);
   } finally { app.unmount(); }

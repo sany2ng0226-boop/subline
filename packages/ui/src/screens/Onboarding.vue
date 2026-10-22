@@ -94,6 +94,7 @@ async function start(): Promise<void> {
   const translationSettings = {
     ...current.translation,
     enabled,
+    targetLang: form.nativeLang,
     engine: enabled ? translation.value as typeof current.translation.engine : current.translation.engine,
   };
   await saveSettings({

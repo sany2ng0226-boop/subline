@@ -42,14 +42,14 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 - `packages/ui/src/composables/useTranscription.ts` 将临时行保存在独立的 `draftLine` ref，定稿行保存在 `lines`；临时行不参与归档或翻译。首次部分识别创建带稳定 `displayId` 和本地接收时刻的行，后续部分识别修改它；定稿通过 `Object.assign` 更新同一对象后放入 `lines`，并以管线确认启动时的本地时刻加上 `SegmentPayload.start` 的会话相对秒数，写入该行的本地 `HH:MM:SS`。无部分识别的定稿也分配 `displayId`；译文仍按宿主段 ID 回填原行。停止录音等待宿主提交剩余文字后清除临时行，清屏同时清除临时行。
 - `stablePartial` 经 `MainScreen.vue` 传入 `components/TranscriptList.vue`。只有它与当前全文前缀匹配时，UI 才将前缀深色展示，其余尾部稍浅色；不匹配时全段浅色。缺少元数据时保留 `undefined`，让 iOS/Web 兼容原有的整段深色外观，不将其伪装为已确认前缀。
 - `TranscriptList.vue` 将已定稿行与临时行合成按时间正序的单一字幕流，并以 `displayId` 作为 Vue key；同一句从临时状态、定稿到翻译回填持续使用同一个 `article`，不再分设临时框、最新定稿框和历史区，也不使用文本框内部滚动。新行与译文的过渡只改 opacity。
-- `MainScreen.vue` 将识别语言与母语作为 `sourceLang` / `targetLang` 传入 `TranscriptList.vue`；定稿行在 `useTranscription.ts` 中保留段的 `lang`，显示时优先于识别语言设置。组件将 `zh` 标注为 `zh-Hans`，按 `:lang()` 为日语优先指定 Hiragino Sans、简体中文优先指定 PingFang SC；`auto` 不生成具体语言标注。译文标注当前仍使用母语设置，尚未逐行传入自动反向翻译的实际目标语种。
+- `MainScreen.vue` 将识别语言与独立翻译目标（`translation.targetLang`，旧值回退 `nativeLang`）作为 `sourceLang` / `targetLang` 传入 `TranscriptList.vue`；定稿行在 `useTranscription.ts` 中保留段的 `lang`，显示时优先于识别语言设置。组件将 `zh` 标注为 `zh-Hans`，按 `:lang()` 为日语优先指定 Hiragino Sans、简体中文优先指定 PingFang SC；`auto` 不生成具体语言标注。译文按固定目标标注语言，不随界面语言改变；当前宿主不启用会话反向翻译。
 - `TranscriptList.vue` 负责主页字幕的时间列、正文与带左侧强调线的译文排版；归档详情通过 `ConversationLine.vue` 复用同一全局 `.timeline-time` 规则。该规则使用 `--transcript-size` 缩放时钟字号，并从 `styles.css` 的 `--rt-ink-3` 取得浅色、深色主题均达到 WCAG AA 的弱化颜色；缺少时间的旧归档不渲染时间元素或占位列。其余字号、颜色层级、间距、草稿光标与淡入由 `TranscriptList.vue` 的 scoped CSS 管理；外部规则见[开始一次转写](product/experience.md#开始一次转写)。
 - 底部跟随也在 `TranscriptList.vue`：只有用户向上滚动才退出跟随，跟随中的高度变化由 `ResizeObserver` 贴底，数据变化后的 `watch` + `nextTick` 贴底作为后台窗口无渲染帧时的兜底。上述共享 UI 状态与排版不增加识别计时器、推理或切句步骤。
 
 ### 翻译
 
 1. 宿主在定稿段到达时调用 `packages/core/src/translation/segment-translation.ts` 的共享编排。
-2. 共享编排根据母语、识别语言和会话内最近外语决定跳过、字形归一化或发起翻译。
+2. macOS、Web 与 iOS 宿主显式传入 `translation.targetLang`（兼容回退 `nativeLang`），共享编排按固定目标决定跳过、字形归一化或发起翻译；同语言段不会反向翻译。只有未传 `targetLang` 的旧核心调用保留母语与会话最近外语的兼容规则。
 3. macOS 应用内 Hy-MT2 与 API 翻译通过 `packages/core/src/translation/context.ts` 管理同语言对的有限原文上下文；会话与配置变化由主进程重置。宿主执行具体引擎：macOS 将应用内 Hy-MT2 7B、M2M-100/API 请求放在纯 Node 子进程，Web 用 Transformers.js Worker 或直接调云端，iOS 调 Apple Translation 或直接调云端。
 4. macOS 主进程在发送翻译 IPC 前通过 `apps/macos/src/main/translation/request-queue.ts` 调度请求，负责并发、等待容量、排队过期及配置变更时的等待取消；具体限制与行级降级见[翻译规则](product/experience.md#翻译规则)。翻译子进程仍负责具体推理，ASR 定稿路径不等待翻译队列完成。
 5. pending、部分译文、成功或失败事件按段 ID 回到 UI 的原文行；共享编排负责部分译文的目标字形归一化，并忽略请求结束后的迟到更新。macOS 通过翻译子进程 IPC 回传应用内及本机 API Hy-MT2 7B 的流式结果；`packages/core/src/translation/translation-stream.ts` 负责读取 OpenAI 兼容 SSE，部分结果不结束队列请求。Web 与 iOS 未订阅部分回填，保持完整结果路径。流式显示与失败契约见[翻译规则](product/experience.md#翻译规则)。
@@ -59,6 +59,10 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 
 ### 设置、模型与归档
 
+- `packages/ui/src/screens/SettingsScreen.vue` 将识别语言与独立翻译目标放在单页顶部，随后展示识别模型与翻译模型；`GeneralSection.vue` 的界面语言、字号与主题位于折叠的“外观与辅助”区，目标不随界面语言改变。本轮设置改动先落 Dev 分支，尚未发布。
+- `components/settings/ModelPicker.vue` 统一两类模型的选择、状态、下载确认、进度、取消、重试和确认删除；`model-picker.ts` 将注册表选项与宿主模型快照合成行，仅已下载的本地模型可选，没有 `modelId` 的“不翻译”／API／系统翻译选项不受下载门槛限制。下载只启动后台任务，不发选择变更，完成后需用户再选；取消不改变当前模型。录音、启停或装载模型时禁止切换与删除；状态查询或操作失败就地显示错误与重试。旧 `ModelsSection.vue` 和独立模型管理入口已移除。
+- `TranslationSection.vue` 将关闭、具体本地模型／系统翻译、API 服务映射到统一 `ModelPicker`，仅选择 API 时展开连接字段。`composables/useModels.ts` 共享模型状态快照、合并并发探测，并在下载完成／失败／取消后刷新；删除或取消由调用处补充刷新。
+- `packages/core/src/settings.ts` 校验并持久化 `translation.targetLang`，旧设置没有有效目标时继承原 `nativeLang`。`Onboarding.vue` 保留两步引导与现有下载流程，只在首次完成时将目标初始化为界面语言；设置选择器的下载门槛不改写引导的模型选择行为。
 - `@rt/ui` 只持有表单和当前会话状态；设置、模型和归档持久化经 `AppBridge`。设置保存契约是 `SettingsPatch`：UI 只提交发生变化的字段，`@rt/core` 的 `mergeSettings` 将补丁合并到最新完整设置并统一校验；macOS 同步合并后写文件，Web 与 iOS 将异步写入串行化，并在每次实际执行时读取最新状态再合并。默认值、其它字段校验、归档摘要和排序也在 `@rt/core` 复用，各宿主只选择文件、Preferences 或 IndexedDB 作为存储后端。
 - Internal 归档入口由 `packages/ui/src/screens/ArchiveLibrary.vue` 管理文件夹、筛选、改名与移动，`MainScreen.vue` 负责手动保存弹窗；内容标题提取属于 `packages/core/src/archive.ts` 的 `suggestArchiveTitle`。产品规则见[清屏与归档](product/experience.md#清屏与归档)。
 - Dev 归档退出通过 `packages/core/src/bridge.ts` 的两个可选契约，经 preload 与 `mac-bridge.ts` 连接主进程：`chooseArchiveSavePath(name)` 打开原生保存窗口，返回 `selected` 与主进程持有的路径 token，或 `cancelled` / `unsupported`；`useSessionArchive.ts` 在选完路径后取得最新 `archiveSnapshot()`，再调用 `saveArchiveBeforeClose(token, lines, audioIds)`。`index.ts` 仅接受已确认路径的 token，先原子写入文本，再调用 `saveArchive` 保存 Dev 内记录，两者完成才让 Promise 成功；UI 此后清空字幕并回执退出。取消或写入异常保持窗口，`unsupported` 或宿主未实现时走原归档路径。Dev 的关闭前归档回执不设人工选择超时，其他渠道保留原有 30 秒超时；请求同时核对窗口发送者与 ID，窗口销毁或渲染进程退出按失败结束。此项为 Dev 分支改动，未发布、未安装，原生保存窗口尚未实机验收；产品边界见[Dev 归档并退出](product/experience.md#dev-归档并退出)。

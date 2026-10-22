@@ -27,7 +27,7 @@ const themeOptions = computed(() => [
 
 <template>
   <div>
-    <n-form-item :label="t('settings.nativeLang')">
+    <n-form-item :label="t('settings.interfaceLang')">
       <n-select v-model:value="form.nativeLang" :options="langOptions" />
     </n-form-item>
 
