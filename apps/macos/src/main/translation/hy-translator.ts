@@ -33,11 +33,11 @@ export class HyTranslator implements Translator {
   async translate(text: string, opts: { source?: string; target: string; context?: string[]; onPartial?: (text: string) => void }): Promise<string> {
     if (!text.trim() || opts.source === opts.target) return text;
     await this.init();
-    // Context is supplied explicitly as source text; generated history never leaks into the next sentence.
+    // HY-MT2 can translate reference context instead of the current sentence; keep each request source-only.
     const session = new this.Session!({ contextSequence: this.context!.getSequence(), autoDisposeSequence: true, systemPrompt: '' });
     let partial = '';
     try {
-      const result = await session.promptWithMeta(translationPrompt(text, LANG_NAMES[opts.target] ?? opts.target, opts.context), {
+      const result = await session.promptWithMeta(translationPrompt(text, LANG_NAMES[opts.target] ?? opts.target), {
         temperature: 0, maxTokens: 1024, signal: AbortSignal.timeout(30_000),
         onTextChunk: (chunk: string) => {
           partial += chunk;
