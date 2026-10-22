@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { readFileSync, writeFileSync, renameSync } = vi.hoisted(() => ({ readFileSync: vi.fn(), writeFileSync: vi.fn(), renameSync: vi.fn() }));
+const { readFileSync, writeFileSync, renameSync, profile } = vi.hoisted(() => ({ readFileSync: vi.fn(), writeFileSync: vi.fn(), renameSync: vi.fn(), profile: { path: '/mock-user-data' } }));
 
 vi.mock('node:fs', () => ({ default: { readFileSync, writeFileSync, renameSync } }));
 vi.mock('electron', () => ({
@@ -8,7 +8,7 @@ vi.mock('electron', () => ({
     getPreferredSystemLanguages: () => ['ja-JP'],
     getSystemLocale: () => 'ja-JP',
     getLocale: () => 'en-US',
-    getPath: () => '/mock-user-data',
+    getPath: () => profile.path,
   },
   safeStorage: {},
 }));
@@ -16,6 +16,9 @@ vi.mock('electron', () => ({
 beforeEach(() => {
   vi.resetModules();
   readFileSync.mockReset();
+  writeFileSync.mockReset();
+  renameSync.mockReset();
+  profile.path = '/mock-user-data';
 });
 
 describe('macOS settings defaults', () => {
@@ -52,3 +55,27 @@ describe('macOS settings defaults', () => {
   expect(JSON.parse(writeFileSync.mock.calls.at(-1)![1])).toEqual(saved);
   expect(renameSync).toHaveBeenCalled();
  });
+
+it.each(['dark', 'light'] as const)('persists follow-system after %s and reloads it on restart', async (theme) => {
+  const fs = await vi.importActual<typeof import('node:fs')>('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  profile.path = fs.mkdtempSync(join(tmpdir(), 'subline-theme-'));
+  const file = join(profile.path, 'settings.json');
+  try {
+    fs.writeFileSync(file, JSON.stringify({ settingsVersion: 2, theme }));
+    readFileSync.mockImplementation(fs.readFileSync);
+    writeFileSync.mockImplementation(fs.writeFileSync);
+    renameSync.mockImplementation(fs.renameSync);
+    const { loadSettings, saveSettings } = await import('./settings');
+    expect(loadSettings().theme).toBe(theme);
+    expect(saveSettings({ theme: 'system' }).theme).toBe('system');
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).theme).toBe('system');
+
+    vi.resetModules();
+    const restarted = await import('./settings');
+    expect(restarted.loadSettings().theme).toBe('system');
+  } finally {
+    fs.rmSync(profile.path, { recursive: true, force: true });
+  }
+});

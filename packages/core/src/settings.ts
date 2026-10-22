@@ -99,7 +99,7 @@ export function withDefaults(raw: unknown, defaults: AppSettings): AppSettings {
     nativeLang: asUiLang(s.nativeLang) ?? d.nativeLang,
     fontSize: typeof fontSize === 'string' && ['xs', 'small', 'medium', 'large', 'xl'].includes(fontSize)
       ? fontSize as SettingsFontSize : d.fontSize,
-    theme: s.theme === 'light' || s.theme === 'dark' ? s.theme : d.theme,
+    theme: s.theme === 'light' || s.theme === 'dark' || s.theme === 'system' ? s.theme : d.theme,
     asr: { language: asrLang, model },
     audioSource:
       s.audioSource === 'mic' || s.audioSource === 'system' ? s.audioSource : d.audioSource,
