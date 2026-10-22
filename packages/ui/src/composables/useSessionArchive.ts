@@ -17,7 +17,7 @@ import {
   canUndoDelete,
   undoDelete,
 } from './useTranscription';
-import { persistRecoveryNow } from './useRecovery';
+import { persistRecoveryNow, recoveryOffer, restoreRecovery } from './useRecovery';
 
 declare const __INTERNAL_BUILD__: boolean;
 const internalBuild = typeof __INTERNAL_BUILD__ !== 'undefined' && __INTERNAL_BUILD__;
@@ -56,15 +56,27 @@ export async function archiveSession(name: string, folderId?: string | null): Pr
   persistRecoveryNow();
 }
 
-// 关闭确认框里选「归档并退出」：先停录（等最后一句定稿），再按默认名归档到上次使用的文件夹。
+// The host may require a save dialog; cancellation must leave the transcript intact.
 async function archiveBeforeClose(): Promise<boolean> {
   try {
     await ensureStopped();
     // 撤销期内选「归档并退出」：把刚清空的内容找回来再归档，而不是让它随退出消失
     if (!lines.length && canUndoDelete.value) undoDelete();
+    restoreRecovery();
     if (!lines.length) return true;
+    const name = await suggestArchiveName();
+    const destination = await bridge().chooseArchiveSavePath?.(name);
+    if (destination?.status === 'cancelled') return false;
+    if (destination?.status === 'selected') {
+      // Include final captions and translations that arrived while the save dialog was open.
+      await bridge().saveArchiveBeforeClose!(destination.token, archiveSnapshot());
+      clearTranscript();
+      lastArchivedAt.value = Date.now();
+      persistRecoveryNow();
+      return true;
+    }
     const folderId = foldersEnabled() ? (await bridge().getArchiveLibrary!()).lastFolderId : undefined;
-    await archiveSession(await suggestArchiveName(), folderId);
+    await archiveSession(name, folderId);
     return true;
   } catch (error) {
     errorText.value = i18n.global.t(archiveErrorKey(error, 'archive.operationFailed'));
@@ -80,7 +92,7 @@ async function archiveBeforeClose(): Promise<boolean> {
 export function registerCloseGuard(): void {
   const { t, locale } = i18n.global;
   watch(
-    () => [hasUnsavedContent.value, recording.value || recordBusy.value, canUndoDelete.value, locale.value] as const,
+    () => [hasUnsavedContent.value || !!recoveryOffer.value, recording.value || recordBusy.value, canUndoDelete.value, locale.value] as const,
     ([unsaved, live, undoable]) => {
       const detail = live ? 'main.closeDetailRecording' : unsaved ? 'main.closeDetail' : 'main.closeUndoable';
       bridge().setCloseGuard?.(unsaved || undoable ? {

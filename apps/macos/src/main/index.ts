@@ -144,15 +144,21 @@ function archiveBeforeClose(target: BrowserWindow): Promise<boolean> {
   const id = ++archiveRequestId;
   return new Promise((resolve) => {
     const finish = (ok: boolean): void => {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       ipcMain.removeListener('window:archive-before-close:done', onDone);
+      target.webContents.removeListener('destroyed', onDestroyed);
+      target.webContents.removeListener('render-process-gone', onDestroyed);
       resolve(ok);
     };
+    const onDestroyed = (): void => finish(false);
     const onDone = (_event: IpcMainEvent, replyId: number, ok: boolean): void => {
-      if (replyId === id) finish(ok);
+      if (_event.sender === target.webContents && replyId === id) finish(ok);
     };
-    const timer = setTimeout(() => finish(false), ARCHIVE_BEFORE_CLOSE_TIMEOUT_MS);
+    // Dev waits for a person to choose a destination, which may take more than 30 seconds.
+    const timer = buildVariant === 'dev' ? undefined : setTimeout(() => finish(false), ARCHIVE_BEFORE_CLOSE_TIMEOUT_MS);
     ipcMain.on('window:archive-before-close:done', onDone);
+    target.webContents.once('destroyed', onDestroyed);
+    target.webContents.once('render-process-gone', onDestroyed);
     target.webContents.send('window:archive-before-close', id);
   });
 }
@@ -833,6 +839,43 @@ ipcMain.handle('archive:save', async (_event, name: string, lines: ArchiveLine[]
     return archiveSummaries();
   }
   return saveArchive(name, lines, Date.now());
+});
+let selectedArchiveFile: { token: string; filePath: string } | undefined;
+let archiveFileRequestId = 0;
+ipcMain.handle('archive:choose-save-path', async (event, name: string) => {
+  if (buildVariant !== 'dev') return { status: 'unsupported' };
+  const target = win;
+  if (!target || target.isDestroyed() || event.sender !== target.webContents) return { status: 'cancelled' };
+  selectedArchiveFile = undefined;
+  const filename = name.replace(/[\\/:*?"<>|\x00-\x1f]/g, '-').trim() || 'Subline';
+  const { canceled, filePath } = await dialog.showSaveDialog(target, {
+    defaultPath: path.join(app.getPath('documents'), `${filename}.txt`),
+    filters: [{ name: 'Text', extensions: ['txt'] }],
+    properties: ['createDirectory', 'showOverwriteConfirmation'],
+  });
+  if (canceled || !filePath) return { status: 'cancelled' };
+  const token = String(++archiveFileRequestId);
+  selectedArchiveFile = { token, filePath };
+  return { status: 'selected', token };
+});
+ipcMain.handle('archive:save-before-close', async (event, token: string, lines: ArchiveLine[]) => {
+  if (buildVariant !== 'dev' || !win || event.sender !== win.webContents || !selectedArchiveFile || selectedArchiveFile.token !== token) {
+    throw new Error('No confirmed archive destination');
+  }
+  const { filePath } = selectedArchiveFile;
+  selectedArchiveFile = undefined;
+  const text = lines.map((line) => [
+    line.time ? `[${line.time}] ${line.text}` : line.text,
+    line.translation,
+  ].filter(Boolean).join('\n')).join('\n\n') + '\n';
+  const temporary = `${filePath}.subline-${process.pid}-${Date.now()}.tmp`;
+  try {
+    await fs.promises.writeFile(temporary, text, { encoding: 'utf8', flag: 'wx', flush: true });
+    await fs.promises.rename(temporary, filePath);
+  } finally {
+    await fs.promises.rm(temporary, { force: true }).catch(() => {});
+  }
+  await saveArchive(path.basename(filePath, path.extname(filePath)), lines, Date.now());
 });
 ipcMain.handle('archive:delete', async (_event, id: string) => {
   await deleteArchive(id);

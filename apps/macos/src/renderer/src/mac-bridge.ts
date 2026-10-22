@@ -151,6 +151,12 @@ export function createMacBridge(api: ElectronApi): AppBridge {
     getTranslationSetupStatus: (modelId) => api.getTranslationSetupStatus(modelId),
     downloadTranslationModel: (modelId) => api.downloadTranslationModel(modelId),
     saveArchive: (name, lines, folderId) => api.saveArchive(name, lines, folderId),
+    chooseArchiveSavePath: api.chooseArchiveSavePath && api.saveArchiveBeforeClose
+      ? (name) => api.chooseArchiveSavePath!(name)
+      : undefined,
+    saveArchiveBeforeClose: api.saveArchiveBeforeClose
+      ? (token, lines) => api.saveArchiveBeforeClose!(token, lines)
+      : undefined,
     getArchiveLibrary: () => api.getArchiveLibrary!(),
     createArchiveFolder: (name) => api.createArchiveFolder!(name),
     renameArchiveFolder: (id, name) => api.renameArchiveFolder!(id, name),
