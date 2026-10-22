@@ -8,9 +8,9 @@
 
 基于 [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator)，由 [Jack](https://github.com/sany2ng0226-boop) 维护，保留上游作者署名、元数据及 Git 历史。当前定制集中在日中双语阅读、本地翻译与记录整理。
 
-![Subline Internal 日中双语测试记录](docs/assets/subline-demo.png)
+![Subline macOS 归档界面与示例文字](docs/assets/subline-demo.png)
 
-*真实应用的归档界面，内容来自合成测试语音；配图是已保存记录，不是实时性能测量。*
+*基于公开 main 源码的干净预览，展示 Subline macOS 的真实归档界面；日中双语内容为手写示例，用于说明界面，不是模型输出或性能证据。*
 
 ## 当前源码节点
 
