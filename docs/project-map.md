@@ -53,11 +53,11 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 
 1. 宿主在定稿段到达时调用 `packages/core/src/translation/segment-translation.ts` 的共享编排。
 2. macOS、Web 与 iOS 宿主显式传入 `translation.targetLang`（兼容回退 `nativeLang`），共享编排按该目标决定跳过、字形归一化或发起翻译；源语言等于目标时不会反向翻译。只有未传 `targetLang` 的旧核心调用仍按母语、识别语言和会话内最近外语执行兼容规则。
-3. macOS 应用内 Hy-MT2 与 API 翻译通过 `packages/core/src/translation/context.ts` 管理同语言对的有限原文上下文；会话与配置变化由主进程重置。宿主执行具体引擎：macOS 将应用内 Hy-MT2 7B、M2M-100/API 请求放在纯 Node 子进程，Web 用 Transformers.js Worker 或直接调云端，iOS 调 Apple Translation 或直接调云端。
+3. macOS 仅在 `cloud` API 引擎下将 `packages/core/src/translation/context.ts` 的有限原文上下文传入共享编排：同语言对最近两段、每段最多 400 字符，会话与配置变化由主进程重置。应用内 Hy-MT2 只接收当前段，不附带此前原文。宿主执行具体引擎：macOS 将应用内 Hy-MT2 7B、M2M-100/API 请求放在纯 Node 子进程，Web 用 Transformers.js Worker 或直接调云端，iOS 调 Apple Translation 或直接调云端。
 4. macOS 主进程在发送翻译 IPC 前通过 `apps/macos/src/main/translation/request-queue.ts` 调度请求，负责并发、等待容量、排队过期及配置变更时的等待取消；具体限制与行级降级见[翻译规则](product/experience.md#翻译规则)。翻译子进程仍负责具体推理，ASR 定稿路径不等待翻译队列完成。
 5. pending、部分译文、成功或失败事件按段 ID 回到 UI 的原文行；共享编排负责部分译文的目标字形归一化，并忽略请求结束后的迟到更新。macOS 通过翻译子进程 IPC 回传应用内及本机 API Hy-MT2 7B 的流式结果；`packages/core/src/translation/translation-stream.ts` 负责读取 OpenAI 兼容 SSE，部分结果不结束队列请求。Web 与 iOS 未订阅部分回填，保持完整结果路径。流式显示与失败契约见[翻译规则](product/experience.md#翻译规则)。
 
-- `apps/macos/src/main/translation/hy-translator.ts` 通过 node-llama-cpp 装载 GGUF；`hy-runtime.ts` 负责 macOS Metal 及 Windows CUDA/CPU 选择和资源检查；每句创建独立 session，仅使用显式原文上下文。`getLlama` 禁止运行时构建和下载原生组件。`translator.ts` 工厂路由 Hy-MT2 与 `local-translator.ts` 的 M2M-100 实现，上层 IPC 将上下文和部分结果回调传入本地实现。
+- `apps/macos/src/main/translation/hy-translator.ts` 通过 node-llama-cpp 装载 GGUF；`hy-runtime.ts` 负责 macOS Metal 及 Windows CUDA/CPU 选择和资源检查；每句创建独立 session，并以当前段原文调用 `translationPrompt`，即使调用者提供 `opts.context` 也不将其加入提示词，不继承此前原文或生成历史。`getLlama` 禁止运行时构建和下载原生组件。`translator.ts` 工厂路由 Hy-MT2 与 `local-translator.ts` 的 M2M-100 实现，上层 IPC 保留上下文与部分结果回调的传输契约，应用内 Hy-MT2 明确忽略上下文；API 路径继续使用有限原文上下文。
 - `apps/macos/electron-builder.yml` 将 Node 翻译子进程入口及依赖解包到 `app.asar.unpacked`，包含 arm64 Metal 原生运行时而不打包权重；纯 Node 子进程不能依赖 Electron 的 asar 读取补丁。
 
 ### 设置、模型与归档
