@@ -1,20 +1,19 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
-import { NButton, NFormItem, NSelect } from 'naive-ui';
+import { computed, h, reactive, ref, watch } from 'vue';
+import { NButton, NFormItem, NSelect, type SelectOption } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import {
-  UI_LANGS,
-  asrModelsFor,
+  ASR_MODELS,
   getAsrModel,
+  getTranslationModel,
   translationModelsFor,
   DEFAULT_ASR_MODEL_ID,
   DEFAULT_TRANSLATION_MODEL_ID,
-  type AsrLang,
 } from '@rt/core';
 import { settings, saveSettings, previewLocale, previewTheme, applyFontSize } from '../composables/useSettings';
 import { type DownloadTask, startDownloads } from '../composables/useModelDownloads';
 import GeneralSection from '../components/settings/GeneralSection.vue';
-import { LANG_LABELS, type GeneralFormData } from '../components/settings/form';
+import type { GeneralFormData } from '../components/settings/form';
 import { humanBytes } from '../utils/bytes';
 import { bridge } from '../bridge';
 
@@ -29,7 +28,6 @@ const form = reactive<GeneralFormData>({
   theme: current.theme,
 });
 
-// 两步：① 母语 / 字号 / 主题；② 上课用什么语言、翻译成母语用哪个本机模型。
 const step = ref<1 | 2>(1);
 
 // 引导页在「开始」前不落盘，仅即时预览界面语言/主题/字体（自动保存通道只在设置页）。
@@ -37,23 +35,17 @@ watch(() => form.nativeLang, (v) => previewLocale(v));
 watch(() => form.theme, (v) => previewTheme(v));
 watch(() => form.fontSize, (v) => applyFontSize(v));
 
-// —— 授课语言：选定语言后用该语言的专用模型（如日语 ReazonSpeech），没有专用模型时用默认多语种模型 ——
-const asrLanguage = ref<AsrLang>(current.asr.language);
-const asrLangOptions = computed(() => [
-  { label: t('settings.asrLanguageAuto'), value: 'auto' },
-  ...UI_LANGS.map((l) => ({ label: LANG_LABELS[l], value: l })),
-]);
-function recommendedAsrModel(language: AsrLang): string {
-  const models = asrModelsFor(language, platform);
-  if (language === current.asr.language && models.some((m) => m.id === current.asr.model)) return current.asr.model;
-  return models.find((m) => m.languages.length === 1)?.id ?? DEFAULT_ASR_MODEL_ID;
-}
-const asrModel = computed(() => getAsrModel(recommendedAsrModel(asrLanguage.value)));
+const availableAsrModels = ASR_MODELS.filter((m) => m.platforms.includes(platform));
+const asrModel = ref(availableAsrModels.some((m) => m.id === current.asr.model)
+  ? current.asr.model : DEFAULT_ASR_MODEL_ID);
+const asrOptions = computed(() => availableAsrModels.map((m) => ({
+  label: `${t(m.nameKey)}（${humanBytes(m.approxBytes)}）`, value: m.id,
+})));
 
 // —— 翻译成母语：不翻译 / 本机模型（标明体积）。云端需要填密钥，留到设置页 ——
 const localAvailable = bridge().localTranslationAvailable !== false;
 const translationOptions = computed(() => {
-  if (!localAvailable) return [];
+  if (!localAvailable) return [{ label: t('onboarding.noTranslation'), value: 'none' }];
   const models = translationModelsFor(platform);
   const local = models.length
     ? models.map((m) => ({ label: `${t(m.nameKey)}（${humanBytes(m.approxDownloadBytes)}）`, value: m.id as string }))
@@ -61,6 +53,20 @@ const translationOptions = computed(() => {
     : [{ label: t('settings.engineLocal'), value: DEFAULT_TRANSLATION_MODEL_ID as string }];
   return [{ label: t('onboarding.noTranslation'), value: 'none' }, ...local];
 });
+function renderTranslationLabel(option: SelectOption) {
+  return h('span', { class: 'flex items-center gap-2' }, [
+    String(option.label),
+    ...(getTranslationModel(String(option.value))?.tier === 'ultra'
+      ? [h('span', {
+          class: 'quality-badge',
+          style: {
+            color: 'var(--rt-accent-ink)', background: 'var(--rt-surface)',
+            border: '1px solid currentColor', borderRadius: '4px',
+            padding: '1px 6px', fontSize: '12px', fontWeight: '600',
+          },
+        }, t('modelsScreen.ultra'))] : []),
+  ]);
+}
 const translation = ref<string>('none');
 
 // 引导只自动下载识别模型；翻译模型留到用户确认后下载。
@@ -78,8 +84,13 @@ async function queueDownloads(asrId: string): Promise<void> {
 }
 
 async function start(): Promise<void> {
-  const asrId = recommendedAsrModel(asrLanguage.value);
+  const asrId = asrModel.value;
+  const spec = getAsrModel(asrId)!;
+  // 保留兼容的识别语言；专用模型改用其注册表声明的语言。
+  const language = spec.languages.includes(current.asr.language)
+    ? current.asr.language : spec.languages[0];
   const enabled = translation.value !== 'none';
+  // 翻译目标继续由 nativeLang 推导；保留既有翻译配置，不另设引导目标语种。
   const translationSettings = {
     ...current.translation,
     enabled,
@@ -90,7 +101,7 @@ async function start(): Promise<void> {
     nativeLang: form.nativeLang,
     fontSize: form.fontSize,
     theme: form.theme,
-    asr: { language: asrLanguage.value, model: asrId },
+    asr: { language, model: asrId },
     translation: translationSettings,
   });
   void queueDownloads(asrId);
@@ -104,25 +115,18 @@ async function start(): Promise<void> {
       <div class="w-full max-w-[460px]">
         <div class="mb-6 text-center">
           <h1 class="mb-2 text-[22px] font-semibold">{{ t('onboarding.title') }}</h1>
-          <p class="text-[var(--rt-ink-2)]">{{ step === 1 ? t('onboarding.configure') : t('onboarding.languageHint') }}</p>
+          <p class="text-[var(--rt-ink-2)]">{{ step === 1 ? t('onboarding.configure') : t('onboarding.modelHint') }}</p>
         </div>
 
         <general-section v-if="step === 1" :form="form" />
 
         <template v-else>
-          <n-form-item :label="t('onboarding.classLanguage')">
-            <n-select v-model:value="asrLanguage" :options="asrLangOptions" />
+          <n-form-item :label="t('settings.asrModel')">
+            <n-select v-model:value="asrModel" :options="asrOptions" />
           </n-form-item>
-          <p v-if="asrModel" class="-mt-3 mb-6 text-xs text-[var(--rt-ink-3)]">
-            {{ t('onboarding.asrModelNote', { model: t(asrModel.nameKey), size: humanBytes(asrModel.approxBytes) }) }}
-          </p>
-
-          <template v-if="translationOptions.length">
-            <n-form-item :label="t('onboarding.translateTo', { lang: LANG_LABELS[form.nativeLang] })">
-              <n-select v-model:value="translation" :options="translationOptions" />
-            </n-form-item>
-            <p class="-mt-3 text-xs text-[var(--rt-ink-3)]">{{ t('onboarding.onDevice') }}</p>
-          </template>
+          <n-form-item :label="t('settings.translationModel')">
+            <n-select v-model:value="translation" :options="translationOptions" :render-label="renderTranslationLabel" />
+          </n-form-item>
         </template>
 
         <!-- 间距放外层 div：Naive 注入的样式会盖过直接写在 n-button 上的工具类（同 MainScreen 的 sm:hidden 教训） -->
