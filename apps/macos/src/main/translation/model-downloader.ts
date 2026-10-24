@@ -3,24 +3,19 @@
 // Transformers.js 缓存布局 `<cacheDir>/<modelId>/<dir>/<filename>`，之后翻译子进程以
 // allowRemoteModels=false 离线加载。
 import fs from 'node:fs';
-import crypto from 'node:crypto';
 import path from 'node:path';
 import { getTranslationModel, type LocalModelFile } from '@rt/core';
-import { downloadFile } from '../model-downloader';
+import { downloadFile, verifyDownloadedFile } from '../model-downloader';
 import { localModelCached } from './model-cache';
 import type { SetupProgress } from '../../shared/types';
 
+/** 核对已落地的模型文件；不符即删除，避免被误判为就绪。 */
 export async function verifyModelFile(file: string, spec: LocalModelFile, signal?: AbortSignal): Promise<void> {
-  if (spec.expectedBytes !== undefined && fs.statSync(file).size !== spec.expectedBytes) {
+  try {
+    await verifyDownloadedFile(file, spec, signal);
+  } catch (error) {
     fs.rmSync(file, { force: true });
-    throw new Error('模型文件大小不符，请重试下载');
-  }
-  if (!spec.sha256) return;
-  const hash = crypto.createHash('sha256');
-  for await (const chunk of fs.createReadStream(file, { signal })) hash.update(chunk);
-  if (hash.digest('hex') !== spec.sha256) {
-    fs.rmSync(file, { force: true });
-    throw new Error('模型文件校验失败，请重试下载');
+    throw error;
   }
 }
 
@@ -40,8 +35,12 @@ export async function downloadTranslationModel(
 
   const localPath = (f: LocalModelFile): string => path.join(cacheDir, spec.modelId, f.dir, f.filename);
   const toDownload = spec.files.filter((f) => {
-    try { const stat = fs.statSync(localPath(f)); return !stat.isFile() || stat.size === 0 || (f.expectedBytes !== undefined && stat.size !== f.expectedBytes); }
-    catch { return true; }
+    try {
+      const stat = fs.statSync(localPath(f));
+      return !stat.isFile() || stat.size === 0 || (f.expectedBytes !== undefined && stat.size !== f.expectedBytes);
+    } catch {
+      return true;
+    }
   });
   const total = spec.approxDownloadBytes;
   for (const f of toDownload) {
@@ -71,9 +70,9 @@ export async function downloadTranslationModel(
         // 实收字节可能略超近似分母（q8 实际略大于估值）：封顶到 total，避免进度条越界。
         onProgress({ loaded: Math.min(base + loaded, total), total });
       },
-      signal
+      signal,
+      f // 每个下载源下完都先校验字节数与 SHA-256，不符换下一个源
     );
-    await verifyModelFile(localPath(f), f, signal);
     base += last;
   }
   // 末尾对齐 100%：各文件实收合计与近似分母有出入，收尾时把进度贴到满格。

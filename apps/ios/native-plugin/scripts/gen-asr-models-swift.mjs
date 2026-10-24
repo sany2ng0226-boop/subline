@@ -67,7 +67,9 @@ function fileLiteral(f, role) {
     `filename: ${swiftString(f.filename)}, ` +
     `dir: ${swiftString(f.dir)}, ` +
     `role: ${swiftString(role ?? f.role ?? '')}, ` +
-    `approxBytes: ${f.approxBytes})`
+    `approxBytes: ${f.approxBytes}, ` +
+    `expectedBytes: ${f.expectedBytes ?? 'nil'}, ` +
+    `sha256: ${f.sha256 ? swiftString(f.sha256) : 'nil'})`
   );
 }
 
@@ -99,7 +101,7 @@ import Foundation
 
 /// 单个需下载的 ASR 模型文件（对应 @rt/core 的 AsrModelFile）。
 struct AsrModelFile {
-  /// 下载源有序列表（native：自托管 GitHub Release 优先 + HF 上游兜底）。下载器按序尝试、每个只试一次，
+  /// 注册表提供的下载源有序列表（默认上游；自托管须显式启用）。下载器按序尝试、每个只试一次，
   /// 全部失败才判失败；URLSession 自动跟随重定向。
   let urls: [String]
   /// 落地文件名。
@@ -110,6 +112,9 @@ struct AsrModelFile {
   let role: String
   /// 近似大小（字节），用于下载进度估算，非精确值。
   let approxBytes: Int
+  /// 精确大小与 SHA-256 可选；没有 pin 的新模型仍可下载。
+  let expectedBytes: Int?
+  let sha256: String?
 }
 
 /// 一个可选用的 ASR 模型规格（对应 @rt/core 的 AsrModelSpec，已按平台过滤为仅含 iOS 支持者）。

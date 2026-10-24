@@ -5,7 +5,7 @@
 // 红线：本模块**不得含任何函数值/运行时行为**（如简繁转换 normalizeZh）。翻译母语字形后处理降为
 // 字符串标签（LangEntrySpec.script），由 ./translation/local-spec 在派生视图时挂回具体函数——否则
 // 会把 chinese-conv 拖进以 ./models 为入口的 iOS esbuild 子图（见 apps/ios .../gen-asr-models-swift.mjs）。
-import { hfResolveUrls, selfHostedAsset } from './model-sources';
+import { HF_REVISIONS, SELF_HOSTED_PINS, UPSTREAM_MODEL_RELEASE, nativeModelUrls, hfResolveUrls } from './model-sources';
 import type { AsrCommitStrategy, AsrLang, LocalEngine, Platform } from './types';
 
 /**
@@ -22,7 +22,7 @@ export interface ModelFileSpec {
    * ASR：相对 models 目录；翻译：Transformers.js 缓存布局内相对 `<cacheDir>/<modelId>/` 的子目录。
    */
   dir: string;
-  /** native 端（macOS/iOS）下载源，有序：自托管 GitHub Release 优先，可含 HF 上游做兜底。 */
+  /** native 端（macOS/iOS）下载源，有序：默认上游；未来镜像需显式启用。 */
   nativeUrls: string[];
   /**
    * web 端下载源，有序：HF 主源 + 镜像（见 model-sources 的 HF_MIRRORS）。浏览器 fetch 受 CORS
@@ -110,6 +110,16 @@ export interface TranslationModelEntry extends CommonModelFields {
 
 export type ModelEntry = AsrModelEntry | TranslationModelEntry;
 
+// HY-MT2 7B and future files absent from SELF_HOSTED_PINS remain unpinned and downloadable.
+function pinned(asset: string): Pick<ModelFileSpec, 'expectedBytes' | 'sha256'> {
+  const pin = SELF_HOSTED_PINS[asset];
+  return pin ? { expectedBytes: pin.bytes, sha256: pin.sha256 } : {};
+}
+
+function pinnedHfUrls(repo: string, rel: string): string[] {
+  return hfResolveUrls(repo, rel, HF_REVISIONS[repo] ?? 'main');
+}
+
 // —— ASR 模型文件子目录常量 ——
 const SENSE_VOICE_DIR = 'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17';
 const PARAFORMER_ZH_DIR = 'sherpa-onnx-paraformer-zh-2024-03-09';
@@ -117,19 +127,20 @@ const REAZONSPEECH_JA_DIR = 'sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01';
 const PARAKEET_EN_DIR = 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8';
 
 /**
- * Silero VAD：所有 ASR 模型共用的语音端点检测依赖。native 走自托管 GitHub Release（无前缀）；
+ * Silero VAD：所有 ASR 模型共用的语音端点检测依赖。native 默认走 sherpa-onnx 官方 release；
  * web 由同源静态资源覆盖（见 web asr model-store），故 webUrls 为空。不进模型选择列表，随任一模型一并下载。
  */
 export const SILERO_VAD_FILE: AsrFileSpec = {
   filename: 'silero_vad.onnx',
   dir: '',
-  nativeUrls: [selfHostedAsset('silero_vad.onnx')],
+  nativeUrls: nativeModelUrls('silero_vad.onnx', ['https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx']),
+  ...pinned('silero_vad.onnx'),
   webUrls: [],
   approxBytes: 643_854,
 };
 
 /**
- * 构造一份 ASR 模型文件描述：native = [自托管资产（扁平命名 `<modelId>-<原文件名>`）, ...HF 上游兜底]；
+ * 构造一份 ASR 模型文件描述：native 默认为固定提交的 HF 上游，未来镜像需显式启用；
  * web = [HF 上游(+镜像)]。多数模型的 HF 源仓名与本地子目录同名（dir 默认取 hfRepoDir）；个别模型的
  * 权重个体文件来自另一命名的源仓（如 reazonspeech），此时显式传 dir。
  */
@@ -141,11 +152,12 @@ function asrFile(
   role: NonNullable<AsrFileSpec['role']>,
   dir: string = hfRepoDir,
 ): AsrFileSpec {
-  const upstream = hfResolveUrls(`csukuangfj/${hfRepoDir}`, filename);
+  const upstream = pinnedHfUrls(`csukuangfj/${hfRepoDir}`, filename);
   return {
     filename,
     dir,
-    nativeUrls: [selfHostedAsset(`${modelId}-${filename}`), ...upstream],
+    nativeUrls: nativeModelUrls(`${modelId}-${filename}`, upstream),
+    ...pinned(`${modelId}-${filename}`),
     webUrls: upstream,
     approxBytes,
     role,
@@ -163,7 +175,7 @@ const M2M100_LANGS: Record<string, LangEntrySpec> = {
 };
 
 /**
- * 构造 M2M100-418M 的一个待下载文件：native = [自托管资产（`m2m100_418M-<原文件名>`）, ...Xenova 上游兜底]；
+ * 构造 M2M100-418M 的一个待下载文件：native 默认为固定提交的 Xenova 上游；
  * web = [Xenova 上游(+镜像)]。dir 仅为缓存布局子目录（'' 或 'onnx'），与下载源 URL 解耦。
  */
 function m2m100File(dir: string, filename: string): ModelFileSpec {
@@ -172,18 +184,20 @@ function m2m100File(dir: string, filename: string): ModelFileSpec {
   return {
     filename,
     dir,
-    nativeUrls: [selfHostedAsset(`m2m100_418M-${filename}`), ...upstream],
+    nativeUrls: nativeModelUrls(`m2m100_418M-${filename}`, pinnedHfUrls('Xenova/m2m100_418M', rel)),
+    ...pinned(`m2m100_418M-${filename}`),
     webUrls: upstream,
   };
 }
 
 // M2M100-1.2B（MIT，质量档）：官方无 ONNX 发布，权重经 optimum 导出 + 合并 decoder + q8 量化后自托管于
-// 本仓库 GitHub Release（扁平资产名带 m2m100_1.2B- 前缀）；仅 macOS 支持、无上游镜像，故 webUrls 为空（唯一源）。
+// 原上游 GitHub Release（扁平资产名带 m2m100_1.2B- 前缀）；仅桌面支持、无 HF 等价源，故 webUrls 为空。
 function m2m1002bFile(dir: string, filename: string): ModelFileSpec {
   return {
     filename,
     dir,
-    nativeUrls: [selfHostedAsset(`m2m100_1.2B-${filename}`)],
+    nativeUrls: nativeModelUrls(`m2m100_1.2B-${filename}`, [`${UPSTREAM_MODEL_RELEASE}/m2m100_1.2B-${filename}`]),
+    ...pinned(`m2m100_1.2B-${filename}`),
     webUrls: [],
   };
 }
@@ -315,8 +329,6 @@ export const MODELS: readonly ModelEntry[] = [
       filename: 'Hy-MT2-7B-Q4_K_M.gguf',
       nativeUrls: hfResolveUrls('tencent/Hy-MT2-7B-GGUF', 'Hy-MT2-7B-Q4_K_M.gguf', 'ab8472660ac61fac25f1af43fac2599d52a8a775'),
       webUrls: [],
-      expectedBytes: 4624648896,
-      sha256: '9f96256500f3fc1ab4d64336b58f52a949a95ad7516b0c229476eef782f9f77b',
     }],
     approxBytes: 4624648896,
     fallbackLang: 'en',

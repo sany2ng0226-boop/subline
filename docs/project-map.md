@@ -6,7 +6,7 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 
 | 模块 | 职责与关键入口 |
 | --- | --- |
-| `packages/core` (`@rt/core`) | 领域类型、`AppBridge` 契约、设置/归档纯逻辑、模型注册表、macOS/Web 共用的实时转写管线、定稿漂移度量、供 macOS 使用的文字合句与原文上下文，以及三端共用的翻译编排；公共入口为 `packages/core/src/index.ts`。 |
+| `packages/core` (`@rt/core`) | 领域类型、`AppBridge` 契约、设置/归档纯逻辑、模型注册表与下载源/完整性 pin 策略、macOS/Web 共用的实时转写管线、定稿漂移度量、供 macOS 使用的文字合句与原文上下文，以及三端共用的翻译编排；公共入口为 `packages/core/src/index.ts`。 |
 | `packages/ui` (`@rt/ui`) | 共享 Vue 3 单页界面，包含引导、主页、设置、归档和跨页状态；平台业务能力及设置、模型、归档持久化通过 `AppBridge` 访问宿主，纯界面状态可直接使用 DOM、媒体查询和 `localStorage` 等浏览器运行时能力。挂载入口为 `packages/ui/src/index.ts`，屏幕切换入口为 `packages/ui/src/App.vue`。 |
 | `apps/macos` (`@rt/macos`) | macOS 与 Windows 候选版共用的 Electron 桌面宿主（保留历史目录名）：渲染层采集麦克风/系统音频，preload 暴露收紧后的 IPC，主进程管理设置、归档、模型和推理子进程；宿主入口是 `apps/macos/src/main/index.ts`，UI 适配入口是 `apps/macos/src/renderer/src/mac-bridge.ts`。 |
 | `apps/web` (`@rt/web`) | 浏览器 PWA 宿主：使用 IndexedDB/Cache Storage 存储，AudioWorklet 采集，Web Worker 中运行 sherpa-onnx WASM 与本地翻译，并管理 Service Worker 外壳缓存；应用入口是 `apps/web/src/main.ts`，平台契约实现是 `apps/web/src/bridge.ts`。 |
@@ -70,7 +70,7 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 - `ArchiveRecord.audio` 保存 WAV 附件元数据；`packages/ui/src/components/ArchiveAudioPlayer.vue` 由 `ArchiveScreen.vue` 和 `ArchiveLibrary.vue` 的详情共用，通过可选 `AppBridge.getArchiveAudioUrl` 异步取址。原生控件使用 `preload="none"`，不自动播放；无附件、能力缺失与读取失败各有文案，失败可重试。`apps/macos/src/main/archive-audio-response.ts` 将受限的 `subline-audio://archive/<archiveId>/<recordingId>` GET / HEAD 请求交给宿主 resolver 校验后，以异步文件流返回 WAV；支持单个字节范围和后缀范围，不接受编码路径、额外路径或多范围请求，流队列按字节限制预读。对应 `.test.ts` 使用临时合成 WAV 覆盖完整读取、HEAD、拖动范围及拒绝路径；本项先落 Dev 分支，未发布、未安装；隐藏 Electron 合成验证已覆盖退出后新进程重开、解码、静音播放和进度拖动，真实系统采音未重测。产品规则见[归档原音回听](product/experience.md#归档原音回听先落-dev-分支)。
 - 文件夹能力同时受 UI 的 `__INTERNAL_BUILD__`、可选 `AppBridge.getArchiveLibrary` 能力和桌面主进程的 Internal 应用身份、Windows 候选版或隔离预览 profile 检查约束；稳定渠道、Web 与 iOS 保留原路径。
 - `apps/macos/src/main/settings.ts` 仅对新建设置预选本地 `hy-mt2-7b`，翻译默认保持关闭；已有设置由共享兼容逻辑读取。正式应用名为 Subline，应用标识仍为 `io.github.sany2ng0226.classroomtranslator`，独立数据目录为 `~/Library/Application Support/Classroom Translator`。
-- 模型清单、大小、语言、平台可用性和有序下载源的单一事实源是 `packages/core/src/model-registry.ts`。各宿主将文件下载到本端模型目录或 Cache Storage，再由对应推理运行时离线装载。Hy-MT2 使用 Tencent 固定 revision 的 Q4_K_M 文件，注册表声明精确字节数及 SHA-256；macOS 下载流程据此校验。
+- 模型清单、大小、语言、平台可用性、有序下载源和可选完整性字段的单一事实源是 `packages/core/src/model-registry.ts`；上游基址、Hugging Face 固定提交、pin 表和未启用的 Subline 自托管源集中在 `packages/core/src/model-sources.ts`。原生端下载器只对带 pin 的文件校验精确字节数和 SHA-256；Hy-MT2 及今后未登记 pin 的文件保持可下载。各宿主将文件下载到本端模型目录或 Cache Storage，再由对应推理运行时离线装载；Web 的 M2M-100 418M 下载仍使用主分支 URL，以保持 Transformers.js 缓存键兼容。
 
 ## 测试与构建位置
 
@@ -80,6 +80,7 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 - 根 `package.json` 的 `pnpm check` 运行 `@rt/core` 单元测试、macOS 评测语料导入器的纯逻辑测试，以及 macOS、Web、iOS 三端类型检查；它不下载语料或模型，也不执行耗时的识别精度门禁。
 - `packages/core/src/**/*.test.ts` 覆盖设置、归档、模型源、转写管线、定稿漂移统计和翻译决策等共享逻辑。
 - `apps/macos/test` 包含无 GUI 管线、CER 评测和翻译脚本；入口命令由 `apps/macos/package.json` 的 `test-pipeline`、`eval-cer` 和 `test-translate` 定义。`eval-cer` 同时报告产品管线 CER、整段离线 CER 和“实时最长结果到定稿”的 Final 漂移，并可用 `--max-cer`、`--max-drift` 将任一模型的加权结果设为失败门槛。日语快捷命令 `eval-cer-ja` 评测固定语言的完整语料，`eval-cer-ja:gate` 则以 SenseVoice 的产品管线 CER 不超过 20%、Final 漂移不超过 5% 为回归门禁。
+- `apps/macos/test/model-integrity.ts` 覆盖原生下载的大小/SHA-256 校验、错误源回退、残留清理、已安装文件大小检查，以及无 pin 文件仍可下载的兼容行为。
 - `apps/macos/scripts/fetch-fleurs-eval.mjs` 通过 `fetch-eval-fleurs` 从固定 revision 的 FLEURS `ja_jp` test split 确定性抽取 100 条 CC-BY-4.0 语料，生成 16 kHz 单声道 PCM WAV、参考文本、语言元数据和带署名及音频哈希的 manifest。源 Parquet 缓存在 `apps/macos/test-audio/cache`，用例写入 `apps/macos/test-audio/eval/fleurs-ja-test`；两处均被 Git 忽略，需要评测的环境自行生成。
 - `apps/macos/test/stage-latency.ts` 使用固定课堂音频、SenseVoice、默认合句规则、Hy-MT2 7B 与产品翻译队列作静音实时回放，分开记录识别提交、合句、排队与翻译延迟；入口为 `test-stage-latency`，指标边界、命令和私有素材要求见[macOS 无 GUI 评测](../apps/macos/test/README.md)。
 - `apps/macos/test/translation-transport-replay.ts` 在固定课堂样本校验通过的原文与相同上下文上，以 ABBA 顺序对比完整响应与流式响应的首批、完整返回延迟，并严格检查最终译文一致性及部分输出前缀；命令和边界见[macOS 无 GUI 评测](../apps/macos/test/README.md)。
