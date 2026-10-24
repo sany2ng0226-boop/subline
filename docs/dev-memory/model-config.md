@@ -6,19 +6,22 @@
 
 - **`model-registry.ts` — 统一清单（唯一作者处）**：`MODELS: ModelEntry[]`，判别联合 `kind: 'asr' | 'translation'`。增删/迁移模型、调平台或能力门槛只改这里。
   - **红线：本模块必须是纯可序列化数据，不含任何函数值/运行时行为。** 翻译母语字形后处理降为字符串标签 `LangEntrySpec.script = 'zh-hans'`，由 `translation/local-spec.ts` 派生视图时挂回 `normalizeZh`。原因见「iOS 代码生成」。
-- **`model-sources.ts` — 下载源治理（唯一）**：所有基址/host/release tag/命名约定收敛于此。
-  - `SELF_HOSTED {host,owner,repo,tag}` + `selfHostedAsset(name)`：自托管 GitHub Release（native 主源）。
-  - `HF {host}` + `HF_MIRRORS[]` + `hfResolveUrls(repo, rel)`：上游 HuggingFace 主源 + 可选镜像，返回**有序 URL 列表**。换镜像/owner/tag 只改这一处。
+- **`model-sources.ts` — 下载源治理（唯一）**：所有基址、固定 revision、资产 pin、release tag 和命名约定收敛于此。
+  - active native 源保持上游 Hugging Face／上游 GitHub Release；Subline `models-v1` 发布并核对资产前，`SELF_HOSTED` 只作关闭的未来配置，不能设成默认源。
+  - 有 pin 的 HF 文件必须同时使用 `HF_REVISIONS` 固定提交，使下载内容与 `SELF_HOSTED_PINS` 的字节数和 SHA-256 对应；自托管副本也必须是同一内容。
+  - 没有 pin 的文件仍可下载，不能因为缺少 `expectedBytes`／`sha256` 而拒绝；新增模型默认归入这一类，待取得可信 pin 后再启用校验。
+  - `HF {host}` + `HF_MIRRORS[]` + `hfResolveUrls(repo, rel, revision)`：上游 Hugging Face 主源 + 可选镜像，返回**有序 URL 列表**。换镜像/owner/tag 只改这一处。
   - `TRANSFORMERS_REMOTE_HOST`（`'https://huggingface.co/'`，**不可变**）：**只**供 web 翻译缓存键用，与可切换的下载源严格分离。若让它跟随镜像变，web 翻译离线加载 `cache.match` 会全部落空（Transformers.js 内部仍按默认 remoteHost 请求）。
 - **派生视图**：`models.ts` 导出 `ASR_MODELS` 等（过滤 `kind==='asr'`）；`translation/local-spec.ts` 导出 `LOCAL_TRANSLATION_MODELS` 等（过滤 `kind==='translation'`，并把 `script` 标签挂回函数）。各端消费这两份视图，形状与历史一致。
 
 ## 按端分源 + 多源 fallback
 
 每个文件在每一端是一个**有序 URL 列表**，下载器按序尝试、**每个源只试一次、全部失败才判失败**：
-- `ModelFileSpec.nativeUrls`（macOS/iOS）：自托管优先，其后追加 HF 上游做兜底（有上游者）。
+- `ModelFileSpec.nativeUrls`（macOS/iOS）：默认使用上游源；只有发布并核验 Subline `models-v1` 后，才可显式启用自托管优先。
 - `ModelFileSpec.webUrls`（web）：HF 主源 + 镜像。浏览器 fetch 受 CORS 约束，故 web 只走发 CORS 头的上游源。
 - web 的 Silero VAD 靠同源静态资源覆盖（`import.meta.env.BASE_URL`，构建期值），故该覆盖留在 web 层（`apps/web/src/asr/model-store.ts` 的 `resolveUrls`，置于列表首），不进 `@rt/core`。
-- 各端下载器把「单源尝试（含 .part/缓存清理 + 无进展看门狗）」封成内层，外层循环 fallback；停滞/HTTP 错误都计为该源失败，聚合错误在全部源耗尽后才浮现。
+- native 下载器对声明 pin 的文件在落地前核对字节数和 SHA-256；不符与停滞/HTTP 错误一样计为该源失败并尝试下一源。未声明 pin 的文件跳过完整性校验，但继续正常下载。
+- 各端下载器把「单源尝试（含 .part/缓存清理 + 无进展看门狗）」封成内层，外层循环 fallback；聚合错误在全部源耗尽后才浮现。
 
 ## 细分端能力门槛（模型属性 × 宿主约束 分离）
 

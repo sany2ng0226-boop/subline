@@ -1,18 +1,45 @@
 // 运行时下载 ASR 模型（方案 B：不打包，首次启动/按需联网下载）。
 // 每个模型只下其注册表登记的文件（多为 int8 量化版），另加所有模型共用的 Silero VAD 依赖。
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline as streamPipeline } from 'node:stream/promises';
-import { SILERO_VAD, getAsrModel, requiredAsrFiles, type AsrModelFile } from '@rt/core';
+import { SILERO_VAD, getAsrModel, type AsrModelFile, type LocalModelFile } from '@rt/core';
 import type { SetupProgress } from '../shared/types';
 
 /** 指定模型（含公共依赖 VAD）是否齐全（清单来自 @rt/core 的共享登记表）。 */
 export function asrModelsReady(modelsDir: string, modelId: string): boolean {
   // 未知 id 必须判「未就绪」：requiredAsrFiles 对未知 id 只返回公共依赖 VAD，
   // 仅按文件存在性判断会误报就绪，随后识别管线构造时才以「未知的识别模型」崩溃。
-  if (!getAsrModel(modelId)) return false;
-  return requiredAsrFiles(modelId).every((f) => fs.existsSync(path.join(modelsDir, f)));
+  const spec = getAsrModel(modelId);
+  if (!spec) return false;
+  return [SILERO_VAD, ...spec.files].every((f) => fileInstalled(path.join(modelsDir, f.dir, f.filename), f));
+}
+
+/** 文件已落地且字节数与登记一致（完整 SHA-256 在下载落地前已校验，这里只做廉价的大小核对）。 */
+function fileInstalled(file: string, spec: Pick<LocalModelFile, 'expectedBytes'>): boolean {
+  try {
+    const stat = fs.statSync(file);
+    return stat.isFile() && stat.size > 0 && (spec.expectedBytes === undefined || stat.size === spec.expectedBytes);
+  } catch {
+    return false;
+  }
+}
+
+/** 按登记的字节数与 SHA-256 核对文件内容；不符即抛错（不删除文件，由调用方处理）。 */
+export async function verifyDownloadedFile(
+  file: string,
+  spec: Pick<LocalModelFile, 'expectedBytes' | 'sha256'>,
+  signal?: AbortSignal
+): Promise<void> {
+  if (spec.expectedBytes !== undefined && fs.statSync(file).size !== spec.expectedBytes) {
+    throw new Error('模型文件大小不符，请重试下载');
+  }
+  if (!spec.sha256) return;
+  const hash = crypto.createHash('sha256');
+  for await (const chunk of fs.createReadStream(file, { signal })) hash.update(chunk);
+  if (hash.digest('hex') !== spec.sha256) throw new Error('模型文件校验失败，请重试下载');
 }
 
 // 无进展看门狗超时：连续这么久没收到任何新字节即判定连接停滞并中止本次下载。
@@ -29,21 +56,22 @@ const sharedDownloads = new Map<string, Promise<void>>();
 
 /**
  * 从多个下载源按序尝试下载到 dest：每个 URL 只试一次，成功即返回，全部失败才抛出聚合错误。
- * urls 为按端分源的有序列表（macOS native 端取注册表 file.nativeUrls：自托管 GitHub Release 优先、
- * 可含 HF 上游兜底）。ASR 与翻译模型的自研下载链路共用此函数（翻译模型见 ./translation/model-downloader）。
+ * urls 为注册表 file.nativeUrls 的有序列表（默认上游源，自托管仅供显式启用）。ASR 与翻译模型的自研下载链路共用此函数（翻译模型见 ./translation/model-downloader）。
  * 每次失败前会清理本次 .part（见 downloadFromUrl），故换源不残留半截文件；停滞/HTTP 错误均计为该源失败。
+ * 给出 expected 时，每个源下完都先核对 .part 的字节数与 SHA-256，不符也计为该源失败、换下一个源。
  */
 export async function downloadFile(
   urls: string[],
   dest: string,
   onBytes?: (loaded: number, total: number) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  expected?: Pick<LocalModelFile, 'expectedBytes' | 'sha256'>
 ): Promise<void> {
   if (urls.length === 0) throw new Error(`无可用下载源: ${dest}`);
   const errors: string[] = [];
   for (const url of urls) {
     try {
-      await downloadFromUrl(url, dest, onBytes, signal);
+      await downloadFromUrl(url, dest, onBytes, signal, expected);
       return;
     } catch (err) {
       // 用户取消（外部 signal aborted）：立即停止，不再尝试后续源。
@@ -63,7 +91,8 @@ async function downloadFromUrl(
   url: string,
   dest: string,
   onBytes?: (loaded: number, total: number) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  expected?: Pick<LocalModelFile, 'expectedBytes' | 'sha256'>
 ): Promise<void> {
   // 无进展看门狗：字节流停滞（TCP 静默断开、无 RST）时主动 abort，避免永久挂起。
   const controller = new AbortController();
@@ -110,6 +139,8 @@ async function downloadFromUrl(
       if (total > 0 && loaded < total) {
         throw new Error(`下载不完整 (${loaded}/${total} 字节): ${url}`);
       }
+      if (watchdog !== undefined) clearTimeout(watchdog); // 校验大文件期间没有网络字节，不能算作停滞
+      if (expected) await verifyDownloadedFile(part, expected, signal);
       fs.renameSync(part, dest);
     } catch (err) {
       fs.rmSync(part, { force: true });
@@ -140,9 +171,9 @@ export async function downloadAsrModels(
   if (!spec) throw new Error(`未知的识别模型: ${modelId}`);
 
   const localPath = (f: AsrModelFile) => path.join(modelsDir, f.dir, f.filename);
-  // 公共依赖 VAD + 该模型全部文件；已存在的跳过（只补缺）。按近似大小升序：小文件先下。
+  // 公共依赖 VAD + 该模型全部文件；已落地且大小正确的跳过（只补缺）。按近似大小升序：小文件先下。
   const toDownload = [SILERO_VAD, ...spec.files]
-    .filter((f) => !fs.existsSync(localPath(f)))
+    .filter((f) => !fileInstalled(localPath(f), f))
     .sort((a, b) => a.approxBytes - b.approxBytes);
 
   const total = toDownload.reduce((sum, f) => sum + f.approxBytes, 0);
@@ -160,7 +191,7 @@ export async function downloadAsrModels(
     const inflight = sharedDownloads.get(dest);
     if (inflight) {
       await inflight;
-      if (fs.existsSync(dest)) {
+      if (fileInstalled(dest, f)) {
         base += f.approxBytes;
         onProgress({ loaded: base, total });
         continue;
@@ -175,7 +206,8 @@ export async function downloadAsrModels(
         last = loaded;
         onProgress({ loaded: base + loaded, total });
       },
-      signal
+      signal,
+      f
     );
     sharedDownloads.set(dest, p.then(() => undefined, () => undefined));
     await p;
