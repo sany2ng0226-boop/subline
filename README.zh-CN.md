@@ -8,16 +8,16 @@
 
 基于 [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator)，由 [Jack](https://github.com/sany2ng0226-boop) 维护，保留上游作者署名、元数据及 Git 历史。当前定制集中在日中双语阅读、本地翻译与记录整理。
 
-![Subline macOS 实时英语字幕与日语译文](docs/assets/subline-live-beta6.png)
+![Subline macOS 实时英语字幕与中文译文](docs/assets/subline-live-beta7.png)
 
-*本机已安装的 beta.6+61ba50a 验收构建：实际采集英语合成测试语音的系统音频，并由识别与翻译模型生成字幕。输出未经改写，不作为性能测量。本次连续 6 条定稿均翻译当前原文，原先重复上一段的用例未再复现。Beta.6 尚未发布，下方公开下载仍为 beta.5。*
+*本机安装的 beta.7+3b1ff86 发布构建：实际采集六段英语合成测试语音的系统音频，并生成对应中文译文。输出未经改写，仍包含识别错误；这是限定样本功能检查，不是准确度基准。公开 beta.7 下载包含同一份应用。*
 
 <details>
 <summary>设置：模型选择、下载管理与独立目标语言</summary>
 
-![Subline beta.6 识别模型内直接选择、下载与删除](docs/assets/subline-settings-beta6.png)
+![Subline beta.7 识别模型内直接选择、下载与删除](docs/assets/subline-settings-beta7.png)
 
-![Subline beta.6 翻译模型选择器](docs/assets/subline-translation-models-beta6.png)
+![Subline beta.7 翻译模型选择器](docs/assets/subline-translation-models-beta7.png)
 
 *同一已安装构建；模型的选择、下载状态和下载／删除操作集中在各自的选择器中，已下载模型可直接选用。*
 
@@ -33,7 +33,7 @@
 
 ## 验证与发布边界
 
-**[下载 Subline 0.2.0-beta.5](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.5)**，适用于 Apple 芯片 Mac、macOS 14.2 或更新版本。已作为预发布版（prerelease）公开。**Subline.app 与 DMG 均已 Developer ID 签名、分别通过 Apple 公证并附上票据**；DMG 与包内应用均通过票据和 Gatekeeper 检查。公开链接无需登录即可下载，重新下载的文件 SHA-256 一致，产物复验通过。
+**[下载 Subline 0.2.0-beta.7](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.7)**，适用于 Apple 芯片 Mac、macOS 14.2 或更新版本。已作为预发布版（prerelease）公开。**Subline.app 与 DMG 均已 Developer ID 签名、分别通过 Apple 公证并附上票据**；两者均通过票据和 Gatekeeper 检查。本机安装的应用与公开包一致，下载完整性可用随附 SHA256SUMS 核对。
 
 公开渠道安装的是 **Subline.app**，提供连续字幕与手动归档；文件夹归档和主页语言选择只在独立的 **Subline Internal** 中提供。
 
@@ -42,7 +42,7 @@
 3. 下载后在本机识别与翻译，**不需要 LM Studio、API Key 或另启模型服务**。按提示允许麦克风或系统音频录制。首次翻译需等待模型加载。
 4. 停止录音后，等译文完成，点击顶栏归档入口并保存；停止不会自动保存。
 
-修复版本已完成短时录音、退出和崩溃恢复检查，并验证在其他应用前台时用 **⌥⌘R** 开始和停止录音。修复候选已实测日语系统音频原文与中文译文；本机 beta.5 更新后已恢复字幕。长时间持续录音尚未验证。
+本机 beta.7 完成六段英语系统音频转写／中文翻译、归档保存与重启读回，原有设置和十个归档保持不变。全新 SenseVoice／VAD 与翻译配置文件下载通过大小和 SHA-256 校验，固定上游文件的元数据也已核对。此前已检查短时录音、退出、崩溃恢复和其他应用前台时的 **⌥⌘R** 启停；长时间持续录音尚未验证。
 
 此前已用空白用户数据目录完成引导和真实模型下载，并在 48 GB 内存的 Apple 芯片开发机测试系统音频转写与本地翻译。真人麦克风识别、远距离、多人噪声、整场活动、长时开发负载及其他内存容量尚未验收。识别仍可能出错。此次不代表 iOS / Web 已通过运行验收。
 

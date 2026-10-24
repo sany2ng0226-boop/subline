@@ -34,13 +34,13 @@ Subline 是基于上游开源项目 Realtime Translator 定制、面向中文、
 
 ### macOS
 
-macOS 公开测试渠道使用 Subline.app，目标为 Apple 芯片 Mac、macOS 14.2 及以上，不代表 GA 正式发布。当前公开预发布版为 [0.2.0-beta.5](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.5)。公开渠道提供连续字幕、手动归档、未归档草稿恢复、删除撤销与退出保护；主页语言选择和文件夹归档仍属于 Subline Internal。
+macOS 公开测试渠道使用 Subline.app，目标为 Apple 芯片 Mac、macOS 14.2 及以上，不代表 GA 正式发布。当前公开预发布版为 [0.2.0-beta.7](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.7)。公开渠道提供连续字幕、独立翻译目标、单页模型选择与下载、手动归档、未归档草稿恢复、删除撤销与退出保护；主页语言选择和文件夹归档仍属于 Subline Internal。
 
-历史 0.2.0-beta.1 公开测试包沿用 Classroom Translator 名称，0.2.0-beta.2 为 Subline Internal 测试包，两者均有各自产物的签名与公证验证记录。已发布 beta.4 也完成 Developer ID 签名、Apple 公证与应用票据验证。beta.5 的应用与 DMG 均完成 Developer ID 签名、分别通过 Apple 公证并附上票据；DMG 与包内应用均通过 stapler 和 Gatekeeper 检查。这一双重公证结论仅适用于本次验收产物，不追溯到旧版或自动沿用于后续构建。
+beta.7 的应用与 DMG 均完成 Developer ID 签名，分别取得 Apple 公证 `Accepted` 结果，并分别通过 stapler 和 Gatekeeper 检查。这一结论仅适用于本次发布产物，不自动沿用于后续构建。
 
-修复版本已完成短时录音、退出和崩溃恢复检查，并验证其他应用前台时的 `⌥⌘R` 启停。修复候选已实测日语系统音频原文与中文译文；本机 beta.5 更新后已恢复字幕。长时间持续录音尚未验证。
+beta.7 主应用已完成 6 条英语→中文合成系统音频短程试用，译文均对应当前原文；新归档在完整退出重启后读回 6 条内容，旧设置与原有 10 个归档保留。Dev 包另用真实本地模型通过 3 条英语→日语／日语→中文流式翻译，其推理 worker 与主应用包内文件的 SHA-256 完全一致。空白模型目录下的 SenseVoice、Silero VAD 及 M2M 配置下载已通过，19 个 Hugging Face 文件与 6 个 GitHub 文件的固定元数据已核对。
 
-此前 Internal 包在空白用户数据目录走通引导、语言选择、模型确认与真实下载、麦克风启停；系统音频日中转写／本地翻译、手动归档、文件夹移动与重启读回也有验收记录。这些 Internal 文件夹结果不属于公开渠道能力。Hy-MT2 已在 48 GB 内存开发机运行；真实麦克风识别、多人噪声、整场活动的长时间负载和其他内存容量仍未验收。
+上述验收是限定合成样本和开发机的短程功能检查，合成语音的识别文字仍有错误，不构成识别准确度或性能基准。Hy-MT2 已在 48 GB 内存开发机运行；真实麦克风识别、多人噪声、整场活动的长时间负载、其他内存容量以及 iOS／Windows 真机仍未验收。
 
 macOS 版是 Electron 应用。麦克风由渲染进程采集；系统音频通过 CoreAudio Tap 回环采集，因此只在 macOS 14.2 及以上显示音源切换。ASR 与本地翻译分别运行在隔离子进程中，某个推理进程崩溃不会连带关闭主窗口。Hy-MT2 通过随应用提供的 node-llama-cpp Metal 后端执行，用户无需安装编译工具；应用不在运行时编译或下载可执行推理组件。稳定渠道的设置、归档和模型缓存位于 `~/Library/Application Support/Classroom Translator`；内部验证渠道名为 Subline Internal，使用独立的 `~/Library/Application Support/Classroom Translator Internal`。改名后数据目录和应用标识保持旧值，已有设置、归档、模型及系统授予的麦克风/系统音频权限照常沿用。两者可并排安装，不自动迁移或共用配置、归档和模型缓存。两个渠道来自同一代码库，内部验收后再发布稳定渠道；Internal 的签名、公证状态按各自产物验收，不能沿用稳定版的公证结论。
 
