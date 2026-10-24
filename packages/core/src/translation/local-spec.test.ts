@@ -96,12 +96,12 @@ describe('本地翻译模型注册表', () => {
     }
   });
 
-  it('keeps HY-MT2 downloadable without a legacy integrity pin', () => {
+  it('retains HY-MT2 upstream revision and verified integrity pin', () => {
     const spec = getTranslationModel('hy-mt2-7b')!;
     for (const f of spec.files) {
       expect(f.nativeUrls[0]).toMatch(/^https:\/\/huggingface.co\/tencent\/Hy-MT2-7B-GGUF\/resolve\/[0-9a-f]{40}\//);
-      expect(f.expectedBytes).toBeUndefined();
-      expect(f.sha256).toBeUndefined();
+      expect(f.expectedBytes).toBe(4624648896);
+      expect(f.sha256).toBe('9f96256500f3fc1ab4d64336b58f52a949a95ad7516b0c229476eef782f9f77b');
     }
   });
 

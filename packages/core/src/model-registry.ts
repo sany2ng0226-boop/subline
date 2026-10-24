@@ -110,7 +110,7 @@ export interface TranslationModelEntry extends CommonModelFields {
 
 export type ModelEntry = AsrModelEntry | TranslationModelEntry;
 
-// HY-MT2 7B and future files absent from SELF_HOSTED_PINS remain unpinned and downloadable.
+// Future files absent from SELF_HOSTED_PINS remain downloadable without a mirror pin.
 function pinned(asset: string): Pick<ModelFileSpec, 'expectedBytes' | 'sha256'> {
   const pin = SELF_HOSTED_PINS[asset];
   return pin ? { expectedBytes: pin.bytes, sha256: pin.sha256 } : {};
@@ -329,6 +329,8 @@ export const MODELS: readonly ModelEntry[] = [
       filename: 'Hy-MT2-7B-Q4_K_M.gguf',
       nativeUrls: hfResolveUrls('tencent/Hy-MT2-7B-GGUF', 'Hy-MT2-7B-Q4_K_M.gguf', 'ab8472660ac61fac25f1af43fac2599d52a8a775'),
       webUrls: [],
+      expectedBytes: 4624648896,
+      sha256: '9f96256500f3fc1ab4d64336b58f52a949a95ad7516b0c229476eef782f9f77b',
     }],
     approxBytes: 4624648896,
     fallbackLang: 'en',

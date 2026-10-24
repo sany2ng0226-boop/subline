@@ -82,15 +82,19 @@ test('Unpinned model downloads remain supported', async () => {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/model`;
   try {
-    const spec = getTranslationModel('hy-mt2-7b')!.files[0]!;
-    assert.equal(spec.expectedBytes, undefined);
-    assert.equal(spec.sha256, undefined);
+    const spec = {};
     await downloadFile([url], dest, undefined, undefined, spec);
     assert.equal(fs.readFileSync(dest, 'utf8'), 'unpinned model');
   } finally {
     server.close();
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('HY-MT2 retains its independently verified upstream integrity pin', () => {
+  const spec = getTranslationModel('hy-mt2-7b')!.files[0]!;
+  assert.equal(spec.expectedBytes, 4624648896);
+  assert.equal(spec.sha256, '9f96256500f3fc1ab4d64336b58f52a949a95ad7516b0c229476eef782f9f77b');
 });
 
 test('Wrong-size downloads fail without leaving installed or temporary files', async () => {

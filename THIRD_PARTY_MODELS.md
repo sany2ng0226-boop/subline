@@ -4,7 +4,7 @@ Runtime downloads use Hugging Face/upstream sources, not Subline releases. The S
 
 Native downloaders verify size and SHA-256 where a pin exists in `SELF_HOSTED_PINS`. Hugging Face native URLs for pinned files use `HF_REVISIONS`; mirrored copies must be identical bytes. Web M2M100 retains main URLs for Transformers.js cache compatibility.
 
-Unpinned: Hy-MT2 7B Q4_K_M (keeps its current upstream revision), and any future files without entries in the pin table. These remain downloadable without pin verification. M2M100 1.2B keeps the existing upstream release because no equivalent HF ONNX source is registered.
+Hy-MT2 7B Q4_K_M retains its independent upstream revision, size and SHA-256 pin. Future files without integrity metadata remain downloadable. M2M100 1.2B keeps the existing upstream release because no equivalent HF ONNX source is registered.
 
 Each model remains under its original license. Model names, authors and sources are kept as required.
 
