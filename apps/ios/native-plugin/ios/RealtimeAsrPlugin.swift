@@ -25,6 +25,7 @@
 //
 
 import Foundation
+import CryptoKit
 import AVFoundation
 import UIKit
 import Capacitor
@@ -800,14 +801,15 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   private func fileIsIntact(_ file: AsrModelFile, at path: String) -> Bool {
     guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
           let bytes = attrs[.size] as? Int else { return false }
+    if let expected = file.expectedBytes { return bytes == expected }
     let minBytes = file.approxBytes >= smallModelFileThreshold
       ? Int(Double(file.approxBytes) * minModelSizeFraction)
       : 1  // small files: just non-empty
     return bytes >= minBytes
   }
 
-  /// Integrity precheck standing in for a real checksum: every registry file must exist and clear
-  /// its size floor. A corrupt/truncated file is deleted here so the next downloadModels()
+  /// Cheap readiness check: pinned files must match their exact size; unpinned files clear
+  /// their size floor. SHA-256 is checked before installation. A corrupt/truncated file is deleted here so the next downloadModels()
   /// re-fetches it (the downloader skips files that already exist), and getSetupStatus / start
   /// see "not ready" and route to re-download / error instead of letting the sherpa-onnx wrapper
   /// fatalError on a bad model.
@@ -847,12 +849,12 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
       let destDir = file.dir.isEmpty ? root : root.appendingPathComponent(file.dir, isDirectory: true)
       try FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
       let dest = destDir.appendingPathComponent(file.filename)
-      if FileManager.default.fileExists(atPath: dest.path) {
+      if fileIsIntact(file, at: dest.path) {
         completedBytes += file.approxBytes
         continue
       }
       let baseCompleted = completedBytes
-      try downloadFile(from: file.urls, to: dest) { loadedThisFile in
+      try downloadFile(from: file.urls, to: dest, expected: file) { loadedThisFile in
         self.notifyListeners("setupProgress", data: [
           "kind": "asr",
           "id": modelId,
@@ -870,10 +872,9 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   }
 
   /// Download `dest` from an ordered list of sources, trying each once until one succeeds; throws an
-  /// aggregate error only if all fail. `urls` is the native-side ordered list (self-hosted GitHub
-  /// Release first, optional HF upstream fallback — see @rt/core AsrModelFile.nativeUrls). Each attempt
+  /// aggregate error only if all fail. `urls` is the registry native-side ordered list. Each attempt
   /// downloads to a temp file and atomically moves on success, so a failed source leaves nothing behind.
-  private func downloadFile(from urls: [String], to dest: URL,
+  private func downloadFile(from urls: [String], to dest: URL, expected: AsrModelFile,
                             onBytes: @escaping (Int) -> Void) throws {
     guard !urls.isEmpty else {
       throw asrError("no download source for \(dest.lastPathComponent)")
@@ -883,7 +884,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
       // 用户取消：立即停止，不再尝试后续源。
       if isDownloadCancelled() { throw asrError("download cancelled") }
       do {
-        try downloadFromURL(urlString, to: dest, onBytes: onBytes)
+        try downloadFromURL(urlString, to: dest, expected: expected, onBytes: onBytes)
         return
       } catch {
         errors.append("\(urlString) → \(error.localizedDescription)")
@@ -901,10 +902,30 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
     return downloadCancelled
   }
 
+  /// Verify the temporary file before installation; hash in chunks to bound memory use.
+  private func verifyDownloadedFile(_ location: URL, expected: AsrModelFile) throws {
+    if let bytes = expected.expectedBytes {
+      let attrs = try FileManager.default.attributesOfItem(atPath: location.path)
+      guard (attrs[.size] as? Int) == bytes else {
+        throw asrError("model file size mismatch")
+      }
+    }
+    guard let digest = expected.sha256 else { return }
+    let handle = try FileHandle(forReadingFrom: location)
+    defer { try? handle.close() }
+    var hash = SHA256()
+    while let chunk = try handle.read(upToCount: 1024 * 1024), !chunk.isEmpty {
+      if isDownloadCancelled() { throw asrError("download cancelled") }
+      hash.update(data: chunk)
+    }
+    let actual = hash.finalize().map { String(format: "%02x", $0) }.joined()
+    guard actual == digest else { throw asrError("model file SHA-256 mismatch") }
+  }
+
   /// Synchronous (on asrQueue) URLSession download from a single URL to a temp file, then atomic move.
   /// Follows GitHub/HF redirects automatically. `onBytes` reports bytes written so far.
   /// 把 task 暴露给 currentDownloadTask，使 cancelDownload 能从别的线程 task.cancel() 解除本函数的信号量阻塞。
-  private func downloadFromURL(_ urlString: String, to dest: URL,
+  private func downloadFromURL(_ urlString: String, to dest: URL, expected: AsrModelFile,
                                onBytes: @escaping (Int) -> Void) throws {
     guard let url = URL(string: urlString) else {
       throw asrError("invalid model URL: \(urlString)")
@@ -929,6 +950,8 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
       }
       // The temp file is purged as soon as this handler returns — move it here, not later.
       do {
+        try self.verifyDownloadedFile(location, expected: expected)
+        if self.isDownloadCancelled() { throw self.asrError("download cancelled") }
         if FileManager.default.fileExists(atPath: dest.path) {
           try FileManager.default.removeItem(at: dest)
         }

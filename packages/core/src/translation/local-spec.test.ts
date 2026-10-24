@@ -1,5 +1,6 @@
 // planTranslation / normalizeZh / 注册表 helper 的单元测试：三端共用的判定逻辑。
 import { describe, expect, it } from 'vitest';
+import { HF_REVISIONS, SELF_HOSTED_PINS } from '../model-sources';
 import {
   DEFAULT_TRANSLATION_MODEL_ID,
   LOCAL_TRANSLATION_MODELS,
@@ -47,8 +48,7 @@ describe('本地翻译模型注册表', () => {
         expect(f.filename.length).toBeGreaterThan(0);
         // dir 为缓存布局子目录：'' 或形如 'onnx'（不含前后斜杠）
         expect(f.dir).not.toMatch(/^\/|\/$/);
-        // native 主源为自托管 GitHub Release 资产，扁平命名以文件名结尾（落地文件名与之一致）。
-        expect(f.nativeUrls[0]).toContain(m.id === 'hy-mt2-7b' ? 'huggingface.co/tencent/Hy-MT2-7B-GGUF/' : 'github.com/baijunjie/realtime-translator/releases/download/models-v1/');
+        expect(f.nativeUrls[0]).not.toContain('github.com/sany2ng0226-boop/subline/');
         expect(f.nativeUrls[0].endsWith(f.filename)).toBe(true);
       }
       // 离线加载所需的 seq2seq 双权重必须在 files 清单内（q8 档带 _quantized 后缀）。
@@ -73,27 +73,35 @@ describe('本地翻译模型注册表', () => {
         'onnx/decoder_model_merged_quantized.onnx',
       ]),
     );
-    // 按端分源：nativeUrls[0] 为自托管 GitHub Release 资产（扁平命名带 m2m100_418M- 前缀）；
-    // webUrls[0] 为上游 Xenova/m2m100_418M 仓 main 分支 resolve 直链（含缓存布局子目录，web 用）。
     for (const f of M2M100_SPEC.files) {
-      expect(f.nativeUrls[0]).toBe(
-        `https://github.com/baijunjie/realtime-translator/releases/download/models-v1/m2m100_418M-${f.filename}`,
-      );
       const rel = f.dir ? `${f.dir}/${f.filename}` : f.filename;
+      expect(f.nativeUrls[0]).toBe(
+        `https://huggingface.co/Xenova/m2m100_418M/resolve/${HF_REVISIONS['Xenova/m2m100_418M']}/${rel}`,
+      );
       expect(f.webUrls[0]).toBe(`https://huggingface.co/Xenova/m2m100_418M/resolve/main/${rel}`);
-      // native 兜底段（自托管之后）与 web 上游同款。
-      expect(f.nativeUrls.slice(1)).toEqual(f.webUrls);
+      expect({ bytes: f.expectedBytes, sha256: f.sha256 })
+        .toEqual(SELF_HOSTED_PINS[`m2m100_418M-${f.filename}`]);
     }
   });
 
-  it('M2M100-1.2B 为自托管唯一源（仅 macOS）：nativeUrls 仅带 m2m100_1.2B- 前缀资产，webUrls 为空', () => {
-    const spec = LOCAL_TRANSLATION_MODELS.find((m) => m.id === 'm2m100-1.2b');
-    expect(spec).toBeDefined();
-    for (const f of spec!.files) {
+  it('retains M2M100-1.2B upstream release with matching pins', () => {
+    const spec = getTranslationModel('m2m100-1.2b')!;
+    for (const f of spec.files) {
       expect(f.nativeUrls).toEqual([
         `https://github.com/baijunjie/realtime-translator/releases/download/models-v1/m2m100_1.2B-${f.filename}`,
       ]);
       expect(f.webUrls).toEqual([]);
+      expect({ bytes: f.expectedBytes, sha256: f.sha256 })
+        .toEqual(SELF_HOSTED_PINS[`m2m100_1.2B-${f.filename}`]);
+    }
+  });
+
+  it('keeps HY-MT2 downloadable without a legacy integrity pin', () => {
+    const spec = getTranslationModel('hy-mt2-7b')!;
+    for (const f of spec.files) {
+      expect(f.nativeUrls[0]).toMatch(/^https:\/\/huggingface.co\/tencent\/Hy-MT2-7B-GGUF\/resolve\/[0-9a-f]{40}\//);
+      expect(f.expectedBytes).toBeUndefined();
+      expect(f.sha256).toBeUndefined();
     }
   });
 

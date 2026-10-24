@@ -1,5 +1,6 @@
 // ASR 模型注册表的单元测试：查表、按语言/平台过滤、齐全性文件清单。
 import { describe, expect, it } from 'vitest';
+import { HF_REVISIONS, SELF_HOSTED_PINS } from './model-sources';
 import {
   ASR_MODELS,
   DEFAULT_ASR_MODEL_ID,
@@ -59,28 +60,28 @@ describe('asrModelsFor', () => {
   });
 });
 
-describe('ASR 按端分源 URL（native 自托管优先 + HF 兜底；web HF 上游）', () => {
-  const GH_BASE = 'https://github.com/baijunjie/realtime-translator/releases/download/models-v1/';
-
-  it('公共依赖 VAD：nativeUrls 为自托管无前缀资产；web 用同源静态资源覆盖，故 webUrls 为空', () => {
-    expect(SILERO_VAD.nativeUrls).toEqual([`${GH_BASE}silero_vad.onnx`]);
+describe('ASR upstream sources and pins', () => {
+  it('uses official VAD upstream and preserves its verification pin', () => {
+    expect(SILERO_VAD.nativeUrls).toEqual([
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx',
+    ]);
     expect(SILERO_VAD.webUrls).toEqual([]);
+    expect({ bytes: SILERO_VAD.expectedBytes, sha256: SILERO_VAD.sha256 })
+      .toEqual(SELF_HOSTED_PINS['silero_vad.onnx']);
   });
 
-  it('各模型文件：nativeUrls[0] 为自托管资产（modelId- 前缀 + 原文件名），native 兜底 = web 上游；web 平台模型带上游 HF csukuangfj webUrls', () => {
+  it('uses pinned HF revisions for native and web ASR downloads', () => {
     for (const m of ASR_MODELS) {
       for (const f of m.files) {
-        // native 首选自托管，扁平命名 `<modelId>-<原文件名>`。
-        expect(f.nativeUrls[0]).toBe(`${GH_BASE}${m.id}-${f.filename}`);
-        // 全部 ASR 模型 platforms 均含 web，故都带上游 webUrls（HF csukuangfj resolve 直链，以原文件名结尾）。
-        expect(m.platforms).toContain('web');
-        expect(f.webUrls.length).toBeGreaterThan(0);
-        for (const u of f.webUrls) {
-          expect(u).toMatch(/^https:\/\/[^/]+\/csukuangfj\/.+\/resolve\/main\//);
-          expect(u.endsWith(f.filename)).toBe(true);
+        expect(f.nativeUrls).toEqual(f.webUrls);
+        expect(f.nativeUrls.length).toBeGreaterThan(0);
+        for (const url of f.nativeUrls) {
+          const [, repo, revision] = url.match(/huggingface\.co\/(csukuangfj\/[^/]+)\/resolve\/([^/]+)\//)!;
+          expect(revision).toBe(HF_REVISIONS[repo]);
+          expect(url.endsWith(f.filename)).toBe(true);
         }
-        // native 兜底段（自托管之后）与 web 上游同款。
-        expect(f.nativeUrls.slice(1)).toEqual(f.webUrls);
+        expect({ bytes: f.expectedBytes, sha256: f.sha256 })
+          .toEqual(SELF_HOSTED_PINS[`${m.id}-${f.filename}`]);
       }
     }
   });
