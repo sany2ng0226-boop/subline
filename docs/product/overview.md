@@ -16,6 +16,7 @@ Subline 是基于上游开源项目 Realtime Translator 定制、面向中文、
 - 各端的语音识别都在当前设备上运行，应用不把音频发送给识别服务。
 - 选择本地翻译时，译文也在当前设备上生成。macOS 新安装默认使用应用内 Hy-MT2 7B（GGUF Q4_K_M），并保留 M2M-100；Web 使用 M2M-100；iOS 使用 Apple Translation。macOS 的 Hy-MT2 不需要 LM Studio 或单独启动 API 服务，推理运行时随应用提供，权重在确认后下载。
 - 选择云端翻译时，需要翻译的已定稿文本段会发送到用户配置的 OpenAI 兼容端点；macOS 的 API 翻译仍附带最近两段同语言对的原文上下文，每段最多 400 字符；应用内 Hy-MT2 每次只翻译当前段原文，使用独立会话，不附带此前原文或生成的对话历史。同语言跳过及仅需中文字形归一化的段不发送。端点可以是本机运行的 LM Studio 等兼容服务，此时文本发送到本机地址。在设置中测试连接会发送固定的 `hello` 测试文本。音频始终不发送，端点的数据处理规则由对应服务商决定。
+- macOS Subline Dev 的录后转写只使用已下载的本地识别和翻译模型，不调用云端 API，原音不上传。实时原稿保持不变，录后结果作为独立版本保存。
 - 应用启动时不自动下载识别或翻译权重。用户确认下载后，应用才从模型源获取文件；Web 的 Silero VAD 是随应用外壳提供的内置例外。
 - 设置、模型和会话归档只保存在当前设备或当前浏览器站点存储中，产品没有跨设备同步。
 - macOS 在系统 `safeStorage` 可用时加密保存云端 API Key；加密不可用时为保证功能会明文落盘。Web 和 iOS 分别将 API Key 随设置保存到 IndexedDB 和 Preferences，应用本身不做额外加密。
@@ -29,14 +30,15 @@ Subline 是基于上游开源项目 Realtime Translator 定制、面向中文、
 | 识别运行时 | sherpa-onnx Node，独立 ASR 子进程 | sherpa-onnx 原生插件 | sherpa-onnx 单线程 WASM Worker |
 | 本地翻译 | Hy-MT2 7B（默认，Apple 芯片 Metal）；M2M-100 418M 或 1.2B | Apple Translation，iOS 18+ | M2M-100 418M；iOS/iPadOS WebKit 上禁用 |
 | 云端翻译 | 支持 | 支持 | 支持 |
+| 原音归档／录后转写 | Dev 已安装：麦克风或系统音频归档；已下载本地模型生成独立版本 | 不支持 | 不支持 |
 | 主要存储 | Electron `userData` 中的文件和模型目录 | Preferences（设置/归档）与 Application Support（ASR 模型） | IndexedDB（设置/归档）与 Cache Storage（模型/应用外壳） |
 | 离线使用 | 所需模型已下载时可用 | ASR 模型已下载时可离线转写；本地翻译还需对应的 Apple 翻译语言包 | 应用外壳和所需模型已缓存时可用 |
 
 ### macOS
 
-macOS 测试版名为 Subline，当前分发目标为 Apple 芯片 Mac。稳定渠道当前仍为 0.2.0-beta.1 朋友测试版，不代表 GA 正式发布。已发出的稳定渠道产物仍以旧名 Classroom Translator 构建，已完成 Developer ID 签名和 Apple 公证，公证票据已附在 `.app` 上，并通过签名、stapler 和 Gatekeeper 验收。当前 Subline Internal 预览包为 0.2.0-beta.2，也已独立完成 Developer ID 签名和 Apple 公证，导出的 `.app` 通过 stapler 验证及 Gatekeeper 的 Notarized Developer ID 检查。上述结论仅适用于各自验收的应用产物，不等于 DMG 容器另获独立公证。Hy-MT2 已在 48 GB 内存的开发机运行，其他内存容量的最低要求尚未验收。
+macOS 测试版名为 Subline，分发目标为 Apple 芯片 Mac；当前公开渠道的版本、下载与产物说明以[仓库首页](../../README.zh-CN.md)和 [GitHub Releases](https://github.com/sany2ng0226-boop/subline/releases) 为准。早期分发验收记录中，0.2.0-beta.1 朋友测试产物仍以旧名 Classroom Translator 构建，0.2.0-beta.2 则为独立的 Subline Internal 预览包；当时分别对指定应用产物完成了 Developer ID 签名、公证、stapler 或 Gatekeeper 检查。这些记录不是当前渠道状态，也不替本轮重新担保旧产物或 DMG 容器。Hy-MT2 已在 48 GB 内存的开发机运行，其他内存容量的最低要求尚未验收。
 
-当前预览包已在本机空白用户数据目录中走通首次引导、日语选择、模型下载确认、由应用下载 SenseVoice 与 Hy-MT2，以及麦克风启停的流程。系统音频的日语转写、中文本地翻译、手动归档、文件夹移动与重启读回也已在该新包中验收。真实麦克风识别、多人噪声环境与整场活动的长时间开发负载尚未验收，不能据此承诺线下活动或黑客松中的识别效果与稳定性。
+早期预览验收还曾在空白用户数据目录中走通首次引导、模型下载确认、系统音频识别与本地翻译、手动归档和重启读回；这些同样只作为历史记录。本轮已安装并验证新的 Dev 包：真实麦克风与系统音频均能归档并按行时间回听，麦克风归档可用 SenseVoice 追加录后转写版本而不覆盖实时原稿，退出重启后仍能读回原音、版本和设置。此能力尚未进入公开正式版；录后真实翻译权重、多人噪声环境与整场活动的长时间负载尚未验收，不能据此承诺识别效果与稳定性。
 
 macOS 版是 Electron 应用。麦克风由渲染进程采集；系统音频通过 CoreAudio Tap 回环采集，因此只在 macOS 14.2 及以上显示音源切换。ASR 与本地翻译分别运行在隔离子进程中，某个推理进程崩溃不会连带关闭主窗口。Hy-MT2 通过随应用提供的 node-llama-cpp Metal 后端执行，用户无需安装编译工具；应用不在运行时编译或下载可执行推理组件。稳定渠道的设置、归档和模型缓存位于 `~/Library/Application Support/Classroom Translator`；内部验证渠道名为 Subline Internal，使用独立的 `~/Library/Application Support/Classroom Translator Internal`。改名后数据目录和应用标识保持旧值，已有设置、归档、模型及系统授予的麦克风/系统音频权限照常沿用。两者可并排安装，不自动迁移或共用配置、归档和模型缓存。两个渠道来自同一代码库，内部验收后再发布稳定渠道；Internal 的签名、公证状态按各自产物验收，不能沿用稳定版的公证结论。
 
