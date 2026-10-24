@@ -6,16 +6,16 @@
 
 **[简体中文](README.zh-CN.md)** · [Product rules](docs/product/experience.md) · [Code map](docs/project-map.md)
 
-![Subline macOS live English captions and Japanese translations](docs/assets/subline-live-beta6.png)
+![Subline macOS live English captions and Chinese translations](docs/assets/subline-live-beta7.png)
 
-*Live captions in the locally installed beta.6+61ba50a acceptance build: synthetic English test speech was captured through system audio and processed by the recognition and translation models. Output is unedited; this is not a benchmark. All six segments in this regression run translated their current source; the previous context-repeat case no longer reproduced. Beta.6 is not published; the public download below remains beta.5.*
+*Live captions in the installed beta.7+3b1ff86 release build: six English synthetic-speech segments were captured through system audio and translated into Chinese. Output is unedited and includes recognition errors; this is a bounded functional check, not a benchmark. The public beta.7 download contains the same application.*
 
 <details>
 <summary>Settings: model selection, downloads and independent languages</summary>
 
-![Subline beta.6 recognition model picker with selection, download and delete controls](docs/assets/subline-settings-beta6.png)
+![Subline beta.7 recognition model picker with selection, download and delete controls](docs/assets/subline-settings-beta7.png)
 
-![Subline beta.6 translation model picker](docs/assets/subline-translation-models-beta6.png)
+![Subline beta.7 translation model picker](docs/assets/subline-translation-models-beta7.png)
 
 *The same installed build. Each model picker combines selection, download status and download/delete controls; downloaded models can be selected directly.*
 
@@ -33,7 +33,7 @@
 
 ## macOS build and distribution status
 
-**[Download Subline 0.2.0-beta.5](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.5)** — Apple Silicon Mac, macOS 14.2 or newer. Published as a prerelease. Both **Subline.app and its DMG** are Developer ID signed, separately Apple notarized, and stapled; the DMG and contained app passed ticket validation and Gatekeeper checks. An unauthenticated download from the public release matched the published SHA-256 and passed the same artifact checks.
+**[Download Subline 0.2.0-beta.7](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.7)** — Apple Silicon Mac, macOS 14.2 or newer. Published as a prerelease. Both **Subline.app and its DMG** are Developer ID signed, separately Apple notarized, and stapled; both passed ticket validation and Gatekeeper checks. The installed app matches the public package. Verify the download using the included SHA256SUMS.
 
 The public channel contains **Subline.app**, with continuous captions and manual archives. Archive folders and the home-screen language selector belong to the separate **Subline Internal** build.
 
@@ -43,7 +43,7 @@ The public channel contains **Subline.app**, with continuous captions and manual
 4. After download, recognition and local translation run on the Mac. **LM Studio, an API key and a separately started model server are not required.** Allow microphone or system-audio capture when requested. The first translation can take longer while the model loads.
 5. Stop recording, wait for pending translations to finish, then choose the toolbar Archive action and Save. Stopping alone does not save it.
 
-The repaired macOS build has completed short recording, exit and crash-recovery checks. The default **⌥⌘R** shortcut was checked with another app in the foreground. The repaired candidate was tested with Japanese system-audio transcription and Chinese translation; the installed beta.5 restored saved captions after updating. Long continuous recording has not been verified.
+The installed beta.7 completed six English-to-Chinese system-audio caption/translation segments, archive save and restart/readback. Existing settings and all ten prior archives were preserved. Clean upstream SenseVoice/VAD and translation-config downloads passed size/SHA-256 checks; pinned upstream metadata was also verified. Earlier lifecycle checks covered short recording, exit, crash recovery and background **⌥⌘R**. Long continuous recording has not been verified.
 
 Earlier checks covered clean-profile onboarding, real model downloads, system-audio transcription and local translation on a 48 GB development Mac. Real microphone recognition, distant speech, noisy groups, sustained event/development use and other memory capacities remain unqualified. Recognition may contain errors. Web and iOS runtime behavior has not been validated for this release.
 
