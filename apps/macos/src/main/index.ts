@@ -5,6 +5,8 @@ import { createQuitFlow, setupSingleInstance } from './quit-flow';
 import { createRecoveryStore } from './recovery-store';
 import { AudioRecordingStore } from './audio-recordings';
 import { archiveAudioResponse } from './archive-audio-response';
+import { ArchiveRefinementManager } from './archive-refinement';
+import { startRefinementWorker } from './archive-refinement-worker';
 import { createRendererRecovery } from './renderer-recovery';
 import { createAsrStopController } from './asr-stop';
 import { resolveLeaveSession } from './leave-session';
@@ -54,17 +56,19 @@ import {
   type ModelKind,
   type CloseGuard,
   type AudioSource,
+  type ArchiveRefineOptions,
 } from '@rt/core';
 import { localModelCached } from './translation/model-cache';
 import { downloadTranslationModel } from './translation/model-downloader';
 import { loadSettings, saveSettings } from './settings';
 import { asrModelsReady, downloadAsrModels } from './model-downloader';
-import { listArchives, getArchive, saveArchive, deleteArchive, archivedRecordingIds } from './archives';
+import { listArchives, getArchive, saveArchive, deleteArchive, archivedRecordingIds, appendArchiveRevision } from './archives';
 import { ArchiveLibraryStore } from './archive-library';
 import { listSummaries, suggestArchiveTitle } from '@rt/core';
 import { systemAudioSupported } from '../shared/audio-source';
 import asrWorkerPath from './asr-process?modulePath';
 import translateWorkerPath from './translation/translate-process?modulePath';
+import refinementWorkerPath from './refinement-process?modulePath';
 import type {
   StartResult,
   AppSettings,
@@ -215,6 +219,29 @@ let activeRecordingId: string | undefined;
 let activeSource: AudioSource | undefined;
 let activeAudioSamples = 0;
 const audioRecordings = new AudioRecordingStore(() => path.join(app.getPath('userData'), 'recordings'));
+let pipelineStarting = false;
+const refinements = new ArchiveRefinementManager({
+  async prepare(id, options) {
+    if (sessionActive || pipelineStarting) throw new Error('Stop recording before reviewing an archive');
+    const archive = getArchive(id);
+    if (!archive?.audio?.length) throw new Error('This archive has no saved audio');
+    if (!asrModelsReady(MODELS_DIR, options.asrModel)) throw new Error('Download the recognition model in Settings first');
+    if (options.translationModel && !localModelCached(TRANSLATION_CACHE_DIR, getTranslationModel(options.translationModel)!)) {
+      throw new Error('Download the translation model in Settings first');
+    }
+    const audio = await audioRecordings.resolve(archive.audio.map((track) => track.id));
+    // Release idle live engines before allocating a second pair of local models.
+    reconfigureAsr();
+    reconfigureTranslate();
+    return { archiveId: id, modelsDir: MODELS_DIR, cacheDir: TRANSLATION_CACHE_DIR, options,
+      recordings: audio.map((attachment) => ({ attachment, filePath: audioRecordings.pathFor(attachment.id) })) };
+  },
+  start: (job, progress) => startRefinementWorker(job, progress, {
+    asr: refinementWorkerPath, translation: translateWorkerPath, packaged: app.isPackaged,
+  }),
+  save: appendArchiveRevision,
+  progress: (value) => sendToRenderer('archive:refine-progress', value),
+});
 
 // 渲染层的行 id：主进程单调递增，跨 ASR 子进程重启不归零。
 // 子进程内部的段序号随进程生命周期从 0 计，直接透传会与既有行冲突、译文回填错行。
@@ -535,7 +562,8 @@ function startAsrChild(): Promise<void> {
           break;
         case 'segment': {
           // 行 id 改写为主进程计数器的值：UI 上屏与译文回填都以它对应
-          const payload: SegmentPayload = { ...m.payload, id: nextLineId++ };
+          const payload: SegmentPayload = { ...m.payload, id: nextLineId++,
+            ...(activeRecordingId ? { recordingId: activeRecordingId } : {}) };
           sendToRenderer('pipeline:segment', payload); // 原文立即上屏
           translateSegment(payload); // 译文异步回填
           break;
@@ -600,50 +628,53 @@ function ensureAsr(): Promise<void> {
 ipcMain.handle('pipeline:start', async (event): Promise<StartResult> => {
   if (!win || event.sender !== win.webContents) return { ok: false, error: 'Invalid recording window' };
   if (sessionActive) return { ok: true, captureSource: activeSource, captureToken: activeCaptureToken, recordingId: activeRecordingId };
-  const source = effectiveSettings().audioSource;
-  // 系统音频 + 开发模式提示：CoreAudio Tap 的 TCC 责任进程是「启动 Electron 的父程序」——
-  // 从终端/IDE 跑 dev 时责任落在终端/IDE，它们的 Info.plist 没有 NSAudioCaptureUsageDescription，
-  // macOS 会给一条不弹窗、无报错的**静音流**。解法：给终端/IDE 手动授予「仅录制系统音频」权限，
-  // 或用打包产物验证（应用自身 Info.plist 已带该 key，不受影响）。
-  if (!app.isPackaged && source === 'system') {
-    console.warn(
-      '[system-audio] dev 模式下若采集到的系统音频为静音：请在 系统设置 → 隐私与安全性 → ' +
-        '屏幕与系统音频录制 → 仅录制系统音频 中加入你的终端/IDE，或用打包应用验证'
-    );
-  }
-  // 仅麦克风音源需申请麦克风权限；系统音频音源不触碰麦克风权限
-  // （系统音频的录制授权在渲染层 getDisplayMedia 时由系统弹出，见 mac-bridge）。
-  if (source === 'mic' && process.platform === 'darwin') {
-    const granted = await systemPreferences.askForMediaAccess('microphone');
-    if (!granted) {
-      return { ok: false, error: '未获得麦克风权限，请在系统设置中授权', code: 'mic-permission' };
-    }
-  }
-
+  if (refinements.busy || pipelineStarting) return { ok: false, error: 'Wait for the recording review or startup to finish' };
+  pipelineStarting = true;
   try {
-    // 仅真冷启动（fork 子进程装模型）才报 loading：预热后复用路径瞬时完成，
-    // 报 loading 会让每次开始录音都闪一次「识别模型加载中」的误导提示。
-    if (!asrChild) {
-      sendToRenderer('pipeline:status', { state: 'loading' });
+    const source = effectiveSettings().audioSource;
+    // 系统音频 + 开发模式提示：CoreAudio Tap 的 TCC 责任进程是「启动 Electron 的父程序」——
+    // 从终端/IDE 跑 dev 时责任落在终端/IDE，它们的 Info.plist 没有 NSAudioCaptureUsageDescription，
+    // macOS 会给一条不弹窗、无报错的**静音流**。解法：给终端/IDE 手动授予「仅录制系统音频」权限，
+    // 或用打包产物验证（应用自身 Info.plist 已带该 key，不受影响）。
+    if (!app.isPackaged && source === 'system') {
+      console.warn(
+        '[system-audio] dev 模式下若采集到的系统音频为静音：请在 系统设置 → 隐私与安全性 → ' +
+          '屏幕与系统音频录制 → 仅录制系统音频 中加入你的终端/IDE，或用打包应用验证'
+      );
     }
-    await ensureAsr();
-    await audioRecordings.finish();
-    activeRecordingId = source === 'system' && process.platform === 'darwin'
-      ? (await audioRecordings.start()).id : undefined;
-  } catch (err) {
-    return { ok: false, error: (err as Error).message };
-  }
-  // 子进程跨会话复用：每次开始录音都重置计时基线，segment.start 相对本次会话起点
-  asrChild?.postMessage({ type: 'reset' });
-  resetReverseTranslationContext(reverseCtx); // 外语历史只在本次会话内有效
-  translationContext.reset();
-  sendToRenderer('pipeline:status', { state: 'running' });
-  sessionActive = true;
-  activeSource = source;
-  activeAudioSamples = 0;
-  activeCaptureToken = randomUUID();
-  displaySleep.start();
-  return { ok: true, captureSource: source, captureToken: activeCaptureToken, recordingId: activeRecordingId };
+    // 仅麦克风音源需申请麦克风权限；系统音频音源不触碰麦克风权限
+    // （系统音频的录制授权在渲染层 getDisplayMedia 时由系统弹出，见 mac-bridge）。
+    if (source === 'mic' && process.platform === 'darwin') {
+      const granted = await systemPreferences.askForMediaAccess('microphone');
+      if (!granted) {
+        return { ok: false, error: '未获得麦克风权限，请在系统设置中授权', code: 'mic-permission' };
+      }
+    }
+
+    try {
+      // 仅真冷启动（fork 子进程装模型）才报 loading：预热后复用路径瞬时完成，
+      // 报 loading 会让每次开始录音都闪一次「识别模型加载中」的误导提示。
+      if (!asrChild) {
+        sendToRenderer('pipeline:status', { state: 'loading' });
+      }
+      await ensureAsr();
+      await audioRecordings.finish();
+      activeRecordingId = process.platform === 'darwin' ? (await audioRecordings.start(source)).id : undefined;
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+    // 子进程跨会话复用：每次开始录音都重置计时基线，segment.start 相对本次会话起点
+    asrChild?.postMessage({ type: 'reset' });
+    resetReverseTranslationContext(reverseCtx); // 外语历史只在本次会话内有效
+    translationContext.reset();
+    sendToRenderer('pipeline:status', { state: 'running' });
+    sessionActive = true;
+    activeSource = source;
+    activeAudioSamples = 0;
+    activeCaptureToken = randomUUID();
+    displaySleep.start();
+    return { ok: true, captureSource: source, captureToken: activeCaptureToken, recordingId: activeRecordingId };
+  } finally { pipelineStarting = false; }
 });
 
 // 预热 ASR 管线：把识别模型装载进内存，绝不触碰麦克风、不申请权限；模型未下载时静默跳过。
@@ -652,6 +683,10 @@ ipcMain.handle('pipeline:start', async (event): Promise<StartResult> => {
 // pipeline:status 的 stopped 终态收尾解禁。与并发的 pipeline:start 共用 ensureAsr 单飞天然合流。
 // 冷启动失败时子进程的 error 状态会照常上报（用户未操作也能看到提示），随后仍以 stopped 收尾。
 ipcMain.on('pipeline:prewarm', () => {
+  if (refinements.busy) {
+    sendToRenderer('pipeline:status', { state: 'stopped' });
+    return;
+  }
   if (!asrModelsReady(MODELS_DIR, loadSettings().asr.model)) {
     sendToRenderer('pipeline:status', { state: 'stopped' });
     return;
@@ -769,6 +804,7 @@ ipcMain.handle('models:list', (): ModelInfo[] => {
 // 在用则先 kill 对应子进程释放文件句柄（下次 start/translate 按新设置重建）。models:delete 与
 // models:cancel-download 共用；未知 id 抛错。
 function deleteModelFiles(kind: ModelKind, id: string): void {
+  if (refinements.busy) throw new Error('A recording review is using local models');
   if (kind === 'asr') {
     const spec = getAsrModel(id);
     if (!spec) throw new Error('未知的识别模型');
@@ -903,6 +939,15 @@ ipcMain.handle('archive:audio-url', (_event, archiveId: string, recordingId: str
   if (!getArchive(archiveId)?.audio?.some((audio) => audio.id === recordingId)) throw new Error('Recording not found in archive');
   return `subline-audio://archive/${encodeURIComponent(archiveId)}/${encodeURIComponent(recordingId)}`;
 });
+ipcMain.handle('archive:refine', (event, id: string, options: ArchiveRefineOptions) => {
+  if (buildVariant !== 'dev' || !win || event.sender !== win.webContents) throw new Error('Recording review is only available in Subline Dev');
+  if (typeof id !== 'string' || !getArchive(id)) throw new Error('Archive not found');
+  return refinements.run(id, options);
+});
+ipcMain.handle('archive:refine-cancel', (event, id: string) => {
+  if (!win || event.sender !== win.webContents) throw new Error('Invalid recording review window');
+  refinements.cancel(id);
+});
 ipcMain.handle('archive:save', async (_event, name: string, lines: ArchiveLine[], folderId?: string | null, audioIds?: string[]) => {
   const audio = await archiveAudio(audioIds);
   if (internalArchives) {
@@ -956,6 +1001,7 @@ ipcMain.handle('archive:save-before-close', async (event, token: string, lines: 
   await saveArchive(path.basename(filePath, path.extname(filePath)), lines, Date.now(), undefined, audio);
 });
 ipcMain.handle('archive:delete', async (_event, id: string) => {
+  if (refinements.isActive(id)) throw new Error('Wait for the recording review to finish before deleting this archive');
   const audioIds = getArchive(id)?.audio?.map((audio) => audio.id) ?? [];
   await deleteArchive(id);
   const protectedIds = archivedRecordingIds();
@@ -1107,6 +1153,7 @@ const quitFlow = createQuitFlow({
   cleanup: () => {
     // Attempt every release even if one native resource has already gone away.
     for (const release of [
+      () => { try { refinements.cancel(); } catch { /* A completed result may already be saving. */ } },
       () => asrChild?.kill(),
       () => translateChild?.proc.kill(),
       () => globalShortcut.unregisterAll(),

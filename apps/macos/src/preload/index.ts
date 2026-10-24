@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type { ElectronApi } from '../shared/types';
 import { availableAudioSources } from '../shared/audio-source';
+declare const __SUBLINE_VARIANT__: 'dev' | 'release';
 
 // 订阅主进程事件并返回反注册函数（AppBridge on* 契约：追加语义 + 可退订）
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
@@ -49,6 +50,11 @@ const api: ElectronApi = {
   listUnarchivedRecordings: () => ipcRenderer.invoke('recordings:unarchived'),
   discardRecordings: (ids) => ipcRenderer.invoke('recordings:discard', ids),
   getArchiveAudioUrl: (archiveId, recordingId) => ipcRenderer.invoke('archive:audio-url', archiveId, recordingId),
+  ...(__SUBLINE_VARIANT__ === 'dev' ? {
+    refineArchive: ((archiveId, options) => ipcRenderer.invoke('archive:refine', archiveId, options)) as NonNullable<ElectronApi['refineArchive']>,
+    cancelArchiveRefinement: ((archiveId) => ipcRenderer.invoke('archive:refine-cancel', archiveId)) as NonNullable<ElectronApi['cancelArchiveRefinement']>,
+    onArchiveRefineProgress: ((cb) => subscribe('archive:refine-progress', cb)) as NonNullable<ElectronApi['onArchiveRefineProgress']>,
+  } : {}),
   getArchiveLibrary: () => ipcRenderer.invoke('archive:library'),
   createArchiveFolder: (name) => ipcRenderer.invoke('archive:folder-create', name),
   renameArchiveFolder: (id, name) => ipcRenderer.invoke('archive:folder-rename', id, name),

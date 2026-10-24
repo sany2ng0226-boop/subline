@@ -3,6 +3,7 @@
 
 /** 一条最终确定的转写结果 */
 export interface SegmentPayload {
+  recordingId?: string;
   /** 段序号，译文异步回来时用它对应到正确的行 */
   id: number;
   text: string;
@@ -178,6 +179,9 @@ export interface ModelInfo {
 
 /** 归档里的一行对话 */
 export interface ArchiveLine {
+  lang?: string;
+  /** Precise offset into one saved recording; legacy archives may have no audio link. */
+  audio?: { recordingId: string; start: number; duration: number };
   /** Local HH:MM:SS, captured when transcribing; absent in legacy archives. */
   time?: string;
   text: string;
@@ -197,7 +201,7 @@ export interface ArchiveLibrary {
 /** Local speech-quality capture of system audio, independent of recognition success. */
 export interface AudioAttachment {
   id: string;
-  source: 'system';
+  source: AudioSource;
   format: 'wav';
   sampleRate: number;
   channels: number;
@@ -214,6 +218,30 @@ export interface ArchiveRecord {
   createdAt: number;
   lines: ArchiveLine[];
   audio?: AudioAttachment[];
+  /** Recorded live lines above are immutable; post-recording results are separate revisions. */
+  revisions?: ArchiveRevision[];
+}
+
+export interface ArchiveRefineOptions {
+  asrModel: string;
+  language: AsrLang;
+  translationModel?: LocalEngine;
+  targetLang: UiLang;
+}
+
+export interface ArchiveRevision {
+  id: string;
+  createdAt: number;
+  options: ArchiveRefineOptions;
+  lines: ArchiveLine[];
+}
+
+export interface ArchiveRefineProgress {
+  archiveId: string;
+  state: 'transcribing' | 'translating' | 'saving' | 'done' | 'cancelled' | 'error';
+  completed: number;
+  total: number;
+  error?: string;
 }
 
 /** 归档列表项（不含完整内容，仅摘要） */

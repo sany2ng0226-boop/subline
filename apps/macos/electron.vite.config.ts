@@ -21,6 +21,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin({ exclude: ['@rt/core'] })],
   },
   preload: {
+    define: { __SUBLINE_VARIANT__: JSON.stringify(process.env['SUBLINE_VARIANT'] === 'dev' ? 'dev' : 'release') },
     resolve: { alias: { '@rt/core': resolve(root, '../../packages/core/src/index.ts') } },
     plugins: [externalizeDepsPlugin({ exclude: ['@rt/core'] })],
   },

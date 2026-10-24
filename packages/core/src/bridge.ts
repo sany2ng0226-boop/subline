@@ -24,6 +24,8 @@ import type {
   ArchiveLibrary,
   ArchiveSummary,
   ArchiveRecord,
+  ArchiveRefineOptions,
+  ArchiveRefineProgress,
 } from './types';
 
 /** 关闭窗口或退出应用前的确认文案；由 UI 本地化后交给宿主展示。 */
@@ -157,6 +159,9 @@ export interface AppBridge {
   listUnarchivedRecordings?(): Promise<string[]>;
   discardRecordings?(ids: string[]): Promise<void>;
   getArchiveAudioUrl?(archiveId: string, recordingId: string): Promise<string>;
+  refineArchive?(archiveId: string, options: ArchiveRefineOptions): Promise<ArchiveRecord>;
+  cancelArchiveRefinement?(archiveId: string): Promise<void>;
+  onArchiveRefineProgress?(cb: (progress: ArchiveRefineProgress) => void): () => void;
   getArchiveLibrary?(): Promise<ArchiveLibrary>;
   createArchiveFolder?(name: string): Promise<ArchiveLibrary>;
   renameArchiveFolder?(id: string, name: string): Promise<ArchiveLibrary>;

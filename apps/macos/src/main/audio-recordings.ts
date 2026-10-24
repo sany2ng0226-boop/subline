@@ -2,13 +2,13 @@ import fs, { type FileHandle } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { AudioAttachment } from '@rt/core';
+import type { AudioAttachment, AudioSource } from '@rt/core';
 
 const SAMPLE_RATE = 16_000;
 const HEADER_BYTES = 44;
 const MAX_DATA_BYTES = 0xffff_ffff - 36;
 export const MAX_QUEUED_PCM_BYTES = 8 * 1024 * 1024;
-const ID_PATTERN = /^audio-(\d{13})-([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/;
+const ID_PATTERN = /^audio-(\d{13})-([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})(-mic)?$/;
 
 type RecordingStart = { id: string; startedAt: number; sampleRate: number; channels: number };
 type Recording = RecordingStart & {
@@ -86,14 +86,15 @@ export class AudioRecordingStore {
     return result;
   }
 
-  start(): Promise<RecordingStart> {
+  start(source: AudioSource = 'system'): Promise<RecordingStart> {
+    if (source !== 'mic' && source !== 'system') return Promise.reject(new Error('Invalid audio source'));
     const session = ++this.requestedSession;
     this.stoppedThrough = session - 1;
     if (this.active) this.active.accepting = false;
     return this.serialize(async () => {
       await this.finishActive();
       const startedAt = Date.now();
-      const id = `audio-${startedAt}-${randomUUID()}`;
+      const id = `audio-${startedAt}-${randomUUID()}${source === 'mic' ? '-mic' : ''}`;
       await fs.mkdir(this.root(), { recursive: true, mode: 0o700 });
       const handle = await fs.open(this.pathFor(id), 'wx', 0o600);
       try { await writeAll(handle, header(0), 0); }
@@ -186,7 +187,7 @@ export class AudioRecordingStore {
         await writeAll(handle, expected, 0);
         await handle.sync();
       }
-      return { id, source: 'system', format: 'wav', sampleRate: SAMPLE_RATE, channels: 1,
+      return { id, source: id.endsWith('-mic') ? 'mic' : 'system', format: 'wav', sampleRate: SAMPLE_RATE, channels: 1,
         durationMs: Math.round(dataBytes / (SAMPLE_RATE * 2) * 1000), startedAt,
         bytes: HEADER_BYTES + dataBytes };
     } finally { await handle.close(); }

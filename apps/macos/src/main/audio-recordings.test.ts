@@ -20,6 +20,21 @@ function tone(seconds = 0.1): Float32Array {
   return Float32Array.from({ length: Math.round(seconds * 16_000) }, (_, i) => Math.sin(i * 2 * Math.PI * 440 / 16_000) * 0.5);
 }
 
+it('preserves microphone provenance and the short tail across reopening without changing legacy system IDs', async () => {
+  const mic = await store.start('mic');
+  store.append(tone(0.013));
+  await store.finish();
+  const system = await store.start('system');
+  store.append(tone(0.1));
+  await store.finish();
+  const reopened = new AudioRecordingStore(() => dir);
+  const audio = await reopened.resolve([mic.id, system.id]);
+  expect(audio[0]).toMatchObject({ source: 'mic', durationMs: 13, bytes: 44 + 208 * 2 });
+  expect(audio[1]).toMatchObject({ source: 'system', durationMs: 100 });
+  expect(mic.id).toMatch(/-mic$/);
+  expect(system.id).not.toMatch(/-mic$/);
+});
+
 it('writes multiple frames into one PCM16 mono WAV and waits for all queued data on finish', async () => {
   const started = await store.start();
   const frame = tone();

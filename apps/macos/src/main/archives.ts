@@ -5,6 +5,7 @@ import path from 'node:path';
 import { app } from 'electron';
 import { listSummaries, makeArchiveId } from '@rt/core';
 import type { ArchiveLine, ArchiveRecord, ArchiveSummary, AudioAttachment } from '../shared/types';
+import type { ArchiveRevision } from '@rt/core';
 
 let cached: ArchiveRecord[] | null = null;
 
@@ -100,4 +101,15 @@ export function saveArchive(name: string, lines: ArchiveLine[], createdAt: numbe
 
 export function deleteArchive(id: string): Promise<ArchiveSummary[]> {
   return mutate((records) => records.filter((r) => r.id !== id));
+}
+
+export async function appendArchiveRevision(id: string, revision: ArchiveRevision): Promise<ArchiveRecord> {
+  await mutate((records) => {
+    const record = records.find((entry) => entry.id === id);
+    if (!record) throw new Error('Archive not found');
+    if (record.revisions?.some((entry) => entry.id === revision.id)) throw new Error('Duplicate revision');
+    return records.map((entry) => entry.id === id
+      ? { ...entry, revisions: [...(entry.revisions ?? []), revision] } : entry);
+  });
+  return getArchive(id)!;
 }

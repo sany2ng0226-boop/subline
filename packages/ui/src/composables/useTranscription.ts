@@ -1,5 +1,5 @@
 import { computed, reactive, ref } from 'vue';
-import type { PipelineErrorCode, TranslationStatusPayload } from '@rt/core';
+import type { ArchiveLine, PipelineErrorCode, TranslationStatusPayload } from '@rt/core';
 import { fmtClock } from '../utils/datetime';
 import { pipelineErrorCode } from '../utils/micPermission';
 import { bridge } from '../bridge';
@@ -8,6 +8,7 @@ export interface TranscriptLine {
   /** Stable view identity survives provisional text becoming a finalized segment. */
   displayId: number;
   lang?: string;
+  audio?: ArchiveLine['audio'];
   id: number;
   time: string;
   text: string;
@@ -80,6 +81,7 @@ export function registerTranscriptionListeners(): void {
     const line = draftLine.value ?? makeDraft(seg.text);
     Object.assign(line, {
       id: seg.id, time: fmtTime(seg.start), text: seg.text, lang: seg.lang,
+      ...(seg.recordingId ? { audio: { recordingId: seg.recordingId, start: seg.start, duration: seg.duration } } : {}),
       translation: '', translating: false, failed: false,
     });
     lines.push(line);
@@ -290,17 +292,19 @@ function resetDraft(): void {
 /** A provisional stream must never be persisted as a completed translation. */
 export function archiveSnapshot() {
   return lines.map(line => ({ time: line.time, text: line.text,
-    translation: line.translationPartial ? '' : line.translation }));
+    translation: line.translationPartial ? '' : line.translation,
+    ...(line.lang ? { lang: line.lang } : {}), ...(line.audio ? { audio: { ...line.audio } } : {}) }));
 }
 
 /** 崩溃暂存用的快照：在归档快照基础上保留每行语言 */
 export function recoverySnapshot(): RecoveredLine[] {
   return lines.map((line) => ({ time: line.time, text: line.text,
     translation: line.translationPartial ? '' : line.translation,
+    ...(line.audio ? { audio: { ...line.audio } } : {}),
     ...(line.lang ? { lang: line.lang } : {}) }));
 }
 
-export interface RecoveredLine { time: string; text: string; translation: string; lang?: string }
+export interface RecoveredLine { time: string; text: string; translation: string; lang?: string; audio?: ArchiveLine['audio'] }
 
 // 恢复行用负 id：新会话的 segment id 从头计数，不能让迟到的译文串到旧行上
 let nextRecoveredId = -2;
@@ -311,6 +315,7 @@ export function restoreLines(saved: RecoveredLine[]): void {
   lines.unshift(...saved.map((line): TranscriptLine => ({
     displayId: ++nextDisplayId, id: nextRecoveredId--, time: line.time, text: line.text,
     translation: line.translation, translating: false, failed: false,
+    ...(line.audio ? { audio: { ...line.audio } } : {}),
     ...(line.lang ? { lang: line.lang } : {}),
   })));
 }

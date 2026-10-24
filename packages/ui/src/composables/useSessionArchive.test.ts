@@ -42,6 +42,18 @@ it('keeps the close guard while a cleared transcript can still be undone', async
   expect(guard).toBeNull();
 });
 
+it('retains per-recording offsets through recovery and archiving after several sessions', async () => {
+  const audio = { recordingId: 'mic-session-two', start: 0.37, duration: 1.28 };
+  callbacks.onSegment({ id: 2, text: '保存时间位置', lang: 'ja', start: audio.start,
+    duration: audio.duration, recordingId: audio.recordingId });
+  const recovery = transcription.recoverySnapshot();
+  expect(recovery[0]).toMatchObject({ audio, lang: 'ja' });
+  transcription.clearTranscript();
+  transcription.restoreLines(recovery);
+  await (await import('./useSessionArchive')).archiveSession('offset-test');
+  expect(saveArchive.mock.calls[0][1][0]).toMatchObject({ audio, lang: 'ja', text: '保存时间位置' });
+});
+
 it('archive-and-quit during the undo window archives the cleared lines', async () => {
   callbacks.onSegment({ id: 1, text: 'a', start: 0, duration: 1 });
   transcription.deleteTranscript();

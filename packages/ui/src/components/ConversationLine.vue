@@ -15,12 +15,18 @@ defineProps<{
   translating?: boolean;
   failed?: boolean;
   failedDetail?: string;
+  /** 归档详情：有原音偏移的行把时间做成「从此处播放」按钮（seekLabel 即其无障碍名称）。 */
+  seekLabel?: string;
+  /** 归档详情：播放位置正落在这一行。 */
+  active?: boolean;
 }>();
+const emit = defineEmits<{ seek: [] }>();
 </script>
 
 <template>
-  <div class="mb-3.5 flex gap-3">
-    <time v-if="time" class="timeline-time">{{ time }}</time>
+  <div class="mb-3.5 flex gap-3" :class="{ 'line-active': active }" :aria-current="active ? 'true' : undefined">
+    <button v-if="seekLabel" type="button" class="timeline-time line-seek" :aria-label="seekLabel" :title="seekLabel" @click="emit('seek')">{{ time }}</button>
+    <time v-else-if="time" class="timeline-time">{{ time }}</time>
     <div class="min-w-0 flex-1">
       <div
         :class="[
@@ -53,3 +59,11 @@ defineProps<{
     </div>
   </div>
 </template>
+
+<style scoped>
+.line-seek { text-align: left; cursor: pointer; border-radius: 4px; text-decoration: underline dotted transparent; text-underline-offset: 3px; }
+.line-seek:hover { color: var(--rt-accent); text-decoration-color: currentColor; }
+.line-seek:focus-visible { outline: 2px solid var(--rt-accent); outline-offset: 2px; }
+.line-active .timeline-time { color: var(--rt-accent); }
+.line-active > div > div:first-child { color: var(--rt-ink); }
+</style>
