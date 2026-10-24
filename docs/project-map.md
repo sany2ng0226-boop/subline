@@ -71,7 +71,7 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 - `apps/macos/src/main/archives.ts` 保留 `archives.json` 的记录数组格式，读取旧记录不做迁移；`archive-library.ts` 单独管理 `archive-library.json` 中的文件夹及记录元数据覆盖，改名和移动不重写归档正文。归档正文与元数据各自通过原子替换落盘，UI 等待保存成功后才清屏。
 - 文件夹能力同时受 UI 的 `__INTERNAL_BUILD__`、可选 `AppBridge.getArchiveLibrary` 能力和桌面主进程的 Internal 应用身份、Windows 候选版或隔离预览 profile 检查约束；稳定渠道、Web 与 iOS 保留原路径。
 - `apps/macos/src/main/settings.ts` 仅对新建设置预选本地 `hy-mt2-7b`，翻译默认保持关闭；已有设置由共享兼容逻辑读取。正式应用名为 Subline，应用标识仍为 `io.github.sany2ng0226.classroomtranslator`，独立数据目录为 `~/Library/Application Support/Classroom Translator`。
-- 模型清单、大小、语言、平台可用性、有序下载源和可选完整性字段的单一事实源是 `packages/core/src/model-registry.ts`；上游基址、Hugging Face 固定提交、pin 表和未启用的 Subline 自托管源集中在 `packages/core/src/model-sources.ts`。原生端下载器只对带 pin 的文件校验精确字节数和 SHA-256；Hy-MT2 及今后未登记 pin 的文件保持可下载。各宿主将文件下载到本端模型目录或 Cache Storage，再由对应推理运行时离线装载；Web 的 M2M-100 418M 下载仍使用主分支 URL，以保持 Transformers.js 缓存键兼容。
+- 模型清单、大小、语言、平台可用性、有序下载源和可选完整性字段的单一事实源是 `packages/core/src/model-registry.ts`；共用上游基址、Hugging Face 固定提交、通用 pin 表和未启用的 Subline 自托管源集中在 `packages/core/src/model-sources.ts`。Hy-MT2 的固定上游 revision、精确字节数和 SHA-256 直接跟随其文件条目登记在注册表中。原生端下载器对所有带 pin 的文件校验精确字节数和 SHA-256；今后未登记 pin 的文件仍可下载。各宿主将文件下载到本端模型目录或 Cache Storage，再由对应推理运行时离线装载；Web 的 M2M-100 418M 下载仍使用主分支 URL，以保持 Transformers.js 缓存键兼容。
 
 ## 测试与构建位置
 
