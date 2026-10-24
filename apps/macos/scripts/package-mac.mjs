@@ -15,6 +15,8 @@ const releaseDir = process.env.RT_RELEASE_DIR
   : path.join(appDir, process.argv.includes('--preview') ? 'release-preview' : 'release');
 const dirOnly = process.argv.includes('--dir');
 const preview = process.argv.includes('--preview');
+// CI notarizes and staples the app before constructing the DMG.
+const manualNotarize = process.argv.includes('--manual-notarize');
 
 const run = (cmd, cwd) => execSync(cmd, { cwd, stdio: 'inherit' });
 
@@ -32,11 +34,12 @@ run(`pnpm --filter @rt/macos deploy --prod=false "${deployDir}"`, root);
 
 console.log('▶ 4/4 打包 (electron-builder)');
 const target = dirOnly ? '--dir' : '';
-// 版本单一来源：apps/macos/package.json 恒为 0.0.0 占位，打包时用根 package.json 的版本
-// 覆盖（-c.extraMetadata.version），决定 dmg 文件名与 App 的 CFBundleShortVersionString。
+// 打包版本来自根 package.json；发布 CI 要求它与 macOS 包版本和标签一致。
+// extraMetadata.version 决定 dmg 文件名与 App 的 CFBundleShortVersionString。
 const { version } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 run(
-  `./node_modules/.bin/electron-builder --mac ${target} -c.extraMetadata.version="${version}" ` +
+  `./node_modules/.bin/electron-builder --mac --arm64 ${target} -c.extraMetadata.version="${version}" ` +
+  (manualNotarize ? '-c.mac.notarize=false -c.forceCodeSigning=true --publish never ' : '') +
   (preview ? '-c.appId=io.github.sany2ng0226.classroomtranslator.preview -c.productName="Subline Internal" -c.extraMetadata.name=realtime-translator-internal -c.extraMetadata.productName="Subline Internal" ' : '-c.extraMetadata.name=realtime-translator -c.extraMetadata.productName="Subline" ') +
   `-c.directories.output="${releaseDir}"`,
   deployDir
