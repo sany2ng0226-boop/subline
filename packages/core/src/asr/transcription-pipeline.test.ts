@@ -4,6 +4,7 @@ import {
   cleanAsrText,
   SAMPLE_RATE,
   type AsrInferenceEngine,
+  type PipelineWindowDiagnostic,
 } from './transcription-pipeline';
 import type { SegmentPayload, AsrCommitStrategy, PartialPayload } from '../types';
 
@@ -107,7 +108,7 @@ interface RampHarness {
   feed(seconds: number, detected: boolean): void;
 }
 
-function makeRampHarness(strategy: AsrCommitStrategy = 'agreement'): RampHarness {
+function makeRampHarness(strategy: AsrCommitStrategy = 'agreement', onDiagnostic?: (event: PipelineWindowDiagnostic) => void): RampHarness {
   const engine = new RampEngine();
   const segments: SegmentPayload[] = [];
   const partials: string[] = [];
@@ -118,6 +119,7 @@ function makeRampHarness(strategy: AsrCommitStrategy = 'agreement'): RampHarness
       onPartial: (p) => partials.push(p.text),
     },
     strategy,
+    onDiagnostic,
   );
   let fed = 0; // 已喂入采样总数（与管线 totalSamples 同步，用作绝对序号）
   return {
@@ -566,6 +568,95 @@ describe('停滞保护', () => {
     expect(h.engine.calls.every((c) => c.endSec - c.startSec <= 9)).toBe(true);
     // 确实增长过（不是每次都很短）——证明是「增长到上限再回落」而非从不增长
     expect(h.engine.calls.some((c) => c.endSec - c.startSec >= 7)).toBe(true);
+  });
+});
+
+describe('只读窗口诊断', () => {
+  const body = '半分基本の十項目かける五点';
+  function stalled(h: RampHarness): void {
+    let calls = 0;
+    const continuation = scheduleDecode(Array.from('次の評価項目です。').map((ch, i) => ({ t: 8.4 + i * 0.08, ch })), 0.08);
+    h.engine.respond = (start, end) => {
+      if (start >= 1) return continuation(start, end);
+      const text = `${++calls % 2 ? '50%' : '五十パーセント'}${body}`;
+      const tokens = Array.from(text);
+      const duration = (end - start) / tokens.length;
+      return { text, tokens, timestamps: tokens.map((_, i) => i * duration), durations: tokens.map(() => duration) };
+    };
+    h.feed(10, true);
+    h.feed(0.6, false);
+  }
+  function empty(h: RampHarness): void {
+    let calls = 0;
+    h.engine.respond = () => ({ text: ++calls === 1 ? 'あ' : '', tokens: ['あ'], timestamps: [0], durations: [0.1] });
+    h.feed(10, true);
+    h.feed(0.6, false);
+  }
+
+  it('只有实际执行检查点时才报告其精确窗口和保存文字', () => {
+    const events: PipelineWindowDiagnostic[] = [];
+    const h = makeRampHarness('agreement', event => events.push(event));
+    stalled(h);
+    const checkpoints = events.filter(event => event.kind === 'stall-checkpoint');
+    expect(checkpoints).toHaveLength(1);
+    expect(checkpoints[0]).toMatchObject({
+      kind: 'stall-checkpoint', strategy: 'agreement', unit: 'session-seconds',
+      windowStart: 0, committedPrefix: '',
+    });
+    expect(checkpoints[0].to).toBeCloseTo(8.4, 5);
+    expect(checkpoints[0].nextWindowStart).toBe(checkpoints[0].to);
+    expect(checkpoints[0].savedText).toBe(checkpoints[0].currentText);
+    expect(checkpoints[0].savedText).toContain(body);
+    expect(events.some(event => event.kind === 'stall-fallback')).toBe(false);
+  });
+
+  it('普通滑动报告实际切点与保留文字，不误报停滞检查点', () => {
+    const events: PipelineWindowDiagnostic[] = [];
+    const h = makeRampHarness('agreement', event => events.push(event));
+    h.engine.respond = virtualDecode;
+    h.feed(9, true);
+    h.feed(0.6, false);
+    const slides = events.filter(event => event.kind === 'ordinary-slide');
+    expect(slides.length).toBeGreaterThan(0);
+    expect(events.every(event => event.kind === 'ordinary-slide')).toBe(true);
+    for (const event of slides) {
+      expect(event.nextWindowStart).toBeCloseTo(event.windowStart + event.alignedEndSec, 5);
+      expect(event.savedText + event.retainedText).toBe(event.committedPrefix);
+      expect(Array.from(event.savedText)).toHaveLength(event.cutLen);
+      expect(event.currentText.startsWith(event.committedPrefix)).toBe(true);
+    }
+  });
+
+  it('空识别回退明确报告原因与保留短尾巴的窗口', () => {
+    const events: PipelineWindowDiagnostic[] = [];
+    const h = makeRampHarness('agreement', event => events.push(event));
+    empty(h);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      kind: 'stall-fallback', reason: 'empty-current', windowStart: 0,
+      currentText: '', committedPrefix: '', savedText: '',
+    });
+    expect(events[0].nextWindowStart).toBeCloseTo(events[0].to - 4, 5);
+  });
+
+  it('启用、禁用或抛异常的诊断回调都不改变识别输出或解码窗口', () => {
+    for (const run of [stalled, empty, (h: RampHarness) => {
+      h.engine.respond = virtualDecode;
+      h.feed(9, true);
+      h.feed(0.6, false);
+    }]) {
+      const baseline = makeRampHarness();
+      const observed = makeRampHarness('agreement', () => {});
+      const throwing = makeRampHarness('agreement', () => { throw new Error('diagnostic failure'); });
+      run(baseline);
+      run(observed);
+      expect(() => run(throwing)).not.toThrow();
+      for (const h of [observed, throwing]) {
+        expect(h.segments).toEqual(baseline.segments);
+        expect(h.partials).toEqual(baseline.partials);
+        expect(h.engine.calls).toEqual(baseline.engine.calls);
+      }
+    }
   });
 });
 

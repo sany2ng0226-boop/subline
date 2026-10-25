@@ -333,6 +333,24 @@ export interface PipelineCallbacks {
   onPartial?: (partial: PartialPayload) => void;
 }
 
+interface WindowDiagnosticBoundary {
+  strategy: AsrCommitStrategy;
+  unit: 'session-seconds';
+  windowStart: number;
+  to: number;
+  nextWindowStart: number;
+  committedPrefix: string;
+  currentText: string;
+  savedText: string;
+}
+
+export type PipelineWindowDiagnostic =
+  | (WindowDiagnosticBoundary & { kind: 'stall-checkpoint' })
+  | (WindowDiagnosticBoundary & { kind: 'stall-fallback';
+      reason: 'chunk' | 'missing-timestamps' | 'empty-current' | 'conflicting-current' | 'no-advance' })
+  | (WindowDiagnosticBoundary & { kind: 'ordinary-slide'; cutLen: number; alignedEndSec: number;
+      retainedText: string; retainedHypothesis: string });
+
 interface HistoryChunk {
   start: number;
   samples: Float32Array;
@@ -352,6 +370,7 @@ export class TranscriptionPipeline {
   private readonly onPartial: (partial: PartialPayload) => void;
   // 行内文本提交策略（按模型解码特性选择，见文件头与 AsrModelSpec.commitStrategy）
   private readonly commitStrategy: AsrCommitStrategy;
+  private readonly onDiagnostic?: (event: PipelineWindowDiagnostic) => void;
 
   // VAD 要求按固定窗口大小喂数据，这里做积攒
   private pending = new Float32Array(0);
@@ -392,11 +411,13 @@ export class TranscriptionPipeline {
     engine: AsrInferenceEngine,
     callbacks: PipelineCallbacks,
     commitStrategy: AsrCommitStrategy = 'agreement',
+    onDiagnostic?: (event: PipelineWindowDiagnostic) => void,
   ) {
     this.engine = engine;
     this.onSegment = callbacks.onSegment;
     this.onPartial = callbacks.onPartial ?? (() => {});
     this.commitStrategy = commitStrategy;
+    this.onDiagnostic = onDiagnostic;
   }
 
   private rememberHistory(samples: Float32Array): void {
@@ -559,7 +580,7 @@ export class TranscriptionPipeline {
       // chunk 的 fallback（确认无时间戳）不做停滞前移：窗口解码已被尾部截断限界，前移
       // 反而会丢弃 finalize 时本可整体补解的音频（agreement 的停滞不丢已提交文本，不受此限）。
       // chunk 的块提交即窗口前移，progressed 同时充当 advanced。
-      if (this.engineHasTimestamps !== false) this.maybeStall(now, progressed, progressed);
+      if (this.engineHasTimestamps !== false) this.maybeStall(now, progressed, progressed, cur);
       return;
     }
 
@@ -648,8 +669,10 @@ export class TranscriptionPipeline {
     if (!aligned || aligned.endSec < threshold) return false;
 
     const previousCommitted = this.committedInWindow;
+    const previousWindowStart = this.windowStart;
     const cps = Array.from(previousCommitted);
-    this.committedDone += cps.slice(0, aligned.cutLen).join('');
+    const savedText = cps.slice(0, aligned.cutLen).join('');
+    this.committedDone += savedText;
     this.committedInWindow = cps.slice(aligned.cutLen).join('');
     // 历史最佳候选若仍与已提交前缀兼容，应从它自身裁掉滑出的部分。用当前 cur 覆盖会在
     // “先展示长句、下一 tick 收缩并触发滑动”时把刚保存的完整尾巴再次丢掉。
@@ -660,6 +683,19 @@ export class TranscriptionPipeline {
     this.windowStart += advance;
     // 窗口变了，旧解码不可比
     this.prevDecode = null;
+    if (this.onDiagnostic) {
+      try {
+        this.onDiagnostic({
+          kind: 'ordinary-slide', strategy: this.commitStrategy, unit: 'session-seconds',
+          windowStart: (previousWindowStart - this.sessionBase) / SAMPLE_RATE,
+          to: (now - this.sessionBase) / SAMPLE_RATE,
+          nextWindowStart: (this.windowStart - this.sessionBase) / SAMPLE_RATE,
+          committedPrefix: previousCommitted, currentText: cur.text, savedText,
+          cutLen: aligned.cutLen, alignedEndSec: aligned.endSec,
+          retainedText: this.committedInWindow, retainedHypothesis: this.bestWindowHypothesis,
+        });
+      } catch { /* Diagnostics cannot interrupt audio processing. */ }
+    }
     return true;
   }
 
@@ -684,6 +720,8 @@ export class TranscriptionPipeline {
       && current?.text.startsWith(this.committedInWindow) && /[\p{L}\p{N}]/u.test(cleanAsrText(current.text))) {
       // A deadline checkpoint trusts the latest compatible full-window reading, not an earlier
       // longest hypothesis. Advancing over precisely that whole input prevents replaying its tail.
+      const previousWindowStart = this.windowStart;
+      const previousCommitted = this.committedInWindow;
       this.committedDone += current.text;
       this.committedInWindow = '';
       this.bestWindowHypothesis = '';
@@ -691,9 +729,22 @@ export class TranscriptionPipeline {
       this.prevDecode = null;
       this.noProgressTicks = 0;
       this.noAdvanceTicks = 0;
+      if (this.onDiagnostic) {
+        try {
+          this.onDiagnostic({
+            kind: 'stall-checkpoint', strategy: this.commitStrategy, unit: 'session-seconds',
+            windowStart: (previousWindowStart - this.sessionBase) / SAMPLE_RATE,
+            to: (now - this.sessionBase) / SAMPLE_RATE,
+            nextWindowStart: (this.windowStart - this.sessionBase) / SAMPLE_RATE,
+            committedPrefix: previousCommitted, currentText: current.text, savedText: current.text,
+          });
+        } catch { /* Diagnostics cannot interrupt audio processing. */ }
+      }
       return;
     }
 
+    const previousWindowStart = this.windowStart;
+    const previousCommitted = this.committedInWindow;
     this.committedDone += this.committedInWindow;
     this.committedInWindow = '';
     // 强制前移后无法可靠地把旧候选映射到保留的音频尾部，宁可让后续短窗重新建立证据。
@@ -704,6 +755,22 @@ export class TranscriptionPipeline {
     this.prevDecode = null;
     this.noProgressTicks = 0;
     this.noAdvanceTicks = 0;
+    if (this.onDiagnostic) {
+      try {
+        this.onDiagnostic({
+          kind: 'stall-fallback', strategy: this.commitStrategy, unit: 'session-seconds',
+          windowStart: (previousWindowStart - this.sessionBase) / SAMPLE_RATE,
+          to: (now - this.sessionBase) / SAMPLE_RATE,
+          nextWindowStart: (this.windowStart - this.sessionBase) / SAMPLE_RATE,
+          committedPrefix: previousCommitted, currentText: current?.text ?? '', savedText: previousCommitted,
+          reason: !noProgressStall ? 'no-advance'
+            : this.commitStrategy !== 'agreement' ? 'chunk'
+            : this.engineHasTimestamps !== true ? 'missing-timestamps'
+            : !current || !/[\p{L}\p{N}]/u.test(cleanAsrText(current.text)) ? 'empty-current'
+            : 'conflicting-current',
+        });
+      } catch { /* Diagnostics cannot interrupt audio processing. */ }
+    }
   }
 
   /**

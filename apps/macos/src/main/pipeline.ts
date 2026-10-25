@@ -16,6 +16,7 @@ import {
   SentenceAssembler,
   type AsrInferenceEngine,
   type PipelineCallbacks,
+  type PipelineWindowDiagnostic,
   type AsrLang,
   type AsrModelSpec,
   type AsrModelFile,
@@ -102,6 +103,7 @@ export function buildModelConfig(
 }
 
 export type PipelineDiagnostic =
+  | PipelineWindowDiagnostic
   | { kind: 'decode'; ms: number; audioSeconds: number; warmup: boolean }
   | { kind: 'raw-result'; text: string; lang: string; audioSeconds: number; warmup: boolean;
       tokens?: string[]; timestamps?: number[]; durations?: number[] }
@@ -123,7 +125,10 @@ export class TranscriptionPipeline {
   constructor(modelsDir: string, modelId: string, language: AsrLang, callbacks: PipelineCallbacks,
     options: { sentenceAssembly?: boolean; sentenceOptions?: import('@rt/core').SentenceAssemblyOptions;
       onDiagnostic?: (event: PipelineDiagnostic) => void } = {}) {
-    const diagnose = options.onDiagnostic;
+    const diagnosticCallback = options.onDiagnostic;
+    const diagnose = diagnosticCallback ? (event: PipelineDiagnostic): void => {
+      try { diagnosticCallback(event); } catch { /* Diagnostics cannot interrupt inference or delivery. */ }
+    } : undefined;
     let warming = true;
     const publishPartial = () => callbacks.onPartial?.({
       text: this.sentences.text + this.partial,
@@ -205,7 +210,7 @@ export class TranscriptionPipeline {
         if (text) this.sentences.touch();
         publishPartial();
       },
-    }, spec.commitStrategy);
+    }, spec.commitStrategy, diagnose);
   }
 
   /** @param samples 16kHz 单声道 */

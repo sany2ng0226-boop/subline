@@ -34,10 +34,21 @@ export function auditTrace(records, phrase = '') {
     const stopped = at('main.pipeline:status').some(e => e.payload.state === 'stopped');
     const payloadLoss = own.some(e => omitted(e.payload));
     const complete = gaps.length === 0 && !payloadLoss && at('session.start').length === 1 && stopped;
+    const countText = (list, text) => {
+      const needle = normalize(text);
+      return needle ? joinSegments(list).split(needle).length - 1 : 0;
+    };
+    const checkpoints = at('asr.stall-checkpoint').map(e => ({
+      seq: e.seq, ...e.payload,
+      savedTextInFragments: complete ? countText(fragments, e.payload.savedText) : null,
+      savedTextInUi: complete ? countText(rendered, e.payload.savedText) : null,
+    }));
     return {
       session, complete, stopped, payloadLoss, audioBlocks: at('audio.input').length,
       maxAudioRms: Math.max(0, ...at('audio.input').map(e => e.payload.rms ?? 0)),
       rawDecodes: at('asr.raw-result').filter(e => !e.payload.warmup).length,
+      checkpoints, checkpointCount: checkpoints.length,
+      ordinarySlides: at('asr.ordinary-slide').length, stallFallbacks: at('asr.stall-fallback').length,
       fragments: fragments.length, assembled: assembled.length, sent: sent.length, uiFinals: rendered.length,
       fragmentToAssemblyTextEqual: complete && fragments.length > 0 && assembled.length > 0 ? joinSegments(fragments) === joinSegments(assembled) : null,
       mainToUiTextEqual: complete && sent.length > 0 ? missingOrChanged.length === 0 && extra.length === 0 && duplicateUiIds.length === 0 : null,

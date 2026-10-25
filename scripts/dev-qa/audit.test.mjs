@@ -38,3 +38,15 @@ test('cursor loss and unfinished recording cannot be reported as a completeness 
   const truncated = fixture(); truncated[0].data.events[6].payload.truncated = true;
   assert.equal(auditTrace(truncated).sessions[0].mainToUiTextEqual, null);
 });
+
+test('reports direct checkpoint execution and exact retained text occurrences without assuming trigger from a short window', () => {
+  const records = fixture();
+  records[0].data.events.push({ seq: 9, session: 's', stage: 'asr.stall-checkpoint', payload: {
+    savedText: '挨拶が出来る。', windowStart: 0, to: 8.2, nextWindowStart: 8.2,
+  } });
+  const result = auditTrace(records).sessions[0];
+  assert.equal(result.checkpointCount, 1);
+  assert.equal(result.checkpoints[0].savedTextInFragments, 1);
+  assert.equal(result.checkpoints[0].savedTextInUi, 1);
+  assert.equal(auditTrace(fixture()).sessions[0].checkpointCount, 0);
+});
