@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
-import { ArrowDown } from '@lucide/vue';
 import type { TranscriptLine } from '../composables/useTranscription';
 import TranslatingDots from './TranslatingDots.vue';
 import { useCaptionAnnouncer } from '../composables/useCaptionAnnouncer';
@@ -102,6 +101,11 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
 });
 
+const jumpAction = computed(() => newLineCount.value
+  ? `↓ ${t('main.jumpLatestCount', { count: newLineCount.value }, newLineCount.value)}`
+  : t('main.jumpLatest'));
+const jumpLabel = computed(() => `${t('main.followPaused')} · ${jumpAction.value}`);
+
 const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 </script>
 
@@ -150,9 +154,10 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 
     <Transition name="jump">
       <div v-if="showJump" class="jump-controls">
-        <span class="paused-hint">{{ t('main.followPaused') }}</span>
-        <button type="button" class="jump-latest" @click="jumpToLatest">
-          <ArrowDown :size="14" />{{ newLineCount ? t('main.jumpLatestCount', { count: newLineCount }, newLineCount) : t('main.jumpLatest') }}
+        <button type="button" class="jump-latest" :aria-label="jumpLabel" @click="jumpToLatest">
+          <span class="jump-paused">{{ t('main.followPaused') }}</span>
+          <span>·</span>
+          <span>{{ jumpAction }}</span>
         </button>
       </div>
     </Transition>
@@ -222,7 +227,7 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
   gap: 6px;
   transform: translateX(-50%);
 }
-.paused-hint { font-size: 12px; color: var(--rt-ink-3); }
+.jump-paused { color: var(--rt-ink-2); }
 .jump-latest {
   display: inline-flex;
   align-items: center;

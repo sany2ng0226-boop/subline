@@ -92,18 +92,22 @@ async function mount() {
 it('preserves the paused scroll position and counts only appended finalized lines', async () => {
   const h = await mount();
   await h.pause();
-  expect(h.text()).toContain('Following paused');
-  expect(h.text()).toContain('Jump to latest');
+  const button = h.find(n => n.type === 'button')!;
+  expect(h.text(button)).toBe('Paused·Jump to latest');
+  expect(button.props['aria-label']).toBe('Paused · Jump to latest');
+  expect(h.find(n => n.props.class === 'paused-hint')).toBeUndefined();
   h.props.draft = line(2);
   await nextTick();
   expect(h.text()).toContain('Jump to latest');
   h.props.lines.push(line(2), line(3), line(4));
   await nextTick(); await nextTick();
   expect(h.scroller.scrollTop).toBe(400);
-  expect(h.text()).toContain('3 new subtitles');
+  expect(h.text(button)).toBe('Paused·↓ 3 new subtitles');
+  expect(button.props['aria-label']).toBe('Paused · ↓ 3 new subtitles');
   h.props.lines[0].translation = 'Updated';
   await nextTick();
-  expect(h.text()).toContain('3 new subtitles');
+  expect(h.text(button)).toBe('Paused·↓ 3 new subtitles');
+  expect(button.props['aria-label']).toBe('Paused · ↓ 3 new subtitles');
   h.scroller.scrollTop = 800; h.scroller.props.onScroll();
   await nextTick();
   await h.pause();
@@ -143,4 +147,22 @@ it('ignores Enter in controls/editable content, with modifiers, during compositi
   apps.splice(apps.indexOf(h.app), 1);
   expect(h.listeners.has('keydown')).toBe(false);
   expect(h.disconnect).toHaveBeenCalledOnce();
+});
+
+it.each([
+  ['zh', '已暂停', '回到最新', '6 条新字幕'],
+  ['ja', '一時停止中', '最新へ移動', '新しい字幕 6 件'],
+  ['en', 'Paused', 'Jump to latest', '6 new subtitles'],
+  ['ko', '일시 정지', '최신으로 이동', '새 자막 6개'],
+] as const)('localizes the complete paused pill in %s', async (locale, paused, latest, count) => {
+  const h = await mount();
+  i18n.global.locale.value = locale;
+  await h.pause();
+  const button = h.find(n => n.type === 'button')!;
+  expect(h.text(button)).toBe(`${paused}·${latest}`);
+  expect(button.props['aria-label']).toBe(`${paused} · ${latest}`);
+  h.props.lines.push(...Array.from({ length: 6 }, (_, i) => line(i + 2)));
+  await nextTick();
+  expect(h.text(button)).toBe(`${paused}·↓ ${count}`);
+  expect(button.props['aria-label']).toBe(`${paused} · ↓ ${count}`);
 });
