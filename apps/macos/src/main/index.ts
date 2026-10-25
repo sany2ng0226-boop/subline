@@ -10,9 +10,10 @@ import { createDisplaySleepBlocker } from './display-sleep';
 import { TranslationRequestQueue } from './translation/request-queue';
 import { migrateLegacyProfile } from './profile-migration';
 import { runCandidateSmoke } from './candidate-smoke';
+import { DevQaServer, devQaEnabled } from './dev-qa';
 import path from 'node:path';
 import fs from 'node:fs';
-import { fork, type ChildProcess } from 'node:child_process';
+import { fork, execFileSync, type ChildProcess } from 'node:child_process';
 import {
   app,
   BrowserWindow,
@@ -119,6 +120,21 @@ const MODELS_DIR = !app.isPackaged && process.env['RT_MODELS_DIR']
 const TRANSLATION_CACHE_DIR = path.join(MODELS_DIR, 'transformers');
 
 let win: BrowserWindow | null = null;
+const qaEnabled = devQaEnabled(app.isPackaged);
+let devQa: DevQaServer | undefined;
+
+function isQaRenderer(event: IpcMainEvent): boolean {
+  return qaEnabled && !!win && !win.isDestroyed()
+    && event.sender === win.webContents && event.senderFrame === win.webContents.mainFrame;
+}
+ipcMain.on('dev-qa:snapshot', (event, requestId: unknown, payload: unknown) => {
+  if (isQaRenderer(event)) devQa?.acceptRendererSnapshot(requestId, payload);
+});
+ipcMain.on('dev-qa:event', (event, kind: unknown, payload: unknown) => {
+  if (isQaRenderer(event) && typeof kind === 'string' && /^(ui|renderer):[a-z0-9:._-]{1,48}$/.test(kind)) {
+    devQa?.trace.record(`renderer.${kind}`, payload);
+  }
+});
 // 渲染层在正在录音或有未归档内容时设置；关窗 / ⌘Q 前据此确认，避免一键丢掉整节课。
 let closeGuard: CloseGuard | null = null;
 // Coalesce native dialogs; the quit controller owns the confirmed/committed state.
@@ -313,6 +329,7 @@ function createWindow(): void {
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
+      ...(qaEnabled ? { additionalArguments: ['--subline-dev-qa'] } : {}),
     },
   });
   alwaysOnTop.apply(loadSettings().alwaysOnTop);
@@ -357,6 +374,9 @@ function createWindow(): void {
 }
 
 function sendToRenderer(channel: string, payload: unknown): void {
+  if (devQa && ['pipeline:partial', 'pipeline:segment', 'pipeline:status', 'pipeline:translation'].includes(channel)) {
+    devQa.trace.record(`main.${channel}`, payload);
+  }
   if (win && !win.isDestroyed()) {
     win.webContents.send(channel, payload);
   }
@@ -500,6 +520,7 @@ function startAsrChild(): Promise<void> {
     child.on('message', (m: AsrToMain) => {
       switch (m.type) {
         case 'ready':
+          devQa?.trace.record('asr.ready', { pid: child.pid });
           settled = true;
           resolve();
           break;
@@ -512,6 +533,9 @@ function startAsrChild(): Promise<void> {
         }
         case 'partial':
           sendToRenderer('pipeline:partial', m.payload);
+          break;
+        case 'diagnostic':
+          devQa?.trace.record(m.stage, m.payload);
           break;
         case 'error':
           sendToRenderer('pipeline:status', { state: 'error', error: m.message, code: 'asr-init-failed' });
@@ -546,7 +570,7 @@ function startAsrChild(): Promise<void> {
         reject(new Error(`识别进程退出 (${code})`));
       }
     });
-    child.postMessage({ type: 'init', modelsDir: MODELS_DIR, modelId: asr.model, language: asr.language });
+    child.postMessage({ type: 'init', modelsDir: MODELS_DIR, modelId: asr.model, language: asr.language, qaEnabled });
   });
 }
 
@@ -568,6 +592,7 @@ function ensureAsr(): Promise<void> {
 }
 
 ipcMain.handle('pipeline:start', async (): Promise<StartResult> => {
+  devQa?.trace.beginSession();
   // 系统音频 + 开发模式提示：CoreAudio Tap 的 TCC 责任进程是「启动 Electron 的父程序」——
   // 从终端/IDE 跑 dev 时责任落在终端/IDE，它们的 Info.plist 没有 NSAudioCaptureUsageDescription，
   // macOS 会给一条不弹窗、无报错的**静音流**。解法：给终端/IDE 手动授予「仅录制系统音频」权限，
@@ -819,6 +844,7 @@ ipcMain.on('pipeline:audio', (_event, samples: Float32Array) => {
     samples.byteOffset,
     samples.byteLength / Float32Array.BYTES_PER_ELEMENT
   );
+  devQa?.trace.audio(f);
   // 主进程只转发音频给识别子进程，不做推理
   asrChild.postMessage({ type: 'audio', samples: f });
 });
@@ -955,6 +981,8 @@ ipcMain.handle(
 
 const asrStop = createAsrStopController();
 ipcMain.handle('pipeline:stop', async () => {
+  devQa?.trace.flushAudio();
+  devQa?.trace.record('session.stop-request', {});
   displaySleep.stop();
   try {
     if (asrChild) await asrStop.stop(asrChild);
@@ -985,6 +1013,7 @@ const quitFlow = createQuitFlow({
   hasUnsavedContent,
   confirmLeave,
   cleanup: () => {
+    devQa?.close();
     // Attempt every release even if one native resource has already gone away.
     for (const release of [
       () => asrChild?.kill(),
@@ -1007,6 +1036,30 @@ let terminating = false;
 
 app.whenReady().then(() => {
   if (!isPrimaryInstance) return;
+  if (qaEnabled) {
+    let revision = 'unknown';
+    try { revision = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], { cwd: app.getAppPath(), timeout: 1000 }).toString().trim(); }
+    catch { /* A source checkout without Git remains identifiable by its executable and app path. */ }
+    devQa = new DevQaServer({
+      identity: { app: 'Subline Dev', pid: process.pid, executable: process.execPath,
+        appPath: app.getAppPath(), cwd: process.cwd(), version: app.getVersion(), revision, packaged: app.isPackaged },
+      socketPath: process.env['SUBLINE_DEV_QA_SOCKET'],
+      state: () => {
+        const settings = effectiveSettings();
+        return { recording: sessionActive, asrPid: asrChild?.pid ?? null, asr: asrChildConfig,
+          settings: { audioSource: settings.audioSource, asr: settings.asr,
+            translation: { enabled: settings.translation.enabled, engine: settings.translation.engine,
+              targetLang: settings.translation.targetLang ?? settings.nativeLang },
+            uiLang: settings.nativeLang, fontSize: settings.fontSize, theme: settings.theme, alwaysOnTop: settings.alwaysOnTop } };
+      },
+      requestRendererSnapshot: (requestId) => {
+        if (!win || win.isDestroyed()) throw new Error('Renderer unavailable');
+        win.webContents.send('dev-qa:snapshot-request', { requestId });
+      },
+    });
+    void devQa.listen().then((socketPath) => console.info(`[Subline Dev QA] ${socketPath}`))
+      .catch((error) => { console.error('Dev QA unavailable', error); devQa?.close(); devQa = undefined; });
+  }
   // Electron installs its native shutdown handlers before ready, replacing earlier Node handlers.
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.on(signal, () => {

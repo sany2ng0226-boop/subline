@@ -6,6 +6,8 @@ import { createRenderer, nextTick, reactive, ssrContextKey } from 'vue';
 import TranscriptList from './TranscriptList.vue';
 import type { TranscriptLine } from '../composables/useTranscription';
 import { i18n } from '../i18n';
+import { configureDevQa } from '../devQa';
+import type { DevQaBridge } from '@rt/core';
 
 type Node = {
   type: string; children: Node[]; parent: Node | null; props: Record<string, any>;
@@ -19,7 +21,28 @@ type Node = {
 const apps: Array<{ unmount(): void }> = [];
 afterEach(() => {
   apps.splice(0).forEach(app => app.unmount());
+  configureDevQa();
   vi.unstubAllGlobals();
+});
+
+it('reports the current reading viewport through the opt-in read-only snapshot', async () => {
+  let request: (value: { requestId: number }) => void = () => {};
+  const api: DevQaBridge = {
+    onSnapshotRequest: cb => { request = cb; return () => {}; },
+    reportSnapshot: vi.fn(), event: vi.fn(),
+  };
+  configureDevQa(api);
+  const h = await mount();
+  await h.pause();
+  request({ requestId: 9 }); await nextTick();
+  const snapshot = (api.reportSnapshot as ReturnType<typeof vi.fn>).mock.calls[0][1];
+  expect(snapshot.sections.viewport).toMatchObject({
+    mounted: true, followEnd: false, scrollTop: 400, scrollHeight: 1000, clientHeight: 200,
+    visibleSources: [{ displayId: '3', top: 0, bottom: 100 }],
+  });
+  h.app.unmount(); apps.splice(apps.indexOf(h.app), 1);
+  request({ requestId: 10 }); await nextTick();
+  expect((api.reportSnapshot as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[1].sections.viewport).toBeUndefined();
 });
 function line(id: number): TranscriptLine {
   return { displayId: id, id, time: '', text: 'Subtitle', translation: '', translating: false, failed: false };

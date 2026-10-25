@@ -3,6 +3,7 @@ import type { PipelineErrorCode, TranslationStatusPayload } from '@rt/core';
 import { fmtClock } from '../utils/datetime';
 import { pipelineErrorCode } from '../utils/micPermission';
 import { bridge } from '../bridge';
+import { boundedQaText, traceDevQa } from '../devQa';
 
 export interface TranscriptLine {
   /** Stable view identity survives provisional text becoming a finalized segment. */
@@ -74,6 +75,10 @@ export function registerTranscriptionListeners(): void {
     draftLine.value = null;
     partial.value = '';
     stablePartial.value = undefined;
+    traceDevQa('ui:segment', () => ({
+      id: seg.id, displayId: line.displayId, start: seg.start, duration: seg.duration,
+      lang: seg.lang, ...boundedQaText(line.text),
+    }));
   });
   bridge().onPartial((p) => {
     partial.value = p.text;
@@ -82,6 +87,10 @@ export function registerTranscriptionListeners(): void {
       if (!draftLine.value) draftLine.value = makeDraft(p.text);
       else draftLine.value.text = p.text;
     } else draftLine.value = null;
+    traceDevQa('ui:partial', () => ({
+      displayId: draftLine.value?.displayId ?? null, ...boundedQaText(p.text),
+      stableText: p.stableText?.slice(0, 2000),
+    }));
   });
   bridge().onTranslation((tr) => {
     // 撤销窗口内被删除的行仍接收译文，撤销恢复后不会卡在「翻译中」。

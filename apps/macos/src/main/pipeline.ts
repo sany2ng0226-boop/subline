@@ -103,6 +103,9 @@ export function buildModelConfig(
 
 export type PipelineDiagnostic =
   | { kind: 'decode'; ms: number; audioSeconds: number; warmup: boolean }
+  | { kind: 'raw-result'; text: string; lang: string; audioSeconds: number; warmup: boolean;
+      tokens?: string[]; timestamps?: number[]; durations?: number[] }
+  | { kind: 'raw-partial'; text: string; stableText?: string }
   | { kind: 'asr-fragment'; segment: import('@rt/core').SegmentPayload }
   | { kind: 'sentence'; segment: import('@rt/core').SegmentPayload };
 
@@ -162,6 +165,9 @@ export class TranscriptionPipeline {
         this.recognizer.decode(stream);
         const result = this.recognizer.getResult(stream);
         diagnose?.({ kind: 'decode', ms: performance.now() - started, audioSeconds: samples.length / SAMPLE_RATE, warmup: warming });
+        diagnose?.({ kind: 'raw-result', text: result.text || '', lang: this.fixedLang ?? (result.lang || ''),
+          audioSeconds: samples.length / SAMPLE_RATE, warmup: warming,
+          tokens: result.tokens, timestamps: result.timestamps, durations: result.durations });
         // tokens/timestamps 透传给 core 供窗口滑动定位提交边界（缺失时 core 走 fallback）。
         return {
           text: result.text || '',
@@ -193,6 +199,7 @@ export class TranscriptionPipeline {
         publishPartial();
       },
       onPartial: ({ text, stableText }) => {
+        diagnose?.({ kind: 'raw-partial', text, stableText });
         this.partial = text;
         this.stablePartial = stableText ?? '';
         if (text) this.sentences.touch();

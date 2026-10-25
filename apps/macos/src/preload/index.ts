@@ -10,6 +10,13 @@ function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
 }
 
 const api: ElectronApi = {
+  ...(process.argv.includes('--subline-dev-qa') ? {
+    devQa: {
+      onSnapshotRequest: (cb: (request: { requestId: number }) => void) => subscribe('dev-qa:snapshot-request', cb),
+      reportSnapshot: (requestId: number, snapshot: unknown) => ipcRenderer.send('dev-qa:snapshot', requestId, snapshot),
+      event: (kind: string, payload: unknown) => ipcRenderer.send('dev-qa:event', kind, payload),
+    },
+  } : {}),
   onShortcut: (cb) => subscribe('shortcut', cb),
   platform: process.platform === 'win32' ? 'windows' : 'macos',
   // 系统音频采集要求 macOS 14.2+；不满足时仅暴露麦克风（与主进程的音源收敛判定共用逻辑）。

@@ -37,6 +37,13 @@ export interface CloseGuard {
   cancel: string;
 }
 
+/** Read-only diagnostics, present only in explicitly opted-in development hosts. */
+export interface DevQaBridge {
+  onSnapshotRequest(cb: (request: { requestId: number }) => void): () => void;
+  reportSnapshot(requestId: number, snapshot: unknown): void;
+  event(kind: string, payload: unknown): void;
+}
+
 /**
  * 宿主提供给渲染层（@rt/ui）的平台桥接契约，由各宿主实现并注入。
  * UI 只负责开/停会话与接收事件，音频采集隐藏在桥接背后、按平台实现：
@@ -44,6 +51,7 @@ export interface CloseGuard {
  *  - iOS（Capacitor）：原生插件直接采麦，JS 侧无需送音频。
  */
 export interface AppBridge {
+  devQa?: DevQaBridge;
   /** 运行平台标识；UI 据此按平台过滤可用模型、决定音源开关等。 */
   platform: Platform;
   onShortcut?(cb: (action: ShortcutAction) => void): () => void;

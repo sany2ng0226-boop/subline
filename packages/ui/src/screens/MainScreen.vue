@@ -49,6 +49,12 @@ import { fmtHourMinute } from '../utils/datetime';
 import { archiveErrorKey } from '../utils/archiveError';
 import { micDeniedDescKey, micSettingsOpener } from '../utils/micPermission';
 import { bridge } from '../bridge';
+import { registerDevQaProvider, transcriptQaSnapshot } from '../devQa';
+
+onUnmounted(registerDevQaProvider('transcription', () => transcriptQaSnapshot({
+  lines, draft: draftLine.value, partial: partial.value, stablePartial: stablePartial.value,
+  recording: recording.value, recordBusy: recordBusy.value, modelLoading: modelLoading.value,
+})));
 
 const { t } = useI18n();
 const emit = defineEmits<{ 'open-settings': []; 'open-archive': [] }>();

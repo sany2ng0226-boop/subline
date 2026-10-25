@@ -4,6 +4,7 @@ import type { TranscriptLine } from '../composables/useTranscription';
 import TranslatingDots from './TranslatingDots.vue';
 import { useCaptionAnnouncer } from '../composables/useCaptionAnnouncer';
 import { useI18n } from 'vue-i18n';
+import { boundedQaText, registerDevQaProvider } from '../devQa';
 
 const { t } = useI18n();
 const props = defineProps<{
@@ -115,14 +116,36 @@ function onKeydown(event: KeyboardEvent): void {
 watch(() => [props.draft?.text, ...props.lines.map((line) =>
   [line.text, line.translation, line.translating, line.failed])], () => nextTick(preserveReadingPosition));
 let resizeObserver: ResizeObserver | undefined;
+let unregisterQa = () => {};
 onMounted(() => {
   window.addEventListener('keydown', onKeydown);
   resizeObserver = new ResizeObserver(preserveReadingPosition);
   if (scroller.value) resizeObserver.observe(scroller.value);
   if (column.value) resizeObserver.observe(column.value);
   jumpToLatest();
+  unregisterQa = registerDevQaProvider('viewport', () => {
+    const el = scroller.value;
+    if (!el) return { mounted: false };
+    const viewport = el.getBoundingClientRect();
+    const visibleSources = sources().flatMap(source => {
+      const rect = source.getBoundingClientRect();
+      if (rect.bottom <= viewport.top || rect.top >= viewport.bottom) return [];
+      return [{
+        displayId: source.closest<HTMLElement>('[data-caption-id]')?.dataset.captionId,
+        top: rect.top - viewport.top, bottom: rect.bottom - viewport.top,
+        ...boundedQaText(source.textContent ?? ''),
+      }];
+    }).slice(0, 50);
+    return {
+      mounted: true, followEnd: followEnd.value, newLineCount: newLineCount.value,
+      anchor: anchor ? { ...anchor } : null,
+      scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight,
+      visibleSources,
+    };
+  });
 });
 onBeforeUnmount(() => {
+  unregisterQa();
   resizeObserver?.disconnect();
   window.removeEventListener('keydown', onKeydown);
 });

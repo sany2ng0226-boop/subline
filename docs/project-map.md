@@ -12,6 +12,7 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 | `apps/web` (`@rt/web`) | 浏览器 PWA 宿主：使用 IndexedDB/Cache Storage 存储，AudioWorklet 采集，Web Worker 中运行 sherpa-onnx WASM 与本地翻译，并管理 Service Worker 外壳缓存；应用入口是 `apps/web/src/main.ts`，平台契约实现是 `apps/web/src/bridge.ts`。 |
 | `apps/ios` (`@rt/ios`) | Capacitor 宿主和 WebView 侧桥接，设置/归档使用 Preferences；应用入口是 `apps/ios/src/main.ts`，平台契约实现是 `apps/ios/src/bridge.ts`。 |
 | `apps/ios/native-plugin` | iOS 原生能力：`AVAudioEngine` 音频采集、sherpa-onnx ASR、模型下载/管理和 iOS 18+ Apple Translation；TypeScript 契约从 `definitions.ts` 导出，Swift 主入口是 `ios/RealtimeAsrPlugin.swift`。 |
+| [`scripts/dev-qa`](../scripts/dev-qa/README.md) | 显式启用、仅限未打包 Electron 的本地只读 QA：用 Unix domain socket 暴露目标身份、运行状态、渲染快照和有界管线事件，再通过官方 MCP stdio 服务或命令行读取及显式导出；不含应用控制或 PCM 音频。 |
 | `assets` | 三端图标的共享源资产，满版母版为 `assets/icon.svg`；`apps/macos/scripts/gen-icon.mjs`、`apps/web/scripts/gen-icons.mjs` 和 `apps/ios/scripts/gen-icons.mjs` 由此生成各端尺寸和格式，macOS 取景另加投影与描边。 |
 | 根工作区配置 | `package.json` 和 `pnpm-workspace.yaml` 定义工作区、共享依赖版本与跨模块质量门禁；`.github/workflows/ci.yml` 运行检查；仅仓库变量 `ENABLE_PAGES=true` 时启用 GitHub Pages 的变更探测与部署。 |
 
@@ -75,6 +76,7 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 
 ## 测试与构建位置
 
+- 根 `pnpm qa:dev` 以只读诊断开关启动 Subline Dev；`qa:mcp`、`qa:read` 和 `qa:test` 分别提供 MCP stdio、命令行读取/显式轨迹导出和模块测试。它只比较已埋点阶段间的文字守恒，不能代替音频真值或准确率评测；接口与证据边界见 [`scripts/dev-qa/README.md`](../scripts/dev-qa/README.md)。
 - 根 `package.json` 的 `pnpm check` 运行 `@rt/core` 单元测试、macOS 评测语料导入器的纯逻辑测试，以及 macOS、Web、iOS 三端类型检查；它不下载语料或模型，也不执行耗时的识别精度门禁。
 - `packages/core/src/**/*.test.ts` 覆盖设置、归档、模型源、转写管线、定稿漂移统计和翻译决策等共享逻辑。
 - `packages/ui/src/components/timeline.test.ts` 检查实时与归档时间列渲染、译文层级及旧归档缺少时间时的兼容；`TranscriptList.test.ts` 检查默认贴底、主动浏览后的原文锚定、译文延迟撑高补偿、定稿行计数、回到最新后恢复跟随与输入焦点保护；`useTranscription.test.ts` 检查相对秒数到本地墙钟、跨午夜及归档时间保留，`tokens.test.ts` 检查两套主题的文字对比度。

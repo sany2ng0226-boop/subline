@@ -29,6 +29,23 @@ it('keeps the same visible row through corrections, confirmation and translation
   expect(state.lines[0].displayId).toBe(row.displayId);
 });
 
+it('links opt-in receipt traces to the same draft and finalized display identity', async () => {
+  const event = vi.fn();
+  const { configureDevQa } = await import('../devQa');
+  configureDevQa({ onSnapshotRequest: () => () => {}, reportSnapshot: () => {}, event });
+  callbacks.onPartial({ text: '挨拶ができる。', stableText: '挨拶が' });
+  const displayId = state.draftLine.value!.displayId;
+  callbacks.onSegment({ id: 98, text: '挨拶ができる。', start: 2, duration: 3, lang: 'ja' });
+  expect(event).toHaveBeenNthCalledWith(1, 'ui:partial', {
+    displayId, text: '挨拶ができる。', truncated: false, stableText: '挨拶が',
+  });
+  expect(event).toHaveBeenNthCalledWith(2, 'ui:segment', {
+    id: 98, displayId, start: 2, duration: 3, lang: 'ja', text: '挨拶ができる。', truncated: false,
+  });
+  expect(state.lines[0].displayId).toBe(displayId);
+  configureDevQa();
+});
+
 it('keeps late translations on their confirmed row while the next row grows', () => {
   callbacks.onPartial({ text: '最初の話。' });
   callbacks.onSegment({ id: 11, text: '最初の話。', start: 0, duration: 2, lang: 'ja' });

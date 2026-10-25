@@ -102,6 +102,7 @@ export function createMacBridge(api: ElectronApi): AppBridge {
   }
 
   return {
+    devQa: api.devQa,
     onAudioLevel(cb) { levelListeners.add(cb); return () => { levelListeners.delete(cb); }; },
     platform: api.platform,
     audioSources: api.audioSources,

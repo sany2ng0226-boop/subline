@@ -14,7 +14,11 @@
     "dist": "pnpm --filter @rt/macos dist",
     "dist:dir": "pnpm --filter @rt/macos dist:dir",
     "check": "pnpm --filter @rt/core test && pnpm --filter @rt/macos test-eval-corpus && pnpm --filter @rt/macos type-check && pnpm --filter @rt/web type-check && pnpm --filter @rt/ios type-check",
-    "dist:windows": "pnpm --filter @rt/macos dist:windows"
+    "dist:windows": "pnpm --filter @rt/macos dist:windows",
+    "qa:dev": "node scripts/dev-qa/launch.mjs",
+    "qa:mcp": "node scripts/dev-qa/server.mjs",
+    "qa:read": "node scripts/dev-qa/client.mjs",
+    "qa:test": "node --test scripts/dev-qa/*.test.mjs"
   },
   "keywords": [],
   "author": "",
@@ -32,5 +36,9 @@
       "cmake-js>tar": "^7.5.21",
       "source-map-js@^1.2.1": "^1.2.2"
     }
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "^4.6.7"
   }
 }
