@@ -448,7 +448,7 @@ describe('窗口滑动（污染逐出）', () => {
     h.feed(6.6, true);
     h.feed(0.5, false);
 
-    expect(h.engine.calls.some((call) => call.startSec >= 1)).toBe(true);
+    expect(h.engine.calls.some((call) => call.startSec >= 0.5)).toBe(true);
     expect(h.segments).toHaveLength(1);
     expect(h.segments[0].text).toBe(prefix + longTail);
   });
@@ -477,7 +477,7 @@ describe('停滞保护', () => {
     expect(final.split(repeatedBody)).toHaveLength(2);
     expect(final.split('次の評価項目です')).toHaveLength(2);
     expect(h.engine.calls.every(call => call.endSec - call.startSec <= 9)).toBe(true);
-    expect(h.engine.calls.some(call => call.startSec >= 8)).toBe(true);
+    expect(h.engine.calls.some(call => call.startSec >= 7.8)).toBe(true);
     expect(h.segments[1].start).toBeCloseTo(h.segments[0].start + h.segments[0].duration, 5);
   });
 
@@ -620,7 +620,7 @@ describe('只读窗口诊断', () => {
     h.feed(0.6, false);
     const slides = events.filter(event => event.kind === 'ordinary-slide');
     expect(slides.length).toBeGreaterThan(0);
-    expect(events.every(event => event.kind === 'ordinary-slide')).toBe(true);
+    expect(events.every(event => event.kind === 'ordinary-slide' || event.kind === 'context-trim')).toBe(true);
     for (const event of slides) {
       expect(event.nextWindowStart).toBeCloseTo(event.windowStart + event.alignedEndSec, 5);
       expect(event.savedText + event.retainedText).toBe(event.committedPrefix);
@@ -696,7 +696,7 @@ describe('翻供重基（模型改写窗口内已提交前缀）', () => {
     // 旧读法被新读法整体取代，行内容完整（无卡死 → 无停滞丢弃）
     expect(h.segments[0].text).toBe('かきくけこさしすせそ');
     // 重基后提交恢复流动，窗口继续滑动（未卡死在行首）
-    expect(h.engine.calls.some((c) => c.startSec >= 2.4)).toBe(true);
+    expect(h.engine.calls.some((c) => c.startSec >= 1.8)).toBe(true);
   });
 
   it('坍缩型翻供（输出变短）：不重基不滑动，定稿保底已提交前缀', () => {
@@ -973,5 +973,91 @@ describe('待定区的合法修正可见', () => {
     h.engine.result = { text: '別', lang: '<|ja|>' };
     h.feed(0.6, true);
     expect(h.partialPayloads.at(-1)).toMatchObject({ text: stable, stableText: stable });
+  });
+});
+
+describe('实际切窗边界的物理上下文回归', () => {
+  // Recreate the boundary snapshot captured immediately after a live slide; the engine
+  // still receives real ramp samples, so its physical input range is independently checked.
+  function resumeBoundary(saved: string, retained: string, boundary: number,
+    respond: (start: number, end: number) => DecodeResult) {
+    const events: PipelineWindowDiagnostic[] = [];
+    const h = makeRampHarness('agreement', event => events.push(event));
+    h.feed(6, true);
+    Object.assign(h.pipeline, { windowStart: Math.round(boundary * SAMPLE_RATE),
+      contextStart: Math.round((boundary - 0.6) * SAMPLE_RATE), contextText: saved,
+      retainedAnchor: retained, committedDone: saved, committedInWindow: retained,
+      bestWindowHypothesis: retained, engineHasTimestamps: true });
+    h.engine.calls.length = 0;
+    h.engine.respond = respond;
+    h.pipeline.flush();
+    return { ...h, events };
+  }
+
+  it('live seq508/513：みた已保存，物理上下文中的みた只裁一次，最终不是みたみたい', () => {
+    const saved = 'で、ここに載せてます。例えば、基本の十項目は挨拶ができるみた';
+    const raw = 'ができるみたいなとこから始まる。';
+    const tokens = Array.from(raw);
+    const h = resumeBoundary(saved, 'いなとこから始ま', 4.38, () => ({ text: raw, tokens,
+      timestamps: [0, 0.12, 0.18, 0.24, 0.42, 0.48, 0.54, 0.66, 0.72, 0.78, 0.84, 0.9, 1.02, 1.08, 1.2, 1.26],
+      durations: tokens.map(() => 0.06) }));
+    expect(h.engine.calls[0].startSec).toBeCloseTo(3.78, 5);
+    expect(h.segments.map(s => s.text).join('')).toBe(saved + 'いなとこから始まる。');
+    expect(h.events.find(e => e.kind === 'context-trim')).toMatchObject({ mode: 'retained-anchor', removedText: 'ができるみた' });
+  });
+
+  it('live seq329/349：採点之前仍给出そういう上下文，避免从词首裸切产生最低', () => {
+    const saved = '五十点分は基本の十項目かける五点というそういう';
+    const text = 'そういう採点方法で。';
+    const h = resumeBoundary(saved, '採点方法で', 4.62, start => {
+      if (start >= 4.6) return { text: '最低方法で。', tokens: Array.from('最低方法で。'), timestamps: [0.06, 0.24, 0.42, 0.6, 0.72, 0.84] };
+      return { text, tokens: Array.from(text), timestamps: [0.12, 0.24, 0.36, 0.42, 0.6, 0.78, 0.9, 1.02, 1.14, 1.26] };
+    });
+    expect(h.engine.calls[0].startSec).toBeCloseTo(4.02, 5);
+    expect(h.segments.map(s => s.text).join('')).toBe(saved + '採点方法で。');
+    expect(h.events.find(e => e.kind === 'context-trim')).toMatchObject({ removedText: 'そういう' });
+  });
+
+  it('旧はい与之后真实说出的两次はい按各自时间归属，只去掉旧音频的一次', () => {
+    const text = 'はいはいはい次です';
+    const h = resumeBoundary('前の説明はい', 'はいはい', 4, () => ({ text, tokens: Array.from(text),
+      timestamps: [0, 0.2, 0.6, 0.8, 1, 1.2, 1.6, 1.8, 2] }));
+    expect(h.segments.map(s => s.text).join('')).toBe('前の説明はいはいはい次です');
+    expect(h.events.find(e => e.kind === 'context-trim')).toMatchObject({ removedText: 'はい', text: 'はいはい次です' });
+  });
+
+  it('模型省略旧上下文，结果已经从保留的两次はい开始时，不再删掉真实重复', () => {
+    const text = 'はいはい次です';
+    const h = resumeBoundary('前の説明はい', 'はいはい', 4, () => ({ text, tokens: Array.from(text),
+      timestamps: [0, 0.2, 0.6, 0.8, 1.6, 1.8, 2] }));
+    expect(h.segments.map(s => s.text).join('')).toBe('前の説明はいはいはい次です');
+    expect(h.events.find(e => e.kind === 'context-trim')).toMatchObject({ mode: 'already-retained', removedText: '' });
+  });
+
+  it('完整检查点后立刻停止：逻辑区间为空时不再解码任何旧上下文', () => {
+    const h = resumeBoundary('已经保存的原文', '', 6, () => ({
+      text: '旧', tokens: ['旧'], timestamps: [0.55],
+    }));
+    expect(h.engine.calls).toHaveLength(0);
+    expect(h.segments.map(s => s.text).join('')).toBe('已经保存的原文');
+  });
+
+  it('完整检查点无保留锚点时，不把边界前0.05秒的旧字误作新字', () => {
+    const h = resumeBoundary('已经保存的说明', '', 4, () => ({
+      text: '说明次', tokens: ['说', '明', '次'], timestamps: [0, 0.55, 0.7],
+    }));
+    expect(h.segments.map(s => s.text).join('')).toBe('已经保存的说明次');
+    expect(h.events.find(e => e.kind === 'context-trim')).toMatchObject({
+      mode: 'timestamps', removedText: '说明', text: '次',
+    });
+  });
+
+  it('上下文ITN使token无法映射时重解逻辑区间，不猜文字长度删除新词', () => {
+    const h = resumeBoundary('百分之八十', '新しい', 4, start => start < 4
+      ? { text: '80%新しい話', tokens: ['八', '十', '新', 'し', 'い', '話'], timestamps: [0, 0.2, 0.6, 0.8, 1, 1.2] }
+      : { text: '新しい話', tokens: ['新', 'し', 'い', '話'], timestamps: [0, 0.2, 0.4, 0.6] });
+    expect(h.engine.calls.map(c => c.startSec)).toEqual([3.4, 4]);
+    expect(h.segments.map(s => s.text).join('')).toBe('百分之八十新しい話');
+    expect(h.events.find(e => e.kind === 'context-trim')).toMatchObject({ mode: 'direct-retry' });
   });
 });

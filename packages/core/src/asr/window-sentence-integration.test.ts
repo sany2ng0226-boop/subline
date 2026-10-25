@@ -9,6 +9,7 @@ type Token = { at: number; text: string; lang?: string };
 class TimelineEngine implements AsrInferenceEngine {
   detected = false;
   calls: { start: number; end: number }[] = [];
+  timestampShift = 0;
   constructor(readonly tokens: Token[]) {}
   acceptVadWindow(): void {}
   isSpeechDetected(): boolean { return this.detected; }
@@ -24,7 +25,7 @@ class TimelineEngine implements AsrInferenceEngine {
     const own = this.tokens.filter(t => t.at >= start - 1e-6 && t.at < end - 1e-6);
     return {
       text: own.map(t => t.text).join(''), lang: `<|${own[0]?.lang ?? 'ja'}|>`,
-      tokens: own.map(t => t.text), timestamps: own.map(t => t.at - start),
+      tokens: own.map(t => t.text), timestamps: own.map(t => Math.max(0, t.at - start + this.timestampShift)),
       durations: own.map(() => 0.12),
     };
   }
@@ -83,6 +84,19 @@ describe('window retention through the unchanged sentence assembler', () => {
     expect(h.finals.map(s => s.text).join('')).toBe(text);
     expect(h.finals.map(s => s.text).join('').split('一万円なら借りられる人')).toHaveLength(3);
     expect(h.reasons).not.toContain('gap');
+  });
+
+  it.each([-0.1, 0.1])('preserves real repeated words with %s second timestamp drift', shift => {
+    const text = '前の説明はいはいはいここから次の説明に進みます';
+    const h = session(timeline(text, 0, 'ja', 0.28));
+    h.engine.timestampShift = shift;
+    h.feed(9, true); h.stop();
+    expect(h.finals.map(s => s.text).join('')).toBe(text);
+    expect(h.reasons).not.toContain('gap');
+    for (let i = 1; i < h.fragments.length; i++) {
+      const previous = h.fragments[i - 1];
+      expect(h.fragments[i].start).toBeCloseTo(previous.start + previous.duration, 5);
+    }
   });
 
   it('keeps active continuation fragments pending through idle but respects the hard deadline', () => {

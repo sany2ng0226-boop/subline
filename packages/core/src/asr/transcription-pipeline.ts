@@ -59,6 +59,8 @@ const WINDOW_COMMIT_SLIDE_MIN_SECONDS = 1;
 // 切点位于保留区首个已知 token，而非可能已漏字的「下一未确认 token」；重叠区只有
 // 下一窗口拥有最终提交权，不对已发出的字幕做模糊文本去重。
 const AGREEMENT_OVERLAP_SECONDS = 0.6;
+const DECODE_CONTEXT_SECONDS = 0.6;
+const CONTEXT_TIME_TOLERANCE_SECONDS = 0.12;
 
 // 停滞保护：窗口超过该时长且连续多个 tick 停滞（无提交进展，或有提交但窗口滑不动）时
 // 强制前移窗口，防止无界增长；两种停滞的前移点不同，见 maybeStall。
@@ -244,6 +246,31 @@ function alignCommitted(
   return null;
 }
 
+interface TokenTextSpan { token: number; start: number; end: number }
+
+/** Strict surface alignment; ITN disagreement is not guessed from character counts. */
+function tokenTextSpans(text: string, tokens: string[]): TokenTextSpan[] {
+  const spans: TokenTextSpan[] = [];
+  let position = 0;
+  for (let token = 0; token < tokens.length; token++) {
+    const start = position;
+    let cursor = position;
+    const surface = tokens[token].replace(WORD_BOUNDARY, ' ');
+    let valid = true;
+    for (const ch of surface) {
+      if (text.startsWith(ch, cursor)) { cursor += ch.length; continue; }
+      if (/\s/u.test(ch)) continue;
+      while (cursor < text.length && SKIPPABLE_RE.test(text[cursor])) cursor++;
+      if (text.startsWith(ch, cursor)) cursor += ch.length;
+      else { valid = false; break; }
+    }
+    if (!valid) break;
+    spans.push({ token, start, end: cursor });
+    position = cursor;
+  }
+  return spans;
+}
+
 /**
  * chunk 提交的切点选择：在块尾搜索区（最后 CHUNK_CUT_SEARCH_SECONDS）内找相邻 token
  * 间隙最大处（gap = 下一 token 起点 − 当前 token 终点，终点缺 durations 时按
@@ -348,6 +375,9 @@ export type PipelineWindowDiagnostic =
       trigger?: 'no-progress' | 'no-advance'; prefixCompatible?: boolean })
   | (WindowDiagnosticBoundary & { kind: 'stall-fallback';
       reason: 'chunk' | 'missing-timestamps' | 'empty-current' | 'conflicting-current' | 'no-advance' })
+  | { kind: 'context-trim'; strategy: AsrCommitStrategy; unit: 'session-seconds';
+      contextStart: number; windowStart: number; to: number; rawText: string; text: string; removedText: string;
+      mode: 'timestamps' | 'retained-anchor' | 'already-retained' | 'direct-retry' }
   | (WindowDiagnosticBoundary & { kind: 'ordinary-slide'; cutLen: number; alignedEndSec: number;
       retainedText: string; retainedHypothesis: string });
 
@@ -397,6 +427,9 @@ export class TranscriptionPipeline {
   // ===== 行（line）状态 =====
   private lineStart = 0; // 本行起始采样（segment.start 基线，滑动不改它）
   private windowStart = 0; // 当前解码窗口起点（随提交前移）
+  private contextStart = 0; // Physical decoder input may precede the logical text boundary.
+  private contextText = ''; // Last emitted characters expected only in that physical overlap.
+  private retainedAnchor = ''; // Exact still-owned prefix, used only close to the boundary.
   private committedDone = ''; // 已滑出窗口的已提交文本（原始，本行内单调只增）
   private committedInWindow = ''; // 当前窗口内已提交的前缀（原始）
   // 当前窗口曾展示过的最完整候选。段尾重解码可能因静音补齐或窗口变长而突然坍缩，
@@ -494,6 +527,9 @@ export class TranscriptionPipeline {
 
   /** 清空行内提交/解码状态（定稿或强切后调用）。 */
   private resetLine(): void {
+    this.contextStart = this.windowStart;
+    this.contextText = '';
+    this.retainedAnchor = '';
     this.committedDone = '';
     this.committedInWindow = '';
     this.bestWindowHypothesis = '';
@@ -558,10 +594,8 @@ export class TranscriptionPipeline {
       this.engineHasTimestamps === false
         ? Math.max(this.windowStart, now - PARTIAL_MAX_WINDOW_SECONDS * SAMPLE_RATE)
         : this.windowStart;
-    const audio = this.historySlice(from, now);
-
     const t0 = Date.now();
-    const cur = this.decodeRaw(audio);
+    const cur = this.decodeWindow(from, now);
     const decodeSamples = ((Date.now() - t0) / 1000) * SAMPLE_RATE;
     this.partialGap = Math.max(
       Math.round(PARTIAL_INTERVAL_SECONDS * SAMPLE_RATE),
@@ -688,6 +722,7 @@ export class TranscriptionPipeline {
       : Array.from(cur.text).slice(aligned.cutLen).join('');
     const advance = Math.max(0, Math.round(aligned.endSec * SAMPLE_RATE));
     this.windowStart += advance;
+    this.retainDecodeContext(previousWindowStart, savedText);
     // 窗口变了，旧解码不可比
     this.prevDecode = null;
     if (this.onDiagnostic) {
@@ -744,6 +779,7 @@ export class TranscriptionPipeline {
       this.committedInWindow = '';
       this.bestWindowHypothesis = '';
       this.windowStart = now;
+      this.retainDecodeContext(previousWindowStart, current.text);
       this.prevDecode = null;
       this.noProgressTicks = 0;
       this.noAdvanceTicks = 0;
@@ -772,6 +808,9 @@ export class TranscriptionPipeline {
     this.windowStart = noProgressStall
       ? Math.max(this.lineStart, now - Math.round(STALL_KEEP_SECONDS * SAMPLE_RATE))
       : now;
+    this.contextStart = this.windowStart;
+    this.contextText = '';
+    this.retainedAnchor = '';
     this.prevDecode = null;
     this.noProgressTicks = 0;
     this.noAdvanceTicks = 0;
@@ -831,7 +870,7 @@ export class TranscriptionPipeline {
     }
     this.partialFloor = to;
 
-    const tail = this.decodeRaw(this.historySlice(this.windowStart, to));
+    const tail = this.decodeWindow(this.windowStart, to);
     const candidates =
       this.commitStrategy === 'agreement'
         ? [this.committedInWindow, this.bestWindowHypothesis, tail.text]
@@ -854,6 +893,78 @@ export class TranscriptionPipeline {
       duration: (to - this.lineStart) / SAMPLE_RATE,
     });
     this.resetLine();
+  }
+
+  private retainDecodeContext(previousStart: number, savedText: string): void {
+    this.contextStart = Math.max(previousStart, this.windowStart - Math.round(DECODE_CONTEXT_SECONDS * SAMPLE_RATE));
+    this.contextText = savedText;
+    this.retainedAnchor = this.committedInWindow;
+  }
+
+  /** Decode context is not part of the next fragment. Only mapped audio before the logical
+   * boundary can be suppressed; repeated words after it retain their own timestamps. */
+  private decodeWindow(logicalStart: number, to: number): RawDecode {
+    if (to <= logicalStart) return { text: '', lang: '' };
+    const from = this.commitStrategy === 'agreement' && this.engineHasTimestamps === true
+      ? Math.min(logicalStart, this.contextStart) : logicalStart;
+    const raw = this.decodeRaw(this.historySlice(from, to));
+    if (from >= logicalStart) return raw;
+    const offset = (logicalStart - from) / SAMPLE_RATE;
+    const tokens = raw.tokens;
+    const times = raw.timestamps;
+    let cut = -1;
+    let cutToken = 0;
+    let mode: 'timestamps' | 'retained-anchor' | 'already-retained' | 'direct-retry' = 'timestamps';
+    if (tokens && times && tokens.length === times.length
+      && times.every((t, i) => Number.isFinite(t) && t >= 0 && (i === 0 || t >= times[i - 1]))) {
+      const spans = tokenTextSpans(raw.text, tokens);
+      // A decoder can omit the physical context entirely. An exact retained prefix must
+      // not be stripped merely because its first new timestamp is close to zero.
+      const anchor = this.retainedAnchor.slice(0, 16);
+      const firstNew = times.findIndex(t => t >= offset);
+      const timedSpan = spans[firstNew];
+      const timedPrefix = timedSpan ? raw.text.slice(0, timedSpan.start) : '';
+      const hasContextAndAnchor = timedPrefix.length > 0 && this.contextText.endsWith(timedPrefix)
+        && raw.text.startsWith(timedPrefix + anchor);
+      if (anchor && raw.text.startsWith(anchor) && !hasContextAndAnchor) {
+        cut = 0;
+        mode = 'already-retained';
+      } else {
+        const allOld = firstNew === -1;
+        cutToken = allOld ? tokens.length : firstNew;
+        const span = spans[cutToken];
+        if (span) cut = span.start;
+        else if (allOld && spans.length === tokens.length) cut = raw.text.length;
+        // Timestamp drift cannot justify deleting a new word. An exact retained anchor
+        // near the same audio boundary is stronger than an estimated single token start.
+        if (anchor) {
+          const candidates = spans.filter(span => raw.text.startsWith(anchor, span.start)
+            && Math.abs(times[span.token] - offset) <= CONTEXT_TIME_TOLERANCE_SECONDS * 2);
+          const closest = candidates.sort((a, b) => Math.abs(times[a.token] - offset) - Math.abs(times[b.token] - offset))[0];
+          if (closest) { cut = closest.start; cutToken = closest.token; mode = 'retained-anchor'; }
+        }
+      }
+    }
+    let result: RawDecode;
+    if (cut < 0) {
+      // ITN may make text and tokens incomparable. Retry exactly the unowned interval;
+      // never guess a character count and discard words across that mismatch.
+      result = this.decodeRaw(this.historySlice(logicalStart, to));
+      mode = 'direct-retry';
+    } else {
+      result = { ...raw, text: raw.text.slice(cut), tokens: tokens?.slice(cutToken),
+        timestamps: times?.slice(cutToken).map(t => Math.max(0, t - offset)),
+        durations: raw.durations?.slice(cutToken) };
+    }
+    if (this.onDiagnostic) {
+      try {
+        this.onDiagnostic({ kind: 'context-trim', strategy: this.commitStrategy, unit: 'session-seconds',
+          contextStart: (from - this.sessionBase) / SAMPLE_RATE,
+          windowStart: (logicalStart - this.sessionBase) / SAMPLE_RATE, to: (to - this.sessionBase) / SAMPLE_RATE,
+          rawText: raw.text, text: result.text, removedText: cut < 0 ? '' : raw.text.slice(0, cut), mode });
+      } catch { /* Diagnostics cannot interrupt audio processing. */ }
+    }
+    return result;
   }
 
   /** 送引擎解码（含最短时长补零），返回原始文本/语言/token 时间戳（不做清理）。 */
