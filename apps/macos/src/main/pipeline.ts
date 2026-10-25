@@ -109,6 +109,7 @@ export type PipelineDiagnostic =
       tokens?: string[]; timestamps?: number[]; durations?: number[] }
   | { kind: 'raw-partial'; text: string; stableText?: string }
   | { kind: 'asr-fragment'; segment: import('@rt/core').SegmentPayload }
+  | ({ kind: 'sentence-flush' } & Parameters<NonNullable<import('@rt/core').SentenceAssemblyOptions['onFlush']>>[0])
   | { kind: 'sentence'; segment: import('@rt/core').SegmentPayload };
 
 export class TranscriptionPipeline {
@@ -138,7 +139,13 @@ export class TranscriptionPipeline {
       diagnose?.({ kind: 'sentence', segment: { ...segment } });
       callbacks.onSegment(segment);
       publishPartial();
-    }, options.sentenceOptions);
+    }, diagnose ? {
+      ...options.sentenceOptions,
+      onFlush: (event) => {
+        diagnose({ kind: 'sentence-flush', ...event });
+        options.sentenceOptions?.onFlush?.(event);
+      },
+    } : options.sentenceOptions);
     assertModelsExist(modelsDir, modelId);
     const spec = getAsrModel(modelId);
     if (!spec) throw new Error(`未知的识别模型: ${modelId}`);

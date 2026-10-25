@@ -55,10 +55,10 @@ const WINDOW_COMMIT_SLIDE_SECONDS = 3;
 // 遏制窗口继续膨胀（正常语速下提交很快达到常规阈值，走不到这档）。
 const WINDOW_PRESSURE_SECONDS = 6;
 const WINDOW_COMMIT_SLIDE_MIN_SECONDS = 1;
-// 滑动切点取已提交末尾 token 的结束时刻（= 下一 token 起点）：已提交音频已保存进
-// committedDone，不再需要留在窗口里，切净以免其尾音被重新解码、重复提交（下一个未提交
-// token 的起音正好保留在新窗口内）。故不留回退余量。
-const SLIDE_SAFETY_SECONDS = 0;
+// 最后这段已对齐的稳定文字暂不移入 committedDone，和音频一起留给下个窗口。
+// 切点位于保留区首个已知 token，而非可能已漏字的「下一未确认 token」；重叠区只有
+// 下一窗口拥有最终提交权，不对已发出的字幕做模糊文本去重。
+const AGREEMENT_OVERLAP_SECONDS = 0.6;
 
 // 停滞保护：窗口超过该时长且连续多个 tick 停滞（无提交进展，或有提交但窗口滑不动）时
 // 强制前移窗口，防止无界增长；两种停滞的前移点不同，见 maybeStall。
@@ -186,32 +186,26 @@ function trimTrailingUnstable(text: string): string {
 const SKIPPABLE_RE = /[\s\p{P}\p{S}]/u;
 
 /**
- * 用 tokens/timestamps 定位「已提交前缀 committed」覆盖到的最后一个完整 token：
- * 逐 token 将其表面文本（BPE 词边界 ▁ 还原为空格）与 committed 逐字比对，返回
- * { cutLen, endSec }：
- *   cutLen —— 最后一个完整匹配 token 消耗到的 committed 码点数（含跳过的标点）；
- *   endSec —— 该 token 结束时间（秒，相对本次解码输入起点，取下一 token 起点为其末尾）。
- * 比对做标点容忍：committed（来自 text）里有模型补的标点而 tokens 没有，committed 侧的
- * 标点/空白可跳过；token 侧的空白（拉丁词边界）在 text 侧已归一化，也可跳过。
- * 真正的表面分歧（如 ITN 把「八十」改写为「80」）在分歧 token 处停止——切点只推进到
- * 分歧前的最后一个完整 token，绝不按码点数硬对齐（那会把切点定在错误的音频位置，
- * 滑出未提交音频或让已提交音频被重复解码提交）。
- * tokens/timestamps 缺失、长度不匹配或首 token 即分歧时返回 null（本 tick 不滑动，
- * 窗口增长由停滞保护兜底）。
+ * 把稳定前缀与 token 表面文字对齐，只提交保留尾部之前的完整 token。
+ * 返回 cutLen（提交文字的码点数）和 endSec（首个保留 token 的起点）。
+ * 标点/空白可跳过；ITN 等实际文字分歧处停止，绝不按字符数硬切音频。
+ * 无法留下至少 AGREEMENT_OVERLAP_SECONDS 的已对齐尾部时不滑动。
  */
 function alignCommitted(
   committed: string,
   tokens?: string[],
   timestamps?: number[],
-  durations?: number[],
+  retainSeconds = AGREEMENT_OVERLAP_SECONDS,
 ): { cutLen: number; endSec: number } | null {
   if (!tokens || !timestamps || tokens.length === 0 || timestamps.length !== tokens.length) {
     return null;
   }
+  if (timestamps.some((time, i) => !Number.isFinite(time) || time < 0
+    || (i > 0 && time < timestamps[i - 1]))) return null;
   const cps = Array.from(committed);
   let pos = 0; // 已消耗的 committed 码点数
-  let lastIdx = -1;
   let cutLen = 0;
+  const matched: { cutLen: number; startSec: number }[] = [];
   for (let i = 0; i < tokens.length && pos < cps.length; i++) {
     let surf = tokens[i].replace(WORD_BOUNDARY, ' ');
     // sherpa 的 text 字段会 trim 首个词边界产生的前导空格，比对时同样去掉，避免拉丁文本错位 1 位
@@ -234,15 +228,20 @@ function alignCommitted(
     // 表面分歧（ITN 等）或 committed 在 token 中途耗尽：切点停在上一个完整 token
     if (!ok) break;
     pos = p;
-    lastIdx = i;
     cutLen = pos;
+    matched.push({ cutLen, startSec: timestamps[i] });
   }
-  if (lastIdx < 0) return null;
-  const endSec =
-    lastIdx + 1 < timestamps.length
-      ? timestamps[lastIdx + 1]
-      : timestamps[lastIdx] + (durations?.[lastIdx] ?? 0.2);
-  return { cutLen, endSec };
+  if (matched.length < 2) return null;
+  // The first retained token is itself already aligned, rather than the next uncertain
+  // token (which may be missing a syllable). Its text stays in this window and has not
+  // been appended to committedDone, so re-decoding this overlap cannot submit it twice.
+  const latestSafeStart = matched[matched.length - 1].startSec - retainSeconds;
+  for (let i = matched.length - 1; i >= 1; i--) {
+    if (matched[i].startSec > 0 && matched[i].startSec <= latestSafeStart) {
+      return { cutLen: matched[i - 1].cutLen, endSec: matched[i].startSec };
+    }
+  }
+  return null;
 }
 
 /**
@@ -345,7 +344,8 @@ interface WindowDiagnosticBoundary {
 }
 
 export type PipelineWindowDiagnostic =
-  | (WindowDiagnosticBoundary & { kind: 'stall-checkpoint' })
+  | (WindowDiagnosticBoundary & { kind: 'stall-checkpoint'; mode?: 'retained-overlap' | 'full-window'; retainedText?: string;
+      trigger?: 'no-progress' | 'no-advance'; prefixCompatible?: boolean })
   | (WindowDiagnosticBoundary & { kind: 'stall-fallback';
       reason: 'chunk' | 'missing-timestamps' | 'empty-current' | 'conflicting-current' | 'no-advance' })
   | (WindowDiagnosticBoundary & { kind: 'ordinary-slide'; cutLen: number; alignedEndSec: number;
@@ -601,7 +601,13 @@ export class TranscriptionPipeline {
     }
 
     // 展示当前确认前缀与临时尾部；后续识别重基仍可修正确认前缀。
-    const shown = cur.text.startsWith(this.committedInWindow) ? cur.text : this.committedInWindow;
+    const compatible = cur.text.startsWith(this.committedInWindow);
+    const shown = compatible || Array.from(cur.text).length >= Array.from(this.committedInWindow).length
+      ? cur.text : this.committedInWindow;
+    // A legitimate window-local revision may be longer before LocalAgreement catches up.
+    // Display it in the pending line, but never label its disagreeing characters stable.
+    const shownStable = compatible || shown === this.committedInWindow
+      ? this.committedInWindow : trimTrailingUnstable(commonCodePointPrefix(shown, this.committedInWindow));
     if (
       cur.text.startsWith(this.committedInWindow) &&
       Array.from(cur.text).length > Array.from(this.bestWindowHypothesis).length
@@ -610,7 +616,7 @@ export class TranscriptionPipeline {
     }
     this.onPartial({
       text: cleanAsrText(this.committedDone + shown),
-      stableText: cleanAsrText(this.committedDone + this.committedInWindow),
+      stableText: cleanAsrText(this.committedDone + shownStable),
     });
 
     this.prevDecode = cur.text;
@@ -650,23 +656,24 @@ export class TranscriptionPipeline {
   }
 
   /**
-   * 窗口滑动（agreement 模式）：已提交前缀覆盖音频达到滑动阈值（常规 3s；窗口已偏长时
-   * 降为压力档，见 WINDOW_PRESSURE_SECONDS）时，把 windowStart 前移到已提交末尾 token
-   * 的结束时刻，已提交文本转入 committedDone，被污染的旧前缀随之滑出后续解码输入。
-   * 返回是否发生滑动。
+   * 窗口滑动（agreement 模式）：只把稳定前缀中位于保留尾部之前的文字移入
+   * committedDone。windowStart 指向保留尾部首个已对齐 token，文字/音频边界一致；
+   * 保留的稳定文字尚未发出，后续修正或重解不会重复追加已定稿字幕。
+   * 常规/压力滑动阈值不变，截止检查点同样保留尾部。返回是否发生滑动。
    */
-  private trySlide(cur: RawDecode, now: number): boolean {
+  private trySlide(cur: RawDecode, now: number, checkpoint = false, priorCommitted = this.committedInWindow,
+    trigger?: 'no-progress' | 'no-advance'): boolean {
     if (this.engineHasTimestamps !== true || this.committedInWindow === '') return false;
     // 翻供 tick 不滑动：cur 不以已提交前缀开头时，其 token 序列与已提交文本不对应，
     // 对齐无意义（若新读法持续，下一 tick 重基前缀后滑动自然恢复）。
     if (!cur.text.startsWith(this.committedInWindow)) return false;
-    const aligned = alignCommitted(this.committedInWindow, cur.tokens, cur.timestamps, cur.durations);
+    const aligned = alignCommitted(this.committedInWindow, cur.tokens, cur.timestamps, AGREEMENT_OVERLAP_SECONDS);
     const winLen = (now - this.windowStart) / SAMPLE_RATE;
     const threshold =
       winLen >= WINDOW_PRESSURE_SECONDS
         ? WINDOW_COMMIT_SLIDE_MIN_SECONDS
         : WINDOW_COMMIT_SLIDE_SECONDS;
-    if (!aligned || aligned.endSec < threshold) return false;
+    if (!aligned || aligned.endSec < (checkpoint ? WINDOW_COMMIT_SLIDE_MIN_SECONDS : threshold)) return false;
 
     const previousCommitted = this.committedInWindow;
     const previousWindowStart = this.windowStart;
@@ -679,18 +686,19 @@ export class TranscriptionPipeline {
     this.bestWindowHypothesis = this.bestWindowHypothesis.startsWith(previousCommitted)
       ? Array.from(this.bestWindowHypothesis).slice(aligned.cutLen).join('')
       : Array.from(cur.text).slice(aligned.cutLen).join('');
-    const advance = Math.max(0, Math.round((aligned.endSec - SLIDE_SAFETY_SECONDS) * SAMPLE_RATE));
+    const advance = Math.max(0, Math.round(aligned.endSec * SAMPLE_RATE));
     this.windowStart += advance;
     // 窗口变了，旧解码不可比
     this.prevDecode = null;
     if (this.onDiagnostic) {
       try {
         this.onDiagnostic({
-          kind: 'ordinary-slide', strategy: this.commitStrategy, unit: 'session-seconds',
+          kind: checkpoint ? 'stall-checkpoint' : 'ordinary-slide', strategy: this.commitStrategy, unit: 'session-seconds',
+          ...(checkpoint ? { mode: 'retained-overlap' as const, trigger, prefixCompatible: cur.text.startsWith(priorCommitted) } : {}),
           windowStart: (previousWindowStart - this.sessionBase) / SAMPLE_RATE,
           to: (now - this.sessionBase) / SAMPLE_RATE,
           nextWindowStart: (this.windowStart - this.sessionBase) / SAMPLE_RATE,
-          committedPrefix: previousCommitted, currentText: cur.text, savedText,
+          committedPrefix: checkpoint ? priorCommitted : previousCommitted, currentText: cur.text, savedText,
           cutLen: aligned.cutLen, alignedEndSec: aligned.endSec,
           retainedText: this.committedInWindow, retainedHypothesis: this.bestWindowHypothesis,
         });
@@ -700,14 +708,10 @@ export class TranscriptionPipeline {
   }
 
   /**
-   * 停滞保护：窗口超 STALL_WINDOW 且连续多个 tick 满足任一停滞条件时强制前移窗口，
-   * 防止窗口无界增长。已提交文本一律不丢（转入 committedDone）。两种停滞的前移点不同：
-   * - 无提交进展但当前全窗仍有兼容文字（如数字表记阻断一致前缀）：以最新读法封存该窗，
-   *   前移到 now，不能将已有文字的音频当作空白丢弃，也不能保留尾部让同一语音重复提交；
-   * - 无兼容全窗读法：前移到 now-STALL_KEEP，保留短尾巴等它解出来；
-   * - 有提交进展但窗口滑不动（对齐持续失败，如 ITN 让 text 与 tokens 表面脱节）：
-   *   直接前移到 now——保留的音频会被重新解码、以「已提交文本+重解文本」的形式重复
-   *   定稿；未提交尾巴只落后解码头 1~2 个 tick，弃之损失更小。
+   * 长窗口期限：当前完整读法仍覆盖窗口内确认内容时，允许在尚未滑出的区域重基
+   * 数字/标点修正，再保存前部并保留尾部重叠。无法把文字映射到可靠 token 边界时，
+   * 整个当前输入只保存一次，显式报告 full-window；不再把有读法的前半窗当静音丢弃。
+   * 空解码、严重坍缩、缺少时间戳和 chunk 保持保守 fallback，不把旧长幻听当真值。
    */
   private maybeStall(now: number, advanced: boolean, progressed: boolean, current?: RawDecode): void {
     this.noAdvanceTicks = advanced ? 0 : this.noAdvanceTicks + 1;
@@ -716,12 +720,26 @@ export class TranscriptionPipeline {
     const noProgressStall = this.noProgressTicks >= STALL_MIN_TICKS;
     if (!noProgressStall && this.noAdvanceTicks < STALL_MIN_TICKS) return;
 
-    if (noProgressStall && this.commitStrategy === 'agreement' && this.engineHasTimestamps === true
-      && current?.text.startsWith(this.committedInWindow) && /[\p{L}\p{N}]/u.test(cleanAsrText(current.text))) {
-      // A deadline checkpoint trusts the latest compatible full-window reading, not an earlier
-      // longest hypothesis. Advancing over precisely that whole input prevents replaying its tail.
+    if (this.commitStrategy === 'agreement' && this.engineHasTimestamps === true
+      && current && /[\p{L}\p{N}]/u.test(cleanAsrText(current.text))
+      && (current.text.startsWith(this.committedInWindow)
+        || Array.from(current.text).length >= Array.from(this.committedInWindow).length)) {
+      // A deadline trusts the latest non-collapsed full-window reading, not an earlier
+      // longest hypothesis. Prefix corrections are safe only inside the still-owned window.
       const previousWindowStart = this.windowStart;
       const previousCommitted = this.committedInWindow;
+      // Window-local confirmations remain revisable until their audio has actually slid out.
+      // A newer full-window reading can correct numeric/punctuation prefixes at the deadline;
+      // concatenating the old prefix with that reading would duplicate the same audio.
+      this.committedInWindow = current.text;
+      this.bestWindowHypothesis = current.text;
+      if (this.trySlide(current, now, true, previousCommitted, noProgressStall ? 'no-progress' : 'no-advance')) {
+        this.noProgressTicks = 0;
+        this.noAdvanceTicks = 0;
+        return;
+      }
+      // Unusable token/text alignment cannot define a safe retained boundary. Checkpoint
+      // precisely this full input once instead of silently discarding its unconfirmed text.
       this.committedDone += current.text;
       this.committedInWindow = '';
       this.bestWindowHypothesis = '';
@@ -732,7 +750,9 @@ export class TranscriptionPipeline {
       if (this.onDiagnostic) {
         try {
           this.onDiagnostic({
-            kind: 'stall-checkpoint', strategy: this.commitStrategy, unit: 'session-seconds',
+            kind: 'stall-checkpoint', mode: 'full-window',
+            trigger: noProgressStall ? 'no-progress' : 'no-advance', prefixCompatible: current.text.startsWith(previousCommitted),
+            strategy: this.commitStrategy, unit: 'session-seconds',
             windowStart: (previousWindowStart - this.sessionBase) / SAMPLE_RATE,
             to: (now - this.sessionBase) / SAMPLE_RATE,
             nextWindowStart: (this.windowStart - this.sessionBase) / SAMPLE_RATE,

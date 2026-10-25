@@ -407,7 +407,7 @@ describe('窗口滑动（污染逐出）', () => {
     // 至少滑动过一次：出现过起点显著大于 0 的解码窗口
     expect(h.engine.calls.some((c) => c.startSec >= 2.5)).toBe(true);
     // 窗口不无界增长：任一次解码窗口时长受滑动约束（远低于 fallback 的 8s 截断）
-    expect(h.engine.calls.every((c) => c.endSec - c.startSec <= 4.5)).toBe(true);
+    expect(h.engine.calls.every((c) => c.endSec - c.startSec <= 5.2)).toBe(true);
     // 污染逐出：进入语音后段（endSec≥5s）的解码窗口起点已越过早期音频
     expect(h.engine.calls.filter((c) => c.endSec >= 5).every((c) => c.startSec >= 2.5)).toBe(true);
     // 无丢失：定稿文本 = 截至段尾的完整虚拟转写
@@ -422,13 +422,13 @@ describe('窗口滑动（污染逐出）', () => {
     const shortTail = 'え';
     h.engine.respond = (startSec, endSec) => {
       if (startSec > 0.1) {
-        return { text: shortTail, tokens: [shortTail], timestamps: [0], durations: [0.2] };
+        return { text: 'う' + shortTail, tokens: ['う', shortTail], timestamps: [0, 0.6], durations: [0.2, 0.2] };
       }
       if (endSec < 5.8) {
         return {
           text: prefix,
           tokens: Array.from(prefix),
-          timestamps: [0, 0.3, 0.6],
+          timestamps: [0, 1.2, 2.4],
           durations: [0.2, 0.2, 0.2],
         };
       }
@@ -436,8 +436,8 @@ describe('窗口滑动（污染逐出）', () => {
       return {
         text: prefix + tail,
         tokens: [...Array.from(prefix), ...Array.from(tail)],
-        // 长候选 tick 尚不足压力滑动阈值；下一次收缩 tick 将首个尾字推迟到 1.2s，触发滑动。
-        timestamps: [0, 0.3, 0.6, endSec < 6.4 ? 0.8 : 1.2, 1.5, 1.8, 2.1, 2.4].slice(
+        // 压力档保留至少0.6s稳定尾部，切点在已知的「う」之前；收缩不能擦掉此前长尾。
+        timestamps: [0, 1.2, 2.4, endSec < 6.4 ? 2.6 : 3.0, 3.3, 3.6, 3.9, 4.2].slice(
           0,
           prefix.length + tail.length,
         ),
@@ -455,6 +455,8 @@ describe('窗口滑动（污染逐出）', () => {
 });
 
 describe('停滞保护', () => {
+  // opaque token fixtures deliberately exercise the unalignable full-input checkpoint;
+  // retained aligned-tail checkpoints have separate audio-schedule regressions below.
   it('数字表记在句首先反复改写时，检查点保留已反复显示的正文且不重放音频', () => {
     const h = makeRampHarness();
     let calls = 0;
@@ -465,7 +467,7 @@ describe('停滞保护', () => {
       const text = `${++calls % 2 ? '50%' : '五十パーセント'}${repeatedBody}`;
       const tokens = Array.from(text);
       const duration = (end - start) / tokens.length;
-      return { text, tokens, timestamps: tokens.map((_, i) => i * duration), durations: tokens.map(() => duration) };
+      return { text, tokens: ['opaque'], timestamps: [0], durations: [duration] };
     };
     h.feed(10, true);
     h.feed(0.6, false);
@@ -489,7 +491,7 @@ describe('停滞保护', () => {
       const text = ++calls === 1 ? hallucination : `${calls % 2 ? '50%' : '五十パーセント'}今回の基本項目です`;
       const tokens = Array.from(text);
       const duration = (end - start) / tokens.length;
-      return { text, tokens, timestamps: tokens.map((_, i) => i * duration), durations: tokens.map(() => duration) };
+      return { text, tokens: ['opaque'], timestamps: [0], durations: [duration] };
     };
     h.feed(10, true);
     h.feed(0.6, false);
@@ -509,7 +511,7 @@ describe('停滞保护', () => {
       const text = `${++calls % 2 ? '50%' : '五十パーセント'}${start < 1 ? firstBody : secondBody}`;
       const tokens = Array.from(text);
       const duration = (end - start) / tokens.length;
-      return { text, tokens, timestamps: tokens.map((_, i) => i * duration), durations: tokens.map(() => duration) };
+      return { text, tokens: ['opaque'], timestamps: [0], durations: [duration] };
     };
     h.feed(19, true);
     h.feed(0.6, false);
@@ -581,7 +583,7 @@ describe('只读窗口诊断', () => {
       const text = `${++calls % 2 ? '50%' : '五十パーセント'}${body}`;
       const tokens = Array.from(text);
       const duration = (end - start) / tokens.length;
-      return { text, tokens, timestamps: tokens.map((_, i) => i * duration), durations: tokens.map(() => duration) };
+      return { text, tokens: ['opaque'], timestamps: [0], durations: [duration] };
     };
     h.feed(10, true);
     h.feed(0.6, false);
@@ -694,7 +696,7 @@ describe('翻供重基（模型改写窗口内已提交前缀）', () => {
     // 旧读法被新读法整体取代，行内容完整（无卡死 → 无停滞丢弃）
     expect(h.segments[0].text).toBe('かきくけこさしすせそ');
     // 重基后提交恢复流动，窗口继续滑动（未卡死在行首）
-    expect(h.engine.calls.some((c) => c.startSec >= 3)).toBe(true);
+    expect(h.engine.calls.some((c) => c.startSec >= 2.4)).toBe(true);
   });
 
   it('坍缩型翻供（输出变短）：不重基不滑动，定稿保底已提交前缀', () => {
@@ -853,4 +855,123 @@ it('exposes the agreed display prefix without hiding a new tentative suffix', ()
   h.pipeline.flush();
   expect(h.segments.map((s) => s.text).join('')).toBe('你好世界还有后文');
   expect(h.partialPayloads.at(-1)?.text).toBe('');
+});
+
+describe('未定稿重叠区的音频所有权', () => {
+  it('前缀修正冲突在期限处重基，保留未提交尾部，挨拶正文不漏不重', () => {
+    const events: PipelineWindowDiagnostic[] = [];
+    const h = makeRampHarness('agreement', e => events.push(e));
+    const old = 'これに載せて、います、例えば、基本の 1';
+    const body = '項目は挨拶ができるみたいなとこから始まる';
+    let calls = 0;
+    let latest = '';
+    h.engine.respond = (start, end) => {
+      if (start > 0) {
+        const schedule = Array.from(latest).map((ch, i, chars) => ({ t: i * 8.4 / chars.length, ch }));
+        schedule.push(...Array.from('次の説明です。').map((ch, i) => ({ t: 8.5 + i * 0.15, ch })));
+        return scheduleDecode(schedule, 0.1)(start, end);
+      }
+      ++calls;
+      if (calls <= 2) return { text: old, tokens: Array.from(old), timestamps: Array(old.length).fill(0), durations: Array(old.length).fill(0.01) };
+      latest = `これに載せてます、例えば、基本の${calls % 2 ? '10' : '十'}${body}`;
+      const tokens = Array.from(latest);
+      return { text: latest, tokens, timestamps: tokens.map((_, i) => i * 8.4 / tokens.length), durations: tokens.map(() => 0.1) };
+    };
+    h.feed(11, true);
+    h.feed(0.6, false);
+    const checkpoint = events.find(e => e.kind === 'stall-checkpoint');
+    expect(checkpoint).toMatchObject({ kind: 'stall-checkpoint', mode: 'retained-overlap', committedPrefix: old });
+    expect(checkpoint).toMatchObject({ trigger: 'no-progress', prefixCompatible: false });
+    expect(checkpoint!.nextWindowStart).toBeLessThan(checkpoint!.to - 0.6);
+    const final = h.segments.map(s => s.text).join('');
+    expect(final).not.toContain('基本の 1');
+    expect(final.split(body)).toHaveLength(2);
+    expect(final.split('次の説明です')).toHaveLength(2);
+    expect(events.some(e => e.kind === 'stall-fallback')).toBe(false);
+    expect(h.engine.calls.every(c => c.endSec - c.startSec <= 9)).toBe(true);
+  });
+
+  it('切点不追随漏掉か的下一token，保留稳定尾字的音频后重新识别かける', () => {
+    const events: PipelineWindowDiagnostic[] = [];
+    const h = makeRampHarness('agreement', e => events.push(e));
+    const prefix = 'この基本の十項目';
+    const schedule = [
+      ...Array.from(prefix).map((ch, i) => ({ t: i * 0.25, ch })),
+      ...Array.from('かける五点です。').map((ch, i) => ({ t: 2.2 + i * 0.2, ch })),
+    ];
+    let calls = 0;
+    h.engine.respond = (start, end) => {
+      if (start > 0) return scheduleDecode(schedule, 0.1)(start, end);
+      const tail = ++calls % 2 ? 'ける五点です' : 'る五点という';
+      const tokens = [...Array.from(prefix), ...Array.from(tail)];
+      return { text: prefix + tail, tokens,
+        timestamps: [...Array.from(prefix).map((_, i) => i * 0.25), ...Array.from(tail).map((_, i) => 2.4 + i * 0.2)],
+        durations: tokens.map(() => 0.1) };
+    };
+    h.feed(6.6, true);
+    h.feed(0.6, false);
+    const first = events.find(e => e.kind === 'ordinary-slide');
+    expect(first).toBeDefined();
+    expect(first!.nextWindowStart).toBeLessThan(2.2);
+    expect(first!.savedText).not.toBe(prefix);
+    expect(h.segments.map(s => s.text).join('')).toBe(prefix + 'かける五点です。');
+  });
+
+  it('同じ言葉を実際に二度話した場合は別の音声区間なので両方を保存する', () => {
+    const h = makeRampHarness();
+    const text = 'ここは大事ですここは大事です次も大事です';
+    h.engine.respond = scheduleDecode(Array.from(text).map((ch, i) => ({ t: i * 0.3, ch })), 0.2);
+    h.feed(9, true);
+    h.feed(0.6, false);
+    expect(h.segments.map(s => s.text).join('')).toBe(text);
+  });
+});
+
+describe('无法对齐token的显式期限检查点', () => {
+  it('ITN阻止滑窗但文字持续增长时保存最新完整读法，不丢未确认尾巴也不重放', () => {
+    const events: PipelineWindowDiagnostic[] = [];
+    const h = makeRampHarness('agreement', e => events.push(e));
+    let call = 0;
+    const continuation = scheduleDecode(Array.from('次の原文です。').map((ch, i) => ({ t: 8.5 + i * 0.1, ch })), 0.1);
+    h.engine.respond = (start, end) => {
+      if (start >= 8) return continuation(start, end);
+      const text = '80%' + Array.from({ length: ++call }, (_, i) => String.fromCharCode(0x3042 + i)).join('');
+      return { text, tokens: ['八', '十', 'パーセント'], timestamps: [0, 0.2, 0.4], durations: [0.1, 0.1, 0.1] };
+    };
+    h.feed(10, true);
+    h.feed(0.6, false);
+    const checkpoint = events.find(e => e.kind === 'stall-checkpoint');
+    expect(checkpoint).toMatchObject({ kind: 'stall-checkpoint', mode: 'full-window', trigger: 'no-advance', prefixCompatible: true });
+    expect(checkpoint!.savedText).toBe(checkpoint!.currentText);
+    expect(checkpoint!.nextWindowStart).toBe(checkpoint!.to);
+    const final = h.segments.map(s => s.text).join('');
+    expect(final.split(checkpoint!.savedText)).toHaveLength(2);
+    expect(final.split('次の原文です')).toHaveLength(2);
+    expect(events.some(e => e.kind === 'stall-fallback')).toBe(false);
+    expect(h.engine.calls.every(c => c.endSec - c.startSec <= 9)).toBe(true);
+  });
+});
+
+describe('待定区的合法修正可见', () => {
+  it('较长冲突读法立即可见，但不把冲突字符标记为稳定', () => {
+    const h = makeHarness();
+    h.engine.result = { text: '基本の 1', lang: '<|ja|>' };
+    h.feed(1.3, true);
+    h.engine.result = { text: '基本の十項目は挨拶ができる', lang: '<|ja|>' };
+    h.feed(0.6, true);
+    const last = h.partialPayloads.at(-1)!;
+    expect(last.text).toBe('基本の十項目は挨拶ができる');
+    expect(last.stableText).toBe('基本の');
+    expect(last.text.startsWith(last.stableText!)).toBe(true);
+  });
+
+  it('短坍缩不能抹掉窗口内已确认文字', () => {
+    const h = makeHarness();
+    const stable = '基本の十項目は挨拶ができる';
+    h.engine.result = { text: stable, lang: '<|ja|>' };
+    h.feed(1.3, true);
+    h.engine.result = { text: '別', lang: '<|ja|>' };
+    h.feed(0.6, true);
+    expect(h.partialPayloads.at(-1)).toMatchObject({ text: stable, stableText: stable });
+  });
 });
