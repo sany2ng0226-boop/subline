@@ -18,3 +18,13 @@ it.each(['zh', 'en', 'ja', 'ko'] as const)('warns about translation model size i
   expect(message).toContain('4.5 GB');
   expect(message).toContain('Hy-MT2 7B');
 });
+
+it.each(['zh', 'en', 'ja', 'ko'] as const)('interpolates paused subtitle counts in %s', locale => {
+  for (const count of [1, 3]) {
+    const text = i18n.global.t('main.jumpLatestCount', { count }, { locale, plural: count });
+    expect(text).toContain(String(count));
+    expect(text).not.toContain('|');
+    expect(text).not.toContain('{count}');
+  }
+  expect(i18n.global.t('main.followPaused', {}, { locale })).not.toBe('main.followPaused');
+});

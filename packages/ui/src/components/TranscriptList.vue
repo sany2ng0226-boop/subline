@@ -27,6 +27,7 @@ const { announcements } = useCaptionAnnouncer(() => props.lines, () => props.ann
 const scroller = ref<HTMLElement | null>(null);
 const column = ref<HTMLElement | null>(null);
 const followEnd = ref(true);
+const newLineCount = ref(0);
 const rows = computed(() => props.draft ? [...props.lines, props.draft] : props.lines);
 const stableText = computed(() => props.stablePartial && props.partial.startsWith(props.stablePartial)
   ? props.stablePartial : '');
@@ -48,7 +49,10 @@ function onScroll(): void {
   const el = scroller.value;
   if (!el) return;
   const gap = el.scrollHeight - el.clientHeight - el.scrollTop;
-  if (gap < 40) followEnd.value = true;
+  if (gap < 40) {
+    followEnd.value = true;
+    newLineCount.value = 0;
+  }
   else if (el.scrollTop < lastTop - 1) followEnd.value = false;
   if (gap < 2 || !followEnd.value) jumping = false;
   lastTop = el.scrollTop;
@@ -64,8 +68,22 @@ function jumpToLatest(): void {
   const el = scroller.value;
   if (!el) return;
   followEnd.value = true;
+  newLineCount.value = 0;
   jumping = true;
   el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+}
+watch(() => props.lines.length, (length, previous) => {
+  if (!length || length < previous) newLineCount.value = 0;
+  else if (!followEnd.value) newLineCount.value += length - previous;
+}, { flush: 'sync' });
+
+function onKeydown(event: KeyboardEvent): void {
+  if (!showJump.value || event.key !== 'Enter' || event.isComposing
+    || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  const focused = document.activeElement;
+  if (focused?.closest('input, textarea, select, button') || (focused as HTMLElement | null)?.isContentEditable) return;
+  event.preventDefault();
+  jumpToLatest();
 }
 // 数据变化后立即贴底（不依赖渲染帧，窗口在后台时也成立）；
 // 过渡结束后才出现的高度变化（新行、译文回填、窗口缩放）由 ResizeObserver 在绘制前补齐。
@@ -73,12 +91,16 @@ watch(() => [props.draft?.text, ...props.lines.map((line) =>
   [line.text, line.translation, line.translating, line.failed])], () => nextTick(pinToEnd));
 let resizeObserver: ResizeObserver | undefined;
 onMounted(() => {
+  window.addEventListener('keydown', onKeydown);
   resizeObserver = new ResizeObserver(pinToEnd);
   if (scroller.value) resizeObserver.observe(scroller.value);
   if (column.value) resizeObserver.observe(column.value);
   pinToEnd();
 });
-onBeforeUnmount(() => resizeObserver?.disconnect());
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  window.removeEventListener('keydown', onKeydown);
+});
 
 const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 </script>
@@ -127,9 +149,12 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
     </div>
 
     <Transition name="jump">
-      <button v-if="showJump" type="button" class="jump-latest" @click="jumpToLatest">
-        <ArrowDown :size="14" />{{ t('main.jumpLatest') }}
-      </button>
+      <div v-if="showJump" class="jump-controls">
+        <span class="paused-hint">{{ t('main.followPaused') }}</span>
+        <button type="button" class="jump-latest" @click="jumpToLatest">
+          <ArrowDown :size="14" />{{ newLineCount ? t('main.jumpLatestCount', { count: newLineCount }, newLineCount) : t('main.jumpLatest') }}
+        </button>
+      </div>
     </Transition>
   </div>
 </template>
@@ -187,10 +212,18 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
   color: var(--rt-ink-3);
 }
 
-.jump-latest {
+.jump-controls {
   position: absolute;
   left: 50%;
   bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transform: translateX(-50%);
+}
+.paused-hint { font-size: 12px; color: var(--rt-ink-3); }
+.jump-latest {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -201,7 +234,6 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
   color: var(--rt-ink-2);
   background: var(--rt-bg);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  transform: translateX(-50%);
   cursor: pointer;
 }
 .jump-latest:hover { color: var(--rt-ink); }
