@@ -27,6 +27,7 @@ const scroller = ref<HTMLElement | null>(null);
 const column = ref<HTMLElement | null>(null);
 
 const newLineCount = ref(0);
+const followEnd = ref(true);
 const rows = computed(() => props.draft ? [...props.lines, props.draft] : props.lines);
 const stableText = computed(() => props.stablePartial && props.partial.startsWith(props.stablePartial)
   ? props.stablePartial : '');
@@ -57,14 +58,29 @@ function rememberAnchor(): void {
   const id = source?.closest<HTMLElement>('[data-caption-id]')?.dataset.captionId;
   anchor = source && id ? { id, top: source.getBoundingClientRect().top - viewport.top } : undefined;
 }
-function onScroll(): void {
+function pauseFollowing(): void {
+  followEnd.value = false;
   rememberAnchor();
+}
+function onNavigation(event: KeyboardEvent): void {
+  if (event.target !== event.currentTarget) return;
+  if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) pauseFollowing();
+}
+function onPointerDown(event: PointerEvent): void {
+  const el = scroller.value;
+  if (!el || event.target !== event.currentTarget) return;
+  const scrollbarWidth = el.offsetWidth - el.clientWidth;
+  if (scrollbarWidth > 0 && event.clientX >= el.getBoundingClientRect().right - scrollbarWidth) pauseFollowing();
+}
+function onScroll(): void {
+  if (!followEnd.value) rememberAnchor();
   const el = scroller.value;
   if (el && el.scrollHeight - el.clientHeight - el.scrollTop < 40) newLineCount.value = 0;
 }
 function preserveReadingPosition(): void {
   const el = scroller.value;
   if (!el) return;
+  if (followEnd.value) { el.scrollTop = el.scrollHeight; return; }
   const source = anchor && sources().find(source =>
     source.closest<HTMLElement>('[data-caption-id]')?.dataset.captionId === anchor!.id);
   if (source && anchor) {
@@ -77,13 +93,13 @@ function jumpToLatest(): void {
   const el = scroller.value;
   if (!el) return;
   newLineCount.value = 0;
-  // An immediate jump establishes one new reading position; it never enables continuous following.
+  followEnd.value = true;
   el.scrollTop = el.scrollHeight;
   rememberAnchor();
 }
 watch(() => props.lines.length, (length, previous) => {
   if (!length || length < previous) { newLineCount.value = 0; anchor = undefined; }
-  else if (!props.recording) newLineCount.value = 0;
+  else if (!props.recording || followEnd.value) newLineCount.value = 0;
   else newLineCount.value += length - previous;
 }, { flush: 'pre' });
 
@@ -95,7 +111,7 @@ function onKeydown(event: KeyboardEvent): void {
   event.preventDefault();
   jumpToLatest();
 }
-// Preserve the same source position through Vue updates and delayed translation transitions.
+// Content growth follows the bottom only until the reader deliberately starts browsing.
 watch(() => [props.draft?.text, ...props.lines.map((line) =>
   [line.text, line.translation, line.translating, line.failed])], () => nextTick(preserveReadingPosition));
 let resizeObserver: ResizeObserver | undefined;
@@ -115,20 +131,20 @@ const jumpAction = computed(() => newLineCount.value
   ? `↓ ${t('main.jumpLatestCount', { count: newLineCount.value }, newLineCount.value)}`
   : t('main.jumpLatest'));
 const jumpLabel = computed(() => jumpAction.value);
-const latestPreview = computed(() => {
-  const text = Array.from(props.draft ? props.partial : rows.value.at(-1)?.text ?? '');
-  return `${text.length > 80 ? '…' : ''}${text.slice(-80).join('')}`;
-});
-
-const showJump = computed(() => rows.value.length > 0);
+const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 </script>
 
 <template>
   <div class="relative flex min-h-0 flex-1 flex-col">
     <div
       ref="scroller"
-      class="transcript-scroller relative flex-1 overflow-y-auto px-6 pb-6 pt-7 max-sm:px-4"
+      class="transcript-scroller relative flex-1 overflow-y-auto px-6 pb-16 pt-7 max-sm:px-4"
       @scroll="onScroll"
+      @wheel.passive="pauseFollowing"
+      @touchstart.passive="pauseFollowing"
+      @pointerdown="onPointerDown"
+      @keydown="onNavigation"
+      tabindex="0"
     >
       <p v-if="!recording && !rows.length" class="empty-hint">{{ emptyHint }}</p>
 
@@ -168,7 +184,6 @@ const showJump = computed(() => rows.value.length > 0);
 
     <Transition name="jump">
       <div v-if="showJump" class="jump-controls">
-        <div class="latest-preview" :lang="textLang(sourceLang)"><span class="latest-label">{{ t('main.latestSource') }}</span><span class="latest-text"><span class="latest-tail">{{ latestPreview }}</span></span></div>
         <button type="button" class="jump-latest" :class="{ 'has-new': newLineCount > 0 }" :aria-label="jumpLabel" @click="jumpToLatest">
           <span :key="newLineCount" class="jump-action">{{ jumpAction }}</span>
         </button>
@@ -232,20 +247,11 @@ const showJump = computed(() => rows.value.length > 0);
 }
 
 .jump-controls {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-height: 62px;
-  padding: 10px 24px;
-  border-top: 1px solid var(--rt-line);
-  background: var(--rt-bg);
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
 }
-.latest-preview { min-width: 0; flex: 1; display: flex; align-items: baseline; font-size: 14px; color: var(--rt-ink); }
-.latest-text { min-width: 0; flex: 1; overflow: hidden; }
-.latest-tail { float: right; min-width: 100%; white-space: nowrap; }
-.latest-label { margin-right: 8px; color: var(--rt-ink-3); font-size: 12px; }
-/* The latest strip occupies its own space so it never covers transcript text. */
 .jump-latest {
   display: inline-flex;
   align-items: center;

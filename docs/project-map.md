@@ -47,7 +47,7 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 - `useTranscription.ts` 在管线确认启动后记录 `recordStartEpoch`，将 `Segment.start` 的会话相对秒数换算为本地 `HH:MM:SS`；临时句先以首次文字到达时刻显示，定稿时替换为片段开始时间。格式化复用 `utils/datetime.ts` 的 `fmtClock`，归档快照保留已格式化的墙钟字符串，不保存或显示经过时长。
 - `TranscriptList.vue` 在实时行左侧渲染 `<time>`；归档详情共用的 `ConversationLine.vue` 使用同一 `timeline-time` 类。`styles.css` 将时间列设为固定 `8ch`、等宽数字及 `--rt-ink-3` 颜色；该 token 在明暗主题的背景与表面上均由 `tokens.test.ts` 守护至少 4.5:1 的对比度。`ArchiveLine.time` 可选，两组件在缺失或空值时省略时间列；不迁移旧记录，也不生成缺失的时间。
 - 字幕排版（字号、颜色层级、间距、草稿光标与淡入）由 `TranscriptList.vue` 的 scoped CSS 管理，颜色取自 `styles.css` 的 `--rt-*` 主题变量；实时和归档译文均有缩进与 2 像素左强调线，并遵循现有字号设置。外部规则见[开始一次转写](product/experience.md#开始一次转写)。
-- 阅读锚定也在 `TranscriptList.vue`：组件记录可见原文的 `displayId` 与相对视口位置，数据更新后由 `watch` + `nextTick`、延迟尺寸变化由 `ResizeObserver` 补偿 `scrollTop`，使原文续写、新行、译文撑高和窗口缩放不改变当前阅读位置。组件底部的独立工具栏显示最新原文末尾与新增定稿行计数；按钮或受输入焦点、修饰键和输入法状态约束的 Enter 快捷键只跳到最新一次，随即建立新锚点，不切换为持续跟随。这些共享 UI 状态与排版不增加识别计时器、推理或切句步骤。
+- 底部跟随与阅读锚定均在 `TranscriptList.vue`：`followEnd` 为真时，数据更新后的 `watch` + `nextTick` 和延迟尺寸变化的 `ResizeObserver` 将视图保持在底部；滚轮、触摸、滚动条或键盘浏览会调用 `pauseFollowing`，记录可见原文的 `displayId` 与相对视口位置，之后补偿 `scrollTop` 以保持阅读位置。暂停时只显示“回到最新”及新增定稿行计数，不显示最新原文预览；按钮或受输入焦点、修饰键和输入法状态约束的 Enter 快捷键恢复持续跟随。这些共享 UI 状态与排版不增加识别计时器、推理或切句步骤。
 
 ### 翻译
 
@@ -77,7 +77,7 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 
 - 根 `package.json` 的 `pnpm check` 运行 `@rt/core` 单元测试、macOS 评测语料导入器的纯逻辑测试，以及 macOS、Web、iOS 三端类型检查；它不下载语料或模型，也不执行耗时的识别精度门禁。
 - `packages/core/src/**/*.test.ts` 覆盖设置、归档、模型源、转写管线、定稿漂移统计和翻译决策等共享逻辑。
-- `packages/ui/src/components/timeline.test.ts` 检查实时与归档时间列渲染、译文层级及旧归档缺少时间时的兼容；`TranscriptList.test.ts` 检查原文锚定、译文延迟撑高补偿、最新原文预览、定稿行计数、单次跳转与输入焦点保护；`useTranscription.test.ts` 检查相对秒数到本地墙钟、跨午夜及归档时间保留，`tokens.test.ts` 检查两套主题的文字对比度。
+- `packages/ui/src/components/timeline.test.ts` 检查实时与归档时间列渲染、译文层级及旧归档缺少时间时的兼容；`TranscriptList.test.ts` 检查默认贴底、主动浏览后的原文锚定、译文延迟撑高补偿、定稿行计数、回到最新后恢复跟随与输入焦点保护；`useTranscription.test.ts` 检查相对秒数到本地墙钟、跨午夜及归档时间保留，`tokens.test.ts` 检查两套主题的文字对比度。
 - `apps/macos/test` 包含无 GUI 管线、CER 评测和翻译脚本；入口命令由 `apps/macos/package.json` 的 `test-pipeline`、`eval-cer` 和 `test-translate` 定义。`eval-cer` 同时报告产品管线 CER、整段离线 CER 和“实时最长结果到定稿”的 Final 漂移，并可用 `--max-cer`、`--max-drift` 将任一模型的加权结果设为失败门槛。日语快捷命令 `eval-cer-ja` 评测固定语言的完整语料，`eval-cer-ja:gate` 则以 SenseVoice 的产品管线 CER 不超过 20%、Final 漂移不超过 5% 为回归门禁。
 - `apps/macos/test/model-integrity.ts` 覆盖原生下载的大小/SHA-256 校验、错误源回退、残留清理、已安装文件大小检查，以及无 pin 文件仍可下载的兼容行为。
 - `apps/macos/scripts/fetch-fleurs-eval.mjs` 通过 `fetch-eval-fleurs` 从固定 revision 的 FLEURS `ja_jp` test split 确定性抽取 100 条 CC-BY-4.0 语料，生成 16 kHz 单声道 PCM WAV、参考文本、语言元数据和带署名及音频哈希的 manifest。源 Parquet 缓存在 `apps/macos/test-audio/cache`，用例写入 `apps/macos/test-audio/eval/fleurs-ja-test`；两处均被 Git 忽略，需要评测的环境自行生成。

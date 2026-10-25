@@ -11,7 +11,7 @@ type Node = {
   type: string; children: Node[]; parent: Node | null; props: Record<string, any>;
   text: string; scrollTop: number; scrollHeight: number; clientHeight: number;
   scrollTo: ReturnType<typeof vi.fn>;
-  getBoundingClientRect(): { top: number; bottom: number };
+  getBoundingClientRect(): { top: number; bottom: number; right: number };
   querySelectorAll(selector: string): Node[];
   closest(selector: string): Node | null;
   dataset: { captionId?: string };
@@ -43,7 +43,7 @@ async function mount() {
       get dataset() { return { captionId: el.props['data-caption-id']?.toString() }; },
       closest() { let current: Node | null = el; while (current && current.props['data-caption-id'] === undefined) current = current.parent; return current; },
       querySelectorAll() { const result: Node[] = []; const visit = (n: Node) => { if (n.props.class === 'caption-source') result.push(n); n.children.forEach(visit); }; visit(el); return result; },
-      getBoundingClientRect() { if (el === scroller) return { top: 0, bottom: 200 }; const id = Number(el.closest('')?.dataset.captionId); const top = (positions.get(id) ?? (id - 1) * 200) - (scroller?.scrollTop ?? 0); return { top, bottom: top + 100 }; },
+      getBoundingClientRect() { if (el === scroller) return { top: 0, bottom: 200, right: 200 }; const id = Number(el.closest('')?.dataset.captionId); const top = (positions.get(id) ?? (id - 1) * 200) - (scroller?.scrollTop ?? 0); return { top, bottom: top + 100, right: 200 }; },
     } as Node;
     return el;
   }
@@ -91,6 +91,7 @@ async function mount() {
   scroller = find(n => !!n.props.onScroll)!;
   const text = (n: Node = root): string => n.text + n.children.map(child => text(child)).join('');
   const pause = async () => {
+    scroller.props.onWheelPassive();
     scroller.scrollTop = 800; scroller.props.onScroll();
     scroller.scrollTop = 400; scroller.props.onScroll();
     await nextTick();
@@ -115,7 +116,7 @@ it('holds the reading source when translation above it expands, including delaye
   expect(h.scroller.scrollTop).toBe(520);
 });
 
-it('does not follow appended lines or draft corrections and exposes the newest source', async () => {
+it('holds the reading position during appended lines and draft corrections after wheel browsing', async () => {
   const h = await mount();
   await h.pause();
   h.props.lines.push(line(6), line(7));
@@ -123,17 +124,17 @@ it('does not follow appended lines or draft corrections and exposes the newest s
   h.props.partial = 'Newest original text';
   await nextTick(); await nextTick();
   expect(h.scroller.scrollTop).toBe(400);
-  expect(h.text()).toContain('Newest original text');
+  expect(h.props.draft.text).toBe('Newest original text');
   expect(h.text()).toContain('2 new subtitles');
   h.props.draft.text = 'Corrected original text';
   h.props.partial = 'Corrected original text';
   await nextTick(); await nextTick();
   expect(h.scroller.scrollTop).toBe(400);
-  expect(h.text()).toContain('Corrected original text');
+  expect(h.props.draft.text).toBe('Corrected original text');
   expect(h.props.lines).toHaveLength(7);
 });
 
-it.each(['click', 'Enter'])('%s jumps once, resets count, then holds that reading position', async method => {
+it.each(['click', 'Enter'])('%s resumes continuous following until the next wheel browsing', async method => {
   const h = await mount();
   await h.pause();
   h.props.lines.push(line(6));
@@ -143,9 +144,15 @@ it.each(['click', 'Enter'])('%s jumps once, resets count, then holds that readin
   expect(h.scroller.scrollTop).toBe(1000);
   await nextTick();
   expect(h.text()).not.toContain('1 new subtitle');
+  h.scroller.scrollHeight = 1200;
   h.props.lines.push(line(7));
   await nextTick(); await nextTick();
-  expect(h.scroller.scrollTop).toBe(1000);
+  expect(h.scroller.scrollTop).toBe(1200);
+  expect(h.find(n => n.type === 'button')).toBeUndefined();
+  await h.pause();
+  h.props.lines.push(line(8));
+  await nextTick(); await nextTick();
+  expect(h.scroller.scrollTop).toBe(400);
   expect(h.text()).toContain('1 new subtitle');
 });
 
@@ -167,35 +174,56 @@ it('ignores Enter inside controls, with modifiers, or during composition and cle
 });
 
 it.each([
-  ['zh', '最新', '回到最新', '6 条新字幕'],
-  ['ja', '最新', '最新へ移動', '新しい字幕 6 件'],
-  ['en', 'Latest', 'Jump to latest', '6 new subtitles'],
-  ['ko', '최신', '최신으로 이동', '새 자막 6개'],
-] as const)('localizes the latest preview and action in %s', async (locale, latest, action, count) => {
+  ['zh', '回到最新', '6 条新字幕'],
+  ['ja', '最新へ移動', '新しい字幕 6 件'],
+  ['en', 'Jump to latest', '6 new subtitles'],
+  ['ko', '최신으로 이동', '새 자막 6개'],
+] as const)('localizes the paused return action in %s', async (locale, action, count) => {
   const h = await mount();
   i18n.global.locale.value = locale;
-  await nextTick();
-  expect(h.text()).toContain(latest);
+  await h.pause();
   expect(h.text()).toContain(action);
   h.props.lines.push(...Array.from({ length: 6 }, (_, i) => line(i + 6)));
   await nextTick();
   expect(h.text()).toContain(count);
 });
 
-it('previews only the latest Unicode tail without mutating the source text', async () => {
+it('follows draft growth, new lines and delayed translation resizing by default', async () => {
   const h = await mount();
-  const original = 'Earlier text' + '語😀'.repeat(50) + 'latest end';
-  h.props.draft = { ...line(6), text: original };
-  h.props.partial = original;
-  await nextTick();
-  const preview = h.find(n => n.props.class === 'latest-tail')!;
-  expect(h.text(preview)).toBe('…' + Array.from(original).slice(-80).join(''));
-  expect(h.props.draft.text).toBe(original);
-  expect(h.props.partial).toBe(original);
+  h.scroller.scrollHeight = 1200;
+  h.props.draft = { ...line(6), text: 'Latest text' };
+  await nextTick(); await nextTick();
+  expect(h.scroller.scrollTop).toBe(1200);
+  h.scroller.scrollTop = 1100;
+  h.scroller.props.onScroll();
+  h.scroller.scrollHeight = 1400;
+  h.resize();
+  expect(h.scroller.scrollTop).toBe(1400);
+  expect(h.find(n => n.type === 'button')).toBeUndefined();
+  expect(h.find(n => n.props.class === 'latest-preview')).toBeUndefined();
 });
 
-it('removes stale preview and count when the transcript becomes empty', async () => {
+it('pauses for touch, scrollbar and keyboard navigation without treating programmatic scroll as browsing', async () => {
   const h = await mount();
+  h.scroller.props.onTouchstartPassive();
+  await nextTick();
+  expect(h.find(n => n.type === 'button')).toBeDefined();
+  h.find(n => n.type === 'button')!.props.onClick();
+  await nextTick();
+  h.scroller.props.onKeydown({ key: 'PageUp', target: h.scroller, currentTarget: h.scroller });
+  await nextTick();
+  expect(h.find(n => n.type === 'button')).toBeDefined();
+  h.find(n => n.type === 'button')!.props.onClick();
+  await nextTick();
+  Object.assign(h.scroller, { offsetWidth: 220, clientWidth: 200 });
+  h.scroller.props.onPointerdown({ target: h.scroller, currentTarget: h.scroller, clientX: 195 });
+  await nextTick();
+  expect(h.find(n => n.type === 'button')).toBeDefined();
+});
+
+it('removes stale return action and count when the transcript becomes empty', async () => {
+  const h = await mount();
+  await h.pause();
   h.props.lines.push(line(6));
   await nextTick();
   expect(h.text()).toContain('1 new subtitle');
@@ -209,6 +237,7 @@ it('removes stale preview and count when the transcript becomes empty', async ()
 
 it('does not count a restored transcript as new live subtitles', async () => {
   const h = await mount();
+  await h.pause();
   h.props.recording = false;
   h.props.lines.push(...Array.from({ length: 37 }, (_, i) => line(i + 6)));
   await nextTick();
