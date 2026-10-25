@@ -32,10 +32,11 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 
 ### 录后转写与归档回听
 
-- `packages/core/src/types.ts` 与 `bridge.ts` 定义录后选项、进度、`ArchiveRevision` 及宿主能力；`apps/macos/src/main/archive-refinement.ts` 管理全应用唯一任务、取消和成功后原子追加，失败或取消不把部分结果写入归档。
+- `packages/core/src/types.ts` 将 `ArchiveRevision.options` 定义为本地录后转写与 Codex 校对两类参数的联合类型，并保留 Codex 模型及逐行待核对元数据；`bridge.ts` 声明 `proofreadArchive` 与 `getCodexStatus` 可选能力，macOS 主进程和 preload 只在 Dev 身份下开放。`apps/macos/src/main/archive-refinement.ts` 让两条路径共用全应用唯一任务、取消和成功后原子追加，失败或取消不把部分结果写入归档。
 - `offline-refinement.ts` 用有界块读取和校验 16 kHz 单声道 PCM16 WAV，经原生 VAD 切段并以 `front(false)` 取得自有样本，避免 Electron 对 external ArrayBuffer 的限制。SenseVoice／Paraformer 单次识别上限为 12 秒，transducer 模型为 3 秒。
-- `archive-refinement-worker.ts` 先在 Electron `utilityProcess` 中运行识别，释放 ASR 后再独立启动现有 `translation/translate-process.ts` 的纯 Node 进程逐行翻译，避免大 tensor 分配触发 Electron 分配器崩溃。该路径只使用已下载本地模型，不经实时翻译队列，HY-MT2 只接收当前行原文。
-- `packages/ui/src/components/ArchiveReview.vue` 与 `archive-review.ts` / `archive-refine.ts` 为普通归档和文件夹归档共用版本切换、已下载模型选择、进度、取消与重试；`ArchiveAudioPlayer.vue` 和 `ConversationLine.vue` 负责逐行跳播与播放高亮，旧归档没有附件或偏移时不推算、不补造。
+- 本地路径的 `archive-refinement-worker.ts` 先在 Electron `utilityProcess` 中运行识别，释放 ASR 后再独立启动现有 `translation/translate-process.ts` 的纯 Node 进程逐行翻译，避免大 tensor 分配触发 Electron 分配器崩溃。该路径只使用已下载本地模型，不经实时翻译队列，HY-MT2 只接收当前行原文。
+- Dev 专用的 `apps/macos/src/main/codex-proofreading.ts` 检查本机 Codex CLI 的 ChatGPT 登录，以 `gpt-6.1-sol` 和严格结构化输出分批校对、翻译所选版本。字幕请求包含字幕文字、源／目标语言、临时行号和匿名录音分组，不包含音频、音频 ID、真实时间偏移或原音文件路径；应用不读取或转发登录凭证，由 Codex CLI 自行鉴权。行顺序、数字、否定和未知标记等校验不通过时拒绝结果，由共享管理器保证不追加部分版本。
+- `packages/ui/src/components/ArchiveReview.vue` 与 `archive-review.ts` / `archive-refine.ts` 为普通归档和文件夹归档共用版本切换、本地模型选择、Codex 状态与来源版本确认、进度、取消和重试；Codex 弹窗在发送前说明文字、音频与订阅额度边界，结果行可显示“待核对”和校对说明。`ArchiveAudioPlayer.vue` 和 `ConversationLine.vue` 负责逐行跳播与播放高亮，旧归档没有附件或偏移时不推算、不补造。
 
 ### 音频音量显示
 
