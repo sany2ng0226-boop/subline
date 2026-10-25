@@ -736,7 +736,7 @@ export class TranscriptionPipeline {
           committedPrefix: checkpoint ? priorCommitted : previousCommitted, currentText: cur.text, savedText,
           cutLen: aligned.cutLen, alignedEndSec: aligned.endSec,
           retainedText: this.committedInWindow, retainedHypothesis: this.bestWindowHypothesis,
-        });
+        } as Extract<PipelineWindowDiagnostic, { kind: 'stall-checkpoint' | 'ordinary-slide' }>);
       } catch { /* Diagnostics cannot interrupt audio processing. */ }
     }
     return true;

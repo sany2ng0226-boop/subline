@@ -36,7 +36,9 @@
 
 - `audio.input`：16 kHz 输入的块数、样本数、RMS、峰值及非有限值计数，不含 PCM；
 - `asr.raw-result` / `asr.raw-partial` / `asr.asr-fragment` / `asr.sentence`：模型结果、临时结果、管线片段和合句结果；
-- `asr.stall-checkpoint` / `asr.stall-fallback` / `asr.ordinary-slide`：只有管线实际执行对应的停滞检查点、停滞降级或普通窗口滑动分支时才产生。三者均以会话相对秒记录 `windowStart`、`to`、`nextWindowStart`，并附带 `committedPrefix`、`currentText` 和 `savedText`；降级事件另有 `reason`，普通滑动另有切点和保留文本字段；
+- `asr.sentence-flush`：macOS 合句器每次定稿时的 `reason`、`text`、`start` 和 `duration`，用于区分标点、短句、等待上限、音频上限、间隔、语言切换或停录等现有定稿原因；该事件只观测分句结果，不改变合句决策；
+- `asr.context-trim`：一致前缀模式实际携带逻辑边界前的解码上下文时产生，以会话相对秒记录 `contextStart`、`windowStart` 和 `to`，并提供原始 `rawText`、排除边界前内容后的 `text` 及 `removedText`。`mode` 为 `timestamps` 时按 token 时间归属，`retained-anchor` 表示在边界附近用已保留文字锚定切点，`already-retained` 表示原始结果已从保留内容开始因而不裁剪，`direct-retry` 表示无法可靠对齐时只重解逻辑区间；
+- `asr.stall-checkpoint` / `asr.stall-fallback` / `asr.ordinary-slide`：只有管线实际执行对应的停滞检查点、停滞降级或普通窗口滑动分支时才产生。三者均以会话相对秒记录 `windowStart`、`to`、`nextWindowStart`，并附带 `committedPrefix`、`currentText` 和 `savedText`；降级事件另有 `reason`，普通滑动另有切点和保留文本字段。检查点的 `mode` 区分保留已对齐尾部的 `retained-overlap` 和只保存最新全窗读法一次的 `full-window`；前者另有 `retainedText`，两者可记录 `trigger` 与 `prefixCompatible`；
 - `main.pipeline:partial` / `main.pipeline:segment` / `main.pipeline:status` / `main.pipeline:translation`：主进程送往渲染层的事件；
 - `renderer.ui:partial` / `renderer.ui:segment`：UI 实际接收的原文事件；
 - `session.start` / `session.stop-request`：一次录音会话的边界。
@@ -47,7 +49,9 @@
 
 `audit.mjs` 比较同一会话内 ASR 片段串联后的文字与合句结果，以及主进程定稿段与 UI 定稿段的 ID 和文本，并报告重复 UI ID、游标缺口、字段省略和会话是否正常停录。只有轨迹无缺口、无省略、恰有一次会话开始且出现停止状态时，跨阶段相等性才会给出布尔结论。
 
-审计结果中的 `checkpointCount` 和 `checkpoints` 列出实际捕获的停滞检查点；每个检查点的 `savedTextInFragments` 与 `savedTextInUi` 分别统计 `savedText` 在拼接后的 ASR 片段和 UI 定稿原文中出现的次数，比较前会做 NFKC 归一化并移除空白。轨迹不完整时这两个次数为 `null`。`ordinarySlides` 与 `stallFallbacks` 只统计对应事件数量。计数为零只能说明这份完整轨迹里没有捕获该分支；在未满足触发条件、游标丢失、字段省略或会话未正常停止时，不能据此判定分支不可达或实现失效。
+审计结果中的 `checkpointCount` 和 `checkpoints` 列出实际捕获的停滞检查点；每个检查点的 `savedTextInFragments` 与 `savedTextInUi` 分别统计 `savedText` 在拼接后的 ASR 片段和 UI 定稿原文中出现的次数，比较前会做 NFKC 归一化并移除空白。`retained-overlap` 检查点的 `savedText` 只是已跨过最终提交边界的前缀，`retainedText` 仍属于后续窗口，不能仅凭当个检查点的出现次数判定它丢失或重复；`full-window` 的 `savedText` 才是该次最新全窗读法。轨迹不完整时这两个次数为 `null`。`ordinarySlides` 与 `stallFallbacks` 只统计对应事件数量。计数为零只能说明这份完整轨迹里没有捕获该分支；在未满足触发条件、游标丢失、字段省略或会话未正常停止时，不能据此判定分支不可达或实现失效。
+
+`audit.mjs` 尚不将 `asr.context-trim` 汇总为正确性判定。`removedText` 只表示本次根据音频边界排除的解码上下文；`already-retained` 的空 `removedText` 与 `direct-retry` 的二次解码都不是单独的丢失或重复证据。逻辑区间为空时不执行上下文解码，因此也不产生该事件。
 
 这些结论只证明已埋点阶段之间的文字守恒。它们不提供独立音频真值，不能判断语音是否被 ASR 漏识别，也不是准确率、CER、实时延迟或完整音频评分；要逐句确认“内容不漏不重复”，仍需将导出证据与视频、人工参考文本或其它独立真值对照。
 
