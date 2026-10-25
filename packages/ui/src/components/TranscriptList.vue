@@ -154,10 +154,11 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 
     <Transition name="jump">
       <div v-if="showJump" class="jump-controls">
-        <button type="button" class="jump-latest" :aria-label="jumpLabel" @click="jumpToLatest">
+        <button type="button" class="jump-latest" :class="{ 'has-new': newLineCount > 0 }" :aria-label="jumpLabel" @click="jumpToLatest">
+          <span class="jump-pause-icon" aria-hidden="true" />
           <span class="jump-paused">{{ t('main.followPaused') }}</span>
-          <span>·</span>
-          <span>{{ jumpAction }}</span>
+          <span class="jump-sep" aria-hidden="true">·</span>
+          <span :key="newLineCount" class="jump-action">{{ jumpAction }}</span>
         </button>
       </div>
     </Transition>
@@ -220,28 +221,52 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 .jump-controls {
   position: absolute;
   left: 50%;
-  bottom: 18px;
+  bottom: 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
   transform: translateX(-50%);
 }
-.jump-paused { color: var(--rt-ink-2); }
+/* 跳到最新：停在列表底部留白（pb-16）内，不压住正在读的字幕。
+   无新字幕＝强调色浅底；有新字幕＝强调色实心底，一眼可见。文字对底色均 ≥ 4.5:1。 */
 .jump-latest {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 14px 7px 11px;
-  border: 1px solid var(--rt-line);
+  gap: 7px;
+  height: 32px;
+  padding: 0 14px 0 12px;
+  border: 1px solid color-mix(in srgb, var(--rt-accent) 35%, transparent);
   border-radius: 999px;
   font-size: 12.5px;
-  color: var(--rt-ink-2);
-  background: var(--rt-bg);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--rt-accent-ink);
+  background: color-mix(in srgb, var(--rt-accent) 10%, var(--rt-bg));
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
   cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
 }
-.jump-latest:hover { color: var(--rt-ink); }
+.jump-latest:hover { background: color-mix(in srgb, var(--rt-accent) 16%, var(--rt-bg)); }
+.jump-latest.has-new {
+  border-color: var(--rt-accent);
+  color: var(--rt-bg);
+  background: var(--rt-accent);
+  font-weight: 600;
+}
+.jump-latest.has-new:hover { background: color-mix(in srgb, var(--rt-accent) 88%, var(--rt-ink)); }
+.jump-latest:focus-visible { outline: 2px solid var(--rt-accent); outline-offset: 3px; }
+.jump-paused { opacity: 0.85; font-weight: 500; }
+.jump-sep { opacity: 0.6; }
+/* 暂停图标：两条竖线，纯 CSS */
+.jump-pause-icon {
+  width: 8px; height: 10px; flex: none;
+  border-left: 2.5px solid currentColor; border-right: 2.5px solid currentColor;
+}
+/* 新字幕计数变化：轻微放大一下 */
+.jump-latest.has-new .jump-action { display: inline-block; animation: jump-bump 0.28s var(--rt-ease); }
+@keyframes jump-bump { 0% { transform: scale(1.12); } 100% { transform: scale(1); } }
 
 /* 过渡：只动 opacity（合成层完成，不触发重排/重绘），新行出现与自动滚动不再互相打架 */
 .caption-enter-active { transition: opacity 0.3s ease-out; }
@@ -249,8 +274,10 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 .tr-enter-active { transition: opacity 0.25s ease-out; }
 .tr-leave-active { transition: opacity 0.1s linear; }
 .tr-enter-from, .tr-leave-to { opacity: 0; }
-.jump-enter-active, .jump-leave-active { transition: opacity 0.18s ease; }
-.jump-enter-from, .jump-leave-to { opacity: 0; }
+.jump-enter-active { transition: opacity 0.2s ease-out, transform 0.24s var(--rt-ease); }
+.jump-leave-active { transition: opacity 0.14s ease-in; }
+.jump-enter-from { opacity: 0; transform: translate(-50%, 6px); }
+.jump-leave-to { opacity: 0; }
 
 /* Keep language-specific CJK glyphs independent of the interface language. */
 .caption-source:lang(ja), .caption-translation:lang(ja) { font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif; }
@@ -263,5 +290,8 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 @media (prefers-reduced-motion: reduce) {
   .caption-enter-active, .tr-enter-active, .tr-leave-active { transition: none; }
   .caret { animation: none; }
+  .jump-enter-active, .jump-leave-active, .jump-latest { transition: none; }
+  .jump-enter-from { transform: translateX(-50%); }
+  .jump-latest.has-new .jump-action { animation: none; }
 }
 </style>
