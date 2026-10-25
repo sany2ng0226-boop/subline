@@ -14,9 +14,11 @@ it('every locale defines the same message keys', () => {
 
 
 it.each(['zh', 'en', 'ja', 'ko'] as const)('warns about translation model size in %s', (locale) => {
-  const message = i18n.global.getLocaleMessage(locale).download.translationDesc;
-  expect(message).toContain('4.5 GB');
-  expect(message).toContain('Hy-MT2 7B');
+  const message = i18n.global.t('download.translationDesc', { modelName: 'Selected model', size: '610 MB' }, { locale });
+  expect(message).toContain('610 MB');
+  expect(message).toContain('Selected model');
+  expect(message).not.toContain('Hy-MT2');
+  expect(message).not.toContain('{');
 });
 
 it.each(['zh', 'en', 'ja', 'ko'] as const)('interpolates paused subtitle counts in %s', locale => {

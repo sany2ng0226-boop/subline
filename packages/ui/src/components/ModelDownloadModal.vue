@@ -12,6 +12,14 @@ const props = defineProps<{ tasks: DownloadTask[] }>();
 const show = defineModel<boolean>('show', { default: false });
 const emit = defineEmits<{ confirm: [tasks: DownloadTask[]]; cancel: [] }>();
 
+const translationTask = computed(() => props.tasks.find((task) => task.kind === 'translation'));
+const description = computed(() => translationTask.value
+  ? t('download.translationDesc', {
+    modelName: t(translationTask.value.nameKey),
+    size: humanBytes(translationTask.value.sizeBytes),
+  })
+  : t('download.desc'));
+
 const totalBytes = computed(() => props.tasks.reduce((sum, task) => sum + task.sizeBytes, 0));
 
 function onConfirm(): void {
@@ -36,7 +44,7 @@ function onCancel(): void {
     :mask-closable="false"
     :close-on-esc="false"
   >
-    <p class="mb-3 text-sm text-[var(--rt-ink-3)]">{{ t(tasks.some((task) => task.kind === 'translation') ? 'download.translationDesc' : 'download.desc') }}</p>
+    <p class="mb-3 text-sm text-[var(--rt-ink-3)]">{{ description }}</p>
     <ul class="mb-2 space-y-1.5">
       <li
         v-for="(task, i) in tasks"

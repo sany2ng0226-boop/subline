@@ -32,7 +32,7 @@ const messages = {
       title: 'Archives',
     },
     download: {
-      translationDesc: 'Translation needs a model download. Hy-MT2 7B is about 4.5 GB. Download the selected model?',
+      translationDesc: 'Translation needs a model download. {modelName} is about {size}. Download the selected model?',
       cancel: 'Cancel',
       desc: 'These models need to be downloaded before recording. They work offline afterward.',
       downloading: 'Downloading…',
@@ -249,7 +249,7 @@ const messages = {
       title: 'アーカイブ',
     },
     download: {
-      translationDesc: '翻訳にはモデルのダウンロードが必要です。Hy-MT2 7B は約4.5 GBです。選択したモデルをダウンロードしますか？',
+      translationDesc: '翻訳にはモデルのダウンロードが必要です。{modelName} は約{size}です。選択したモデルをダウンロードしますか？',
       cancel: 'キャンセル',
       desc: '録音を開始する前に、以下のモデルをダウンロードします。完了後はオフラインで利用できます。',
       downloading: 'ダウンロード中…',
@@ -465,7 +465,7 @@ const messages = {
       title: '보관 기록',
     },
     download: {
-      translationDesc: '번역하려면 모델을 다운로드해야 합니다. Hy-MT2 7B는 약 4.5 GB입니다. 선택한 모델을 다운로드할까요?',
+      translationDesc: '번역하려면 모델을 다운로드해야 합니다. {modelName}는 약 {size}입니다. 선택한 모델을 다운로드할까요?',
       cancel: '취소',
       desc: '녹음을 시작하기 전에 다음 모델을 다운로드합니다. 완료 후에는 오프라인으로 사용할 수 있습니다.',
       downloading: '다운로드 중…',
@@ -679,7 +679,7 @@ const messages = {
       title: '归档记录',
     },
     download: {
-      translationDesc: '翻译需要下载模型，Hy-MT2 7B 约 4.5 GB。要下载所选模型吗？',
+      translationDesc: '翻译需要下载模型，{modelName} 约 {size}。要下载所选模型吗？',
       cancel: '取消',
       desc: '开始录音前需要下载以下模型，下载后即可离线使用。',
       downloading: '下载中…',
