@@ -27,7 +27,7 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
       primaryColorPressed: pressed,
       primaryColorSuppl: hover,
       borderRadius: '8px',
-      fontFamily: '-apple-system, "PingFang SC", "Hiragino Sans", "Apple SD Gothic Neo", sans-serif',
+      fontFamily: '-apple-system, BlinkMacSystemFont, system-ui, "PingFang SC", "Hiragino Sans", "Apple SD Gothic Neo", sans-serif',
     },
     Button: isDark.value ? { textColorPrimary: '#14151a', textColorHoverPrimary: '#14151a', textColorPressedPrimary: '#14151a', textColorFocusPrimary: '#14151a' } : {},
   };
