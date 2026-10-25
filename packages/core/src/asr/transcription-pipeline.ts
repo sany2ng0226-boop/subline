@@ -595,7 +595,7 @@ export class TranscriptionPipeline {
     this.prevDecode = cur.text;
 
     const slid = this.trySlide(cur, now);
-    this.maybeStall(now, slid, progressed);
+    this.maybeStall(now, slid, progressed, cur);
   }
 
   /**
@@ -666,17 +666,33 @@ export class TranscriptionPipeline {
   /**
    * 停滞保护：窗口超 STALL_WINDOW 且连续多个 tick 满足任一停滞条件时强制前移窗口，
    * 防止窗口无界增长。已提交文本一律不丢（转入 committedDone）。两种停滞的前移点不同：
-   * - 无提交进展（音频确实解不出）：前移到 now-STALL_KEEP，保留短尾巴等它解出来；
+   * - 无提交进展但当前全窗仍有兼容文字（如数字表记阻断一致前缀）：以最新读法封存该窗，
+   *   前移到 now，不能将已有文字的音频当作空白丢弃，也不能保留尾部让同一语音重复提交；
+   * - 无兼容全窗读法：前移到 now-STALL_KEEP，保留短尾巴等它解出来；
    * - 有提交进展但窗口滑不动（对齐持续失败，如 ITN 让 text 与 tokens 表面脱节）：
    *   直接前移到 now——保留的音频会被重新解码、以「已提交文本+重解文本」的形式重复
    *   定稿；未提交尾巴只落后解码头 1~2 个 tick，弃之损失更小。
    */
-  private maybeStall(now: number, advanced: boolean, progressed: boolean): void {
+  private maybeStall(now: number, advanced: boolean, progressed: boolean, current?: RawDecode): void {
     this.noAdvanceTicks = advanced ? 0 : this.noAdvanceTicks + 1;
     this.noProgressTicks = advanced || progressed ? 0 : this.noProgressTicks + 1;
     if (now - this.windowStart <= STALL_WINDOW_SECONDS * SAMPLE_RATE) return;
     const noProgressStall = this.noProgressTicks >= STALL_MIN_TICKS;
     if (!noProgressStall && this.noAdvanceTicks < STALL_MIN_TICKS) return;
+
+    if (noProgressStall && this.commitStrategy === 'agreement' && this.engineHasTimestamps === true
+      && current?.text.startsWith(this.committedInWindow) && /[\p{L}\p{N}]/u.test(cleanAsrText(current.text))) {
+      // A deadline checkpoint trusts the latest compatible full-window reading, not an earlier
+      // longest hypothesis. Advancing over precisely that whole input prevents replaying its tail.
+      this.committedDone += current.text;
+      this.committedInWindow = '';
+      this.bestWindowHypothesis = '';
+      this.windowStart = now;
+      this.prevDecode = null;
+      this.noProgressTicks = 0;
+      this.noAdvanceTicks = 0;
+      return;
+    }
 
     this.committedDone += this.committedInWindow;
     this.committedInWindow = '';

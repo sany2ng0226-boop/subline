@@ -453,6 +453,106 @@ describe('窗口滑动（污染逐出）', () => {
 });
 
 describe('停滞保护', () => {
+  it('数字表记在句首先反复改写时，检查点保留已反复显示的正文且不重放音频', () => {
+    const h = makeRampHarness();
+    let calls = 0;
+    const repeatedBody = '半分基本の十項目かける五点';
+    const continuation = scheduleDecode(Array.from('次の評価項目です。').map((ch, i) => ({ t: 8.4 + i * 0.08, ch })), 0.08);
+    h.engine.respond = (start, end) => {
+      if (start >= 1) return continuation(start, end);
+      const text = `${++calls % 2 ? '50%' : '五十パーセント'}${repeatedBody}`;
+      const tokens = Array.from(text);
+      const duration = (end - start) / tokens.length;
+      return { text, tokens, timestamps: tokens.map((_, i) => i * duration), durations: tokens.map(() => duration) };
+    };
+    h.feed(10, true);
+    h.feed(0.6, false);
+
+    expect(h.partials.some(text => text.includes(repeatedBody))).toBe(true);
+    const final = h.segments.map(segment => segment.text).join('');
+    expect(final.split(repeatedBody)).toHaveLength(2);
+    expect(final.split('次の評価項目です')).toHaveLength(2);
+    expect(h.engine.calls.every(call => call.endSec - call.startSec <= 9)).toBe(true);
+    expect(h.engine.calls.some(call => call.startSec >= 8)).toBe(true);
+    expect(h.segments[1].start).toBeCloseTo(h.segments[0].start + h.segments[0].duration, 5);
+  });
+
+  it('停滞检查点采用最新窗口读法，不把句首不一致时的早期长幻听按长度保存', () => {
+    const h = makeRampHarness();
+    let calls = 0;
+    const hallucination = '過去の長い誤認識を採用しない'.repeat(5);
+    const continuation = scheduleDecode(Array.from('次の項目です。').map((ch, i) => ({ t: 8.4 + i * 0.08, ch })), 0.08);
+    h.engine.respond = (start, end) => {
+      if (start >= 1) return continuation(start, end);
+      const text = ++calls === 1 ? hallucination : `${calls % 2 ? '50%' : '五十パーセント'}今回の基本項目です`;
+      const tokens = Array.from(text);
+      const duration = (end - start) / tokens.length;
+      return { text, tokens, timestamps: tokens.map((_, i) => i * duration), durations: tokens.map(() => duration) };
+    };
+    h.feed(10, true);
+    h.feed(0.6, false);
+    const final = h.segments.map(segment => segment.text).join('');
+    expect(final).toContain('今回の基本項目です');
+    expect(final).not.toContain('過去の長い誤認識');
+  });
+
+  it('连续两次表记停滞各自只保存一次，后续正常词仍完整衔接', () => {
+    const h = makeRampHarness();
+    let calls = 0;
+    const firstBody = '半分基本の十項目かける五点';
+    const secondBody = '別の評価にも基本の十項目を使います';
+    const continuation = scheduleDecode(Array.from('続きの説明です。').map((ch, i) => ({ t: 17 + i * 0.1, ch })), 0.1);
+    h.engine.respond = (start, end) => {
+      if (start >= 16) return continuation(start, end);
+      const text = `${++calls % 2 ? '50%' : '五十パーセント'}${start < 1 ? firstBody : secondBody}`;
+      const tokens = Array.from(text);
+      const duration = (end - start) / tokens.length;
+      return { text, tokens, timestamps: tokens.map((_, i) => i * duration), durations: tokens.map(() => duration) };
+    };
+    h.feed(19, true);
+    h.feed(0.6, false);
+    const final = h.segments.map(segment => segment.text).join('');
+    expect(final.split(firstBody)).toHaveLength(2);
+    expect(final.split(secondBody)).toHaveLength(2);
+    expect(final.split('続きの説明です')).toHaveLength(2);
+    expect(h.engine.calls.every(call => call.endSec - call.startSec <= 9)).toBe(true);
+    for (let i = 1; i < h.segments.length; i++) {
+      expect(h.segments[i].start).toBeCloseTo(h.segments[i - 1].start + h.segments[i - 1].duration, 5);
+    }
+  });
+
+  it('最新读法已与稳定前缀冲突时，不把它当作兼容的全窗检查点封存', () => {
+    const h = makeRampHarness();
+    const stable = '確定した原文';
+    const continuation = scheduleDecode(Array.from('続きの原文です。').map((ch, i) => ({ t: 8.5 + i * 0.1, ch })), 0.1);
+    h.engine.respond = (start, end) => {
+      if (start >= 1) return continuation(start, end);
+      const text = end < 2 ? stable : '別';
+      const tokens = Array.from(text);
+      return { text, tokens, timestamps: tokens.map(() => 0), durations: tokens.map(() => 0.01) };
+    };
+    h.feed(10, true);
+    h.feed(0.6, false);
+    const final = h.segments.map(segment => segment.text).join('');
+    expect(final).toContain(stable);
+    expect(final).not.toContain('別');
+    const firstAdvanced = h.engine.calls.find(call => call.startSec > 0);
+    expect(firstAdvanced?.startSec).toBeGreaterThan(4);
+    expect(firstAdvanced?.startSec).toBeLessThan(5);
+  });
+
+  it('空解码仍仅保留短音频尾部，不封存早期未确认文字', () => {
+    const h = makeRampHarness();
+    let calls = 0;
+    h.engine.respond = () => ({ text: ++calls === 1 ? 'あ' : '', tokens: ['あ'], timestamps: [0], durations: [0.1] });
+    h.feed(10, true);
+    h.feed(0.6, false);
+    expect(h.segments).toHaveLength(0);
+    const firstAdvanced = h.engine.calls.find(call => call.startSec > 0);
+    expect(firstAdvanced?.startSec).toBeGreaterThan(4);
+    expect(firstAdvanced?.startSec).toBeLessThan(5);
+  });
+
   it('持续不一致（音频解不出）时窗口不无界增长', () => {
     const h = makeRampHarness();
     let n = 0;
