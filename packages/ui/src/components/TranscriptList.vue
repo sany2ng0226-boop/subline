@@ -267,6 +267,7 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 @font-face { font-family: "JumpArrow"; src: local("HiraginoSans-W3"); font-weight: 100 400; unicode-range: U+2193; }
 @font-face { font-family: "JumpArrow"; src: local("HiraginoSans-W4"); font-weight: 401 500; unicode-range: U+2193; }
 @font-face { font-family: "JumpArrow"; src: local("HiraginoSans-W5"); font-weight: 501 900; unicode-range: U+2193; }
+.jump-action { font-family: "JumpArrow", -apple-system, "PingFang SC", "Hiragino Sans", "Apple SD Gothic Neo", sans-serif; }
 .jump-latest:lang(ja) {
   font-family: -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
   font-weight: 400; font-feature-settings: "palt"; letter-spacing: 0.02em;
@@ -279,7 +280,7 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 /* 数字等宽：计数变化时胶囊宽度不跳 */
 .jump-action, .jump-paused { font-variant-numeric: tabular-nums; }
 /* 分隔点：3px CSS 圆点代替 "·" 字形（文字保留在 DOM，font-size 0） */
-.jump-sep { flex: none; width: 3px; height: 3px; border-radius: 50%; font-size: 0; background: currentColor; opacity: 0.6; }
+.jump-sep { flex: none; width: 3px; height: 3px; border-radius: 50%; font-size: 0; background: currentColor; opacity: 0.75; }
 /* 新字幕计数变化：轻微放大一下 */
 .jump-latest.has-new .jump-action { display: inline-block; animation: jump-bump 0.28s var(--rt-ease); }
 @keyframes jump-bump { 0% { transform: scale(1.12); } 100% { transform: scale(1); } }
