@@ -283,15 +283,15 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 @font-face { font-family: "JumpArrow"; src: local("HiraginoSans-W3"); font-weight: 100 400; unicode-range: U+2193; }
 @font-face { font-family: "JumpArrow"; src: local("HiraginoSans-W4"); font-weight: 401 500; unicode-range: U+2193; }
 @font-face { font-family: "JumpArrow"; src: local("HiraginoSans-W5"); font-weight: 501 900; unicode-range: U+2193; }
-.jump-action { font-family: "JumpArrow", -apple-system, "PingFang SC", "Hiragino Sans", "Apple SD Gothic Neo", sans-serif; }
+.jump-action { font-family: "JumpArrow", -apple-system, BlinkMacSystemFont, system-ui, "PingFang SC", "Hiragino Sans", "Apple SD Gothic Neo", sans-serif; }
 .jump-latest:lang(ja) {
-  font-family: -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
   font-weight: 400; font-feature-settings: "palt"; letter-spacing: 0.02em;
 }
 .jump-latest:lang(ja).has-new { font-weight: 500; }
-.jump-latest:lang(ja) .jump-action { font-family: "JumpArrow", -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; }
-.jump-latest:lang(ko) { font-family: -apple-system, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif; letter-spacing: -0.01em; }
-.jump-latest:lang(ko) .jump-action { font-family: "JumpArrow", -apple-system, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif; }
+.jump-latest:lang(ja) .jump-action { font-family: "JumpArrow", -apple-system, BlinkMacSystemFont, system-ui, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; }
+.jump-latest:lang(ko) { font-family: -apple-system, BlinkMacSystemFont, system-ui, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif; letter-spacing: -0.01em; }
+.jump-latest:lang(ko) .jump-action { font-family: "JumpArrow", -apple-system, BlinkMacSystemFont, system-ui, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif; }
 /* 数字等宽：计数变化时胶囊宽度不跳 */
 .jump-action { font-variant-numeric: tabular-nums; }
 /* 过渡：只动 opacity（合成层完成，不触发重排/重绘），新行出现与自动滚动不再互相打架 */

@@ -60,7 +60,7 @@ body,
 }
 
 body {
-  font-family: -apple-system, "PingFang SC", "Hiragino Sans", "Apple SD Gothic Neo", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, "PingFang SC", "Hiragino Sans", "Apple SD Gothic Neo", sans-serif;
 }
 
 /* 整窗背景兜底（.dark 在 <html> 上），避免高度链问题露出白底 */
