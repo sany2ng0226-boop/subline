@@ -93,6 +93,11 @@ const CHUNK_MIN_PAUSE_SECONDS = 0.25;
 // 崩溃边界为 0.1s，取 0.5s 留裕量）。不足时补零凑齐再解码，对识别结果无影响。
 const MIN_DECODE_SECONDS = 0.5;
 
+// Without usable timing, only a large loss of meaningful text is evidence of collapse.
+// This is a conservative fallback heuristic, not a test of linguistic correctness.
+const FINAL_COLLAPSE_MIN_LOSS = 4;
+const FINAL_AUDIO_EDGE_TOLERANCE_SECONDS = 0.6;
+
 // 连续重复达到这个次数才视为退化（复读机幻觉），折叠
 const REPEAT_MIN = 4;
 // 折叠后保留的份数（保留少量，既不刷屏又能看出原文带重复）
@@ -378,6 +383,10 @@ export type PipelineWindowDiagnostic =
   | { kind: 'context-trim'; strategy: AsrCommitStrategy; unit: 'session-seconds';
       contextStart: number; windowStart: number; to: number; rawText: string; text: string; removedText: string;
       mode: 'timestamps' | 'retained-anchor' | 'already-retained' | 'direct-retry' }
+  | { kind: 'final-choice'; strategy: AsrCommitStrategy; unit: 'session-seconds';
+      windowStart: number; to: number; confirmedText: string; previousText: string;
+      currentText: string; selectedText: string; fullAudioCoverage: boolean;
+      reason: 'latest' | 'empty-fallback' | 'truncated-fallback' }
   | (WindowDiagnosticBoundary & { kind: 'ordinary-slide'; cutLen: number; alignedEndSec: number;
       retainedText: string; retainedHypothesis: string });
 
@@ -854,15 +863,8 @@ export class TranscriptionPipeline {
     this.noAdvanceTicks = 0;
   }
 
-  /**
-   * 断行定稿：对未提交区 [windowStart, to] 做一次尾部解码。tail 以 committedInWindow 为前缀
-   * （正常延伸）则取 tail；不一致时取两者中更长者——tail 坍缩（污染窗口下解码退化为
-   * 短输出）时保底取已提交前缀，tail 只是改写了前缀表记（み↔皆、读点、ITN）时它是对
-   * 同一段音频更完整的一次性解码，弃之会整句丢失（TTS ja 实录）。committedInWindow
-   * agreement 模式还会纳入当前窗口曾展示过、且与当时稳定前缀一致的最完整候选，避免段尾
-   * 单次解码坍缩让确认区比识别区骤然变短。三者仍按完整度择优；chunk 模式没有该候选，
-   * 维持按块提交语义。行文本 = clean(committedDone + 上述结果)；无字母/数字则丢弃。
-   */
+  /** Decode the unowned tail once. Normal revisions win even when shorter; surviving
+   * window-local candidates are fallbacks for empty or clearly truncated decodes only. */
   private finalizeLine(to: number): void {
     if (to <= this.lineStart) {
       this.resetLine();
@@ -871,13 +873,8 @@ export class TranscriptionPipeline {
     this.partialFloor = to;
 
     const tail = this.decodeWindow(this.windowStart, to);
-    const candidates =
-      this.commitStrategy === 'agreement'
-        ? [this.committedInWindow, this.bestWindowHypothesis, tail.text]
-        : [tail.text];
-    const finalUncommitted = candidates.reduce((best, candidate) =>
-      Array.from(candidate).length > Array.from(best).length ? candidate : best,
-    );
+    const finalUncommitted = this.commitStrategy === 'agreement'
+      ? this.chooseFinalTail(tail, to) : tail.text;
 
     const lineText = cleanAsrText(this.committedDone + finalUncommitted);
     const lang = cleanLang(this.lineLang ?? tail.lang);
@@ -893,6 +890,41 @@ export class TranscriptionPipeline {
       duration: (to - this.lineStart) / SAMPLE_RATE,
     });
     this.resetLine();
+  }
+
+  private chooseFinalTail(tail: RawDecode, to: number): string {
+    const previous = Array.from(this.bestWindowHypothesis).length > Array.from(this.committedInWindow).length
+      ? this.bestWindowHypothesis : this.committedInWindow;
+    const meaningfulLength = (text: string): number => Array.from(cleanAsrText(text).replace(/[\s\p{P}\p{S}]/gu, '')).length;
+    const currentLength = meaningfulLength(tail.text);
+    const previousLength = meaningfulLength(previous);
+    const times = tail.timestamps;
+    const duration = (to - this.windowStart) / SAMPLE_RATE;
+    const validTimes = !!tail.tokens?.length && !!times && times.length === tail.tokens.length
+      && times.every((time, i) => Number.isFinite(time) && time >= 0 && (i === 0 || time >= times[i - 1]));
+    const last = times ? times.length - 1 : -1;
+    const lastDuration = last >= 0 ? tail.durations?.[last] : undefined;
+    const tokenEnd = last >= 0 && times
+      ? times[last] + (lastDuration !== undefined && Number.isFinite(lastDuration) && lastDuration >= 0
+        ? lastDuration : EST_TOKEN_DUR_SECONDS) : 0;
+    const fullAudioCoverage = !!validTimes && !!times
+      && times[0] <= FINAL_AUDIO_EDGE_TOLERANCE_SECONDS
+      && times[last] <= duration + EST_TOKEN_DUR_SECONDS
+      && tokenEnd >= duration - FINAL_AUDIO_EDGE_TOLERANCE_SECONDS;
+    const severeLoss = previousLength - currentLength >= FINAL_COLLAPSE_MIN_LOSS
+      && currentLength * 2 <= previousLength;
+    const reason = currentLength === 0 && previousLength > 0 ? 'empty-fallback'
+      : severeLoss && !fullAudioCoverage ? 'truncated-fallback' : 'latest';
+    const selected = reason === 'latest' ? tail.text : previous;
+    if (this.onDiagnostic && (currentLength > 0 || previousLength > 0)) {
+      try {
+        this.onDiagnostic({ kind: 'final-choice', strategy: this.commitStrategy, unit: 'session-seconds',
+          windowStart: (this.windowStart - this.sessionBase) / SAMPLE_RATE,
+          to: (to - this.sessionBase) / SAMPLE_RATE, confirmedText: this.committedInWindow,
+          previousText: previous, currentText: tail.text, selectedText: selected, fullAudioCoverage, reason });
+      } catch { /* Diagnostics cannot interrupt audio processing. */ }
+    }
+    return selected;
   }
 
   private retainDecodeContext(previousStart: number, savedText: string): void {

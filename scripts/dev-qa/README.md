@@ -38,6 +38,7 @@
 - `asr.raw-result` / `asr.raw-partial` / `asr.asr-fragment` / `asr.sentence`：模型结果、临时结果、管线片段和合句结果；
 - `asr.sentence-flush`：macOS 合句器每次定稿时的 `reason`、`text`、`start` 和 `duration`，用于区分标点、短句、等待上限、音频上限、间隔、语言切换或停录等现有定稿原因；该事件只观测分句结果，不改变合句决策；
 - `asr.context-trim`：一致前缀模式实际携带逻辑边界前的解码上下文时产生，以会话相对秒记录 `contextStart`、`windowStart` 和 `to`，并提供原始 `rawText`、排除边界前内容后的 `text` 及 `removedText`。`mode` 为 `timestamps` 时按 token 时间归属，`retained-anchor` 表示在边界附近用已保留文字锚定切点，`already-retained` 表示原始结果已从保留内容开始因而不裁剪，`direct-retry` 表示无法可靠对齐时只重解逻辑区间；
+- `asr.final-choice`：一致前缀模式定稿时选择尚未提交尾部后产生，记录窗口内已确认文字、此前幸存候选、本次尾部解码、最终选择及是否覆盖完整音频。`reason` 为 `latest` 时采用本次读法，`empty-fallback` 或 `truncated-fallback` 时分别表示空结果或未覆盖完整音频的明显坍缩触发旧候选保底；该事件只观测现有定稿选择，不新增解码或等待；
 - `asr.stall-checkpoint` / `asr.stall-fallback` / `asr.ordinary-slide`：只有管线实际执行对应的停滞检查点、停滞降级或普通窗口滑动分支时才产生。三者均以会话相对秒记录 `windowStart`、`to`、`nextWindowStart`，并附带 `committedPrefix`、`currentText` 和 `savedText`；降级事件另有 `reason`，普通滑动另有切点和保留文本字段。检查点的 `mode` 区分保留已对齐尾部的 `retained-overlap` 和只保存最新全窗读法一次的 `full-window`；前者另有 `retainedText`，两者可记录 `trigger` 与 `prefixCompatible`；
 - `main.pipeline:partial` / `main.pipeline:segment` / `main.pipeline:status` / `main.pipeline:translation`：主进程送往渲染层的事件；
 - `renderer.ui:partial` / `renderer.ui:segment`：UI 实际接收的原文事件；
@@ -51,7 +52,7 @@
 
 审计结果中的 `checkpointCount` 和 `checkpoints` 列出实际捕获的停滞检查点；每个检查点的 `savedTextInFragments` 与 `savedTextInUi` 分别统计 `savedText` 在拼接后的 ASR 片段和 UI 定稿原文中出现的次数，比较前会做 NFKC 归一化并移除空白。`retained-overlap` 检查点的 `savedText` 只是已跨过最终提交边界的前缀，`retainedText` 仍属于后续窗口，不能仅凭当个检查点的出现次数判定它丢失或重复；`full-window` 的 `savedText` 才是该次最新全窗读法。轨迹不完整时这两个次数为 `null`。`ordinarySlides` 与 `stallFallbacks` 只统计对应事件数量。计数为零只能说明这份完整轨迹里没有捕获该分支；在未满足触发条件、游标丢失、字段省略或会话未正常停止时，不能据此判定分支不可达或实现失效。
 
-`audit.mjs` 尚不将 `asr.context-trim` 汇总为正确性判定。`removedText` 只表示本次根据音频边界排除的解码上下文；`already-retained` 的空 `removedText` 与 `direct-retry` 的二次解码都不是单独的丢失或重复证据。逻辑区间为空时不执行上下文解码，因此也不产生该事件。
+`audit.mjs` 尚不将 `asr.context-trim` 或 `asr.final-choice` 汇总为正确性判定。`removedText` 只表示本次根据音频边界排除的解码上下文；`already-retained` 的空 `removedText` 与 `direct-retry` 的二次解码都不是单独的丢失或重复证据。逻辑区间为空时不执行上下文解码，因此也不产生该事件。`final-choice` 的 `reason` 只说明当次选择路径；即使采用最新读法或触发保底，也不能脱离音频真值判断文字是否正确。
 
 这些结论只证明已埋点阶段之间的文字守恒。它们不提供独立音频真值，不能判断语音是否被 ASR 漏识别，也不是准确率、CER、实时延迟或完整音频评分；要逐句确认“内容不漏不重复”，仍需将导出证据与视频、人工参考文本或其它独立真值对照。
 

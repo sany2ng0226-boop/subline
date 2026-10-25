@@ -620,7 +620,8 @@ describe('只读窗口诊断', () => {
     h.feed(0.6, false);
     const slides = events.filter(event => event.kind === 'ordinary-slide');
     expect(slides.length).toBeGreaterThan(0);
-    expect(events.every(event => event.kind === 'ordinary-slide' || event.kind === 'context-trim')).toBe(true);
+    expect(events.every(event => event.kind === 'ordinary-slide' || event.kind === 'context-trim'
+      || event.kind === 'final-choice')).toBe(true);
     for (const event of slides) {
       expect(event.nextWindowStart).toBeCloseTo(event.windowStart + event.alignedEndSec, 5);
       expect(event.savedText + event.retainedText).toBe(event.committedPrefix);
@@ -1059,5 +1060,85 @@ describe('实际切窗边界的物理上下文回归', () => {
     expect(h.engine.calls.map(c => c.startSec)).toEqual([3.4, 4]);
     expect(h.segments.map(s => s.text).join('')).toBe('百分之八十新しい話');
     expect(h.events.find(e => e.kind === 'context-trim')).toMatchObject({ mode: 'direct-retry' });
+  });
+});
+
+describe('定稿优先最新正常读法，旧候选只作异常保底', () => {
+  it('现场百万円纠正即使较短也不被旧00万円候选覆盖，且不额外解码', () => {
+    const events: PipelineWindowDiagnostic[] = [];
+    const h = makeRampHarness('agreement', e => events.push(e));
+    const old = 'はい、00万円なら借りいでした。';
+    const corrected = 'はい、百万円なら借りられる人。';
+    h.engine.respond = (_start, end) => {
+      const text = end < 1.5 ? 'はい' : end < 2 ? old : corrected;
+      return { text, tokens: Array.from(text), timestamps: Array.from(text).map((_, i) =>
+        text === corrected ? [0.18, 0.3, 0.42, 0.54, 0.78, 0.9, 1.08, 1.14, 1.32, 1.38, 1.5, 1.56, 1.74, 1.86, 2.04][i] : 0) };
+    };
+    h.feed(2.2, true);
+    const calls = h.engine.calls.length;
+    h.feed(0.5, false);
+    expect(h.engine.calls).toHaveLength(calls + 1);
+    expect(h.segments.map(s => s.text).join('')).toBe(corrected);
+    expect(events.find(e => e.kind === 'final-choice')).toMatchObject({ reason: 'latest', previousText: old,
+      currentText: corrected, selectedText: corrected, fullAudioCoverage: true });
+  });
+
+  it('没有时间戳的普通较短修正和同长修正仍采用最新读法', () => {
+    for (const [old, latest] of [
+      ['はい、00万円なら借りいでした。', 'はい、百万円なら借りられる人。'],
+      ['明日は晴天です。', '明日は雨天です。'],
+    ]) {
+      const h = makeHarness();
+      h.engine.result = { text: old, lang: '<|ja|>' };
+      h.feed(0.7, true);
+      h.engine.result = { text: latest, lang: '<|ja|>' };
+      h.feed(0.5, false);
+      expect(h.segments[0].text).toBe(latest);
+    }
+  });
+
+  it('ITN压缩了字数，但时间戳覆盖整段语音时采用最新数字表记', () => {
+    const events: PipelineWindowDiagnostic[] = [];
+    const h = makeRampHarness('agreement', e => events.push(e));
+    h.engine.respond = () => ({ text: '八十パーセントです。', tokens: ['八十パーセントです。'], timestamps: [0] });
+    h.feed(2.2, true);
+    h.engine.respond = () => ({ text: '80%。', tokens: ['八', '十', 'パー', 'セント'],
+      timestamps: [0.18, 0.48, 1.2, 1.92], durations: [0.2, 0.2, 0.2, 0.2] });
+    h.feed(0.5, false);
+    expect(h.segments[0].text).toBe('80%。');
+    expect(events.find(e => e.kind === 'final-choice')).toMatchObject({ reason: 'latest', fullAudioCoverage: true });
+  });
+
+  it('尾部变空或只剩末尾短词时保留幸存候选', () => {
+    for (const latest of ['', '。', 'はい', 'です']) {
+      const h = makeHarness();
+      h.engine.result = { text: '本日は会議の進捗状況を確認します。', lang: '<|ja|>' };
+      h.feed(0.7, true);
+      h.engine.result = { text: latest, lang: '<|ja|>' };
+      h.feed(0.5, false);
+      expect(h.segments[0].text).toBe('本日は会議の進捗状況を確認します。');
+    }
+  });
+
+  it('仅解出末尾的短时间岛不能借有效时间戳绕过严重坍缩保护', () => {
+    const events: PipelineWindowDiagnostic[] = [];
+    const h = makeRampHarness('agreement', e => events.push(e));
+    h.engine.respond = () => ({ text: '本日は会議の進捗状況を確認します。', tokens: ['本日は会議の進捗状況を確認します。'], timestamps: [0] });
+    h.feed(2.2, true);
+    h.engine.respond = () => ({ text: 'です', tokens: ['で', 'す'], timestamps: [1.8, 1.98] });
+    h.feed(0.5, false);
+    expect(h.segments[0].text).toBe('本日は会議の進捗状況を確認します。');
+    expect(events.find(e => e.kind === 'final-choice')).toMatchObject({ reason: 'truncated-fallback', fullAudioCoverage: false });
+  });
+
+  it('chunk定稿仍直接使用现有尾部解码，不启用候选仲裁', () => {
+    const events: PipelineWindowDiagnostic[] = [];
+    const h = makeRampHarness('chunk', e => events.push(e));
+    h.engine.respond = () => ({ text: '古い長めの解码候補', tokens: ['古い長めの解码候補'], timestamps: [0] });
+    h.feed(0.7, true);
+    h.engine.respond = () => ({ text: '最新', tokens: ['最新'], timestamps: [0] });
+    h.feed(0.5, false);
+    expect(h.segments[0].text).toBe('最新');
+    expect(events.some(e => e.kind === 'final-choice')).toBe(false);
   });
 });
