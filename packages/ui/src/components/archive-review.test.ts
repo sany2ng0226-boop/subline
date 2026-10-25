@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { effectScope, nextTick } from 'vue';
-import { makeDefaults, type AppSettings, type ArchiveRecord, type ArchiveRefineProgress, type ModelInfo } from '@rt/core';
+import { makeDefaults, type AppSettings, type ArchiveProofreadOptions, type ArchiveRecord, type ArchiveRefineProgress, type ArchiveRevision, type ModelInfo } from '@rt/core';
 import {
-  activeLineIndex, canRefine, defaultRefineOptions, formatOffset, lineSeek, readyAsrModels, readyTranslationModels, validRefineOptions,
+  activeLineIndex, canProofread, canRefine, codexIssue, defaultRefineOptions, describeRevision, formatOffset, isProofreadOptions, lineSeek,
+  proofreadOptions, readyAsrModels, readyTranslationModels, revisionOrdinal, validRefineOptions,
 } from './archive-review';
 import { useArchiveRefine } from './archive-refine';
 
@@ -99,13 +100,59 @@ describe('archive line playback mapping', () => {
   });
 });
 
+describe('codex proofreading choices', () => {
+  const local = { asrModel: 'sense-voice', language: 'auto' as const, targetLang: 'en' as const };
+  const revisions: ArchiveRevision[] = [
+    { id: 'r1', createdAt: 0, options: local, lines: [] },
+    { id: 'c1', createdAt: 1, options: { kind: 'codex', targetLang: 'ja' }, codex: { model: 'gpt-5-codex' },
+      lines: [
+        { text: 'a', translation: '', review: { needsReview: true, note: 'name unclear' } },
+        { text: 'b', translation: '', review: { needsReview: false, note: '', originalText: 'bb' } },
+        { text: 'c', translation: '' },
+      ] },
+    { id: 'c2', createdAt: 2, options: { kind: 'codex', targetLang: 'zh', sourceRevisionId: 'r1' }, lines: [] },
+    { id: 'c3', createdAt: 3, options: { kind: 'codex', targetLang: 'zh', sourceRevisionId: 'gone' }, lines: [] },
+  ];
+
+  it('sends the selected version as source and omits it for the live transcript', () => {
+    expect(proofreadOptions('live', 'ja')).toEqual({ kind: 'codex', targetLang: 'ja' });
+    expect('sourceRevisionId' in proofreadOptions('live', 'ja')).toBe(false);
+    expect(proofreadOptions('r1', 'ko')).toEqual({ kind: 'codex', targetLang: 'ko', sourceRevisionId: 'r1' });
+  });
+
+  it('only offers the entry on hosts exposing both proofreading and status checks', () => {
+    expect(canProofread({ proofreadArchive: vi.fn(), getCodexStatus: vi.fn() })).toBe(true);
+    expect(canProofread({ proofreadArchive: vi.fn() })).toBe(false);
+    expect(canProofread({})).toBe(false);
+  });
+
+  it('turns status into actionable issues without any fallback', () => {
+    expect(codexIssue({ available: false, authenticated: false, model: '' })).toBe('missing');
+    expect(codexIssue({ available: true, authenticated: false, model: '' })).toBe('login');
+    expect(codexIssue({ available: true, authenticated: true, model: 'gpt-5-codex' })).toBeNull();
+  });
+
+  it('describes legacy local revisions and Codex revisions from the same list', () => {
+    expect(isProofreadOptions(local)).toBe(false);
+    expect(describeRevision(revisions[0], revisions)).toEqual({ kind: 'local', asrModel: 'sense-voice', language: 'auto', targetLang: 'en' });
+    expect(describeRevision(revisions[1], revisions)).toEqual({ kind: 'codex', model: 'gpt-5-codex', targetLang: 'ja', source: 'live', needsReview: 1 });
+    expect(describeRevision(revisions[2], revisions)).toMatchObject({ source: 'r1', model: undefined });
+    expect(describeRevision(revisions[3], revisions)).toMatchObject({ source: 'unknown' });
+    expect(revisionOrdinal(revisions, 'r1')).toEqual({ kind: 'local', n: 1 });
+    expect(revisionOrdinal(revisions, 'c2')).toEqual({ kind: 'codex', n: 2 });
+  });
+});
+
 describe('archive refine run state', () => {
   const options = { asrModel: 'sense-voice', language: 'auto' as const, targetLang: 'en' as const };
-  function setup(refineArchive: (id: string, o: typeof options) => Promise<ArchiveRecord>) {
+  function setup(
+    refineArchive: (id: string, o: typeof options) => Promise<ArchiveRecord>,
+    proofreadArchive?: (id: string, o: ArchiveProofreadOptions) => Promise<ArchiveRecord>,
+  ) {
     let emit: ((p: ArchiveRefineProgress) => void) | undefined;
     const off = vi.fn();
     const host = {
-      refineArchive, getArchive: vi.fn(),
+      refineArchive, proofreadArchive, getArchive: vi.fn(),
       cancelArchiveRefinement: vi.fn(async () => undefined),
       onArchiveRefineProgress: vi.fn((cb: (p: ArchiveRefineProgress) => void) => { emit = cb; return off; }),
     };
@@ -154,6 +201,46 @@ describe('archive refine run state', () => {
     await t.state.retry();
     expect(refine).toHaveBeenNthCalledWith(2, 'mine', options);
     expect(t.state.phase.value).toBe('done');
+  });
+
+  it('routes Codex tasks to proofreading, shares cancel, and resends the same request on retry', async () => {
+    const refine = vi.fn();
+    const proofread = vi.fn()
+      .mockRejectedValueOnce(new Error('Codex usage limit reached'))
+      .mockResolvedValueOnce({ id: 'mine', revisions: [{ id: 'c1' }] });
+    const t = setup(refine, proofread);
+    const request = { kind: 'codex' as const, targetLang: 'ja' as const, sourceRevisionId: 'r1' };
+    const first = t.state.start(request);
+    expect(t.state.phase.value).toBe('proofreading');
+    expect(t.state.kind.value).toBe('codex');
+    expect(t.state.canCancel.value).toBe(true);
+    await first;
+    expect(refine).not.toHaveBeenCalled();
+    expect(t.state.phase.value).toBe('error');
+    expect(t.state.error.value).toBe('Codex usage limit reached');
+    expect(t.onRecord).not.toHaveBeenCalled();
+    await t.state.retry();
+    expect(proofread).toHaveBeenNthCalledWith(2, 'mine', request);
+    expect(t.state.phase.value).toBe('done');
+  });
+
+  it('cancels a Codex task without saving anything', async () => {
+    let reject!: (e: Error) => void;
+    const t = setup(vi.fn(), vi.fn(() => new Promise<ArchiveRecord>((_, r) => { reject = r; })));
+    void t.state.start({ kind: 'codex', targetLang: 'en' });
+    t.emit({ state: 'proofreading', completed: 3, total: 10 });
+    expect(t.state.percent.value).toBe(30);
+    await t.state.cancel();
+    reject(new Error('cancelled'));
+    await vi.waitFor(() => expect(t.state.phase.value).toBe('cancelled'));
+    expect(t.onRecord).not.toHaveBeenCalled();
+  });
+
+  it('labels an observed run as Codex from its progress', () => {
+    const t = setup(vi.fn());
+    t.emit({ state: 'proofreading', completed: 1, total: 2 });
+    expect(t.state.running.value).toBe(true);
+    expect(t.state.kind.value).toBe('codex');
   });
 
   it('picks up a run started elsewhere and reloads the record when it finishes', async () => {

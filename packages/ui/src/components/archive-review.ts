@@ -4,10 +4,14 @@ import {
   asrModelsFor,
   getTranslationModel,
   translationModelsFor,
+  type AppBridge,
   type AppSettings,
   type ArchiveLine,
+  type ArchiveProofreadOptions,
   type ArchiveRecord,
   type ArchiveRefineOptions,
+  type ArchiveRevision,
+  type CodexStatus,
   type AsrLang,
   type AsrModelSpec,
   type LocalEngine,
@@ -105,6 +109,64 @@ export function activeLineIndex(lines: ArchiveLine[], recordingId: string, time:
     const end = a.start + (Number.isFinite(a.duration) && a.duration > 0 ? a.duration : 0);
     return time >= a.start && time < end;
   });
+}
+
+// —— Codex 校对（仅 Dev 宿主提供）——
+// 只发送字幕文字、不重听音频；结果另存为版本，行的 audio/time/lang 由宿主原样保留。
+
+/** 版本参数是 Codex 校对还是本地重新转写（旧的本地参数没有 kind）。 */
+export function isProofreadOptions(o: ArchiveRefineOptions | ArchiveProofreadOptions): o is ArchiveProofreadOptions {
+  return 'kind' in o && o.kind === 'codex';
+}
+
+/** 宿主同时提供校对与状态检查才显示入口；非 Dev 宿主两者都没有。 */
+export function canProofread(host: Pick<AppBridge, 'proofreadArchive' | 'getCodexStatus'>): boolean {
+  return !!host.proofreadArchive && !!host.getCodexStatus;
+}
+
+/** 校对当前选中的版本：实时原文省略 sourceRevisionId。 */
+export function proofreadOptions(version: string, targetLang: UiLang): ArchiveProofreadOptions {
+  return version === 'live' ? { kind: 'codex', targetLang } : { kind: 'codex', targetLang, sourceRevisionId: version };
+}
+
+/** 本机 Codex 是否可用；不可用时给出可操作的原因，绝不改走 API Key 或本地模型。 */
+export function codexIssue(status: CodexStatus): 'missing' | 'login' | null {
+  if (!status.available) return 'missing';
+  if (!status.authenticated) return 'login';
+  return null;
+}
+
+/** 版本在列表里的序号：本地重新转写与 Codex 校对各自从 1 计数。 */
+export function revisionOrdinal(revisions: ArchiveRevision[], id: string): { kind: 'local' | 'codex'; n: number } | null {
+  const target = revisions.find((r) => r.id === id);
+  if (!target) return null;
+  const kind = isProofreadOptions(target.options) ? 'codex' : 'local';
+  const same = revisions.filter((r) => (isProofreadOptions(r.options) ? 'codex' : 'local') === kind);
+  return { kind, n: same.indexOf(target) + 1 };
+}
+
+export type RevisionSummary =
+  | { kind: 'local'; asrModel: string; language: AsrLang; translationModel?: LocalEngine; targetLang: UiLang }
+  /** source：'live' 为实时原文、'unknown' 为找不到的来源，否则为来源版本 id。 */
+  | { kind: 'codex'; model?: string; targetLang: UiLang; source: string; needsReview: number };
+
+/** 版本的来源说明（两种参数格式都兼容）。 */
+export function describeRevision(revision: ArchiveRevision, revisions: ArchiveRevision[]): RevisionSummary {
+  const o = revision.options;
+  if (!isProofreadOptions(o)) {
+    const out: RevisionSummary = { kind: 'local', asrModel: o.asrModel, language: o.language, targetLang: o.targetLang };
+    if (o.translationModel) out.translationModel = o.translationModel;
+    return out;
+  }
+  const id = o.sourceRevisionId;
+  const source = id === undefined ? 'live' : revisions.some((r) => r.id === id) ? id : 'unknown';
+  return {
+    kind: 'codex',
+    model: revision.codex?.model || undefined,
+    targetLang: o.targetLang,
+    source,
+    needsReview: revision.lines.filter((line) => line.review?.needsReview).length,
+  };
 }
 
 /** 秒 → m:ss / h:mm:ss，用于没有本地时间的行。 */

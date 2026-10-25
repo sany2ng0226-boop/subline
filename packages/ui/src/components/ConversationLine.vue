@@ -19,6 +19,8 @@ defineProps<{
   seekLabel?: string;
   /** 归档详情：播放位置正落在这一行。 */
   active?: boolean;
+  /** 归档详情的 Codex 校对版本：待核对标记与原因；改动过的行可展开查看修改前文字（默认收起）。 */
+  review?: { needsReview: boolean; note: string; originalText?: string };
 }>();
 const emit = defineEmits<{ seek: [] }>();
 </script>
@@ -56,6 +58,16 @@ const emit = defineEmits<{ seek: [] }>();
         </n-tooltip>
         <span v-else>{{ t('status.transFailedLine') }}</span>
       </div>
+      <template v-if="review">
+        <p v-if="review.needsReview" class="review-note">
+          <span class="text-[var(--rt-live)]">{{ t('archive.reviewNeeded') }}</span><template v-if="review.note"> · {{ review.note }}</template>
+        </p>
+        <details v-if="(review.originalText && review.originalText !== text) || (!review.needsReview && review.note)" class="review-more">
+          <summary>{{ t(review.originalText && review.originalText !== text ? 'archive.reviewOriginal' : 'archive.reviewNote') }}</summary>
+          <p v-if="review.originalText && review.originalText !== text" class="mt-1">{{ review.originalText }}</p>
+          <p v-if="!review.needsReview && review.note" class="mt-1">{{ review.note }}</p>
+        </details>
+      </template>
     </div>
   </div>
 </template>
@@ -66,4 +78,7 @@ const emit = defineEmits<{ seek: [] }>();
 .line-seek:focus-visible { outline: 2px solid var(--rt-accent); outline-offset: 2px; }
 .line-active .timeline-time { color: var(--rt-accent); }
 .line-active > div > div:first-child { color: var(--rt-ink); }
+.review-note, .review-more { margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--rt-ink-3); }
+.review-more summary { cursor: pointer; width: fit-content; border-radius: 4px; }
+.review-more summary:focus-visible { outline: 2px solid var(--rt-accent); outline-offset: 2px; }
 </style>

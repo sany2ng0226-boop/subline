@@ -52,6 +52,8 @@ const api: ElectronApi = {
   getArchiveAudioUrl: (archiveId, recordingId) => ipcRenderer.invoke('archive:audio-url', archiveId, recordingId),
   ...(__SUBLINE_VARIANT__ === 'dev' ? {
     refineArchive: ((archiveId, options) => ipcRenderer.invoke('archive:refine', archiveId, options)) as NonNullable<ElectronApi['refineArchive']>,
+    proofreadArchive: ((archiveId, options) => ipcRenderer.invoke('archive:proofread', archiveId, options)) as NonNullable<ElectronApi['proofreadArchive']>,
+    getCodexStatus: (() => ipcRenderer.invoke('codex:status')) as NonNullable<ElectronApi['getCodexStatus']>,
     cancelArchiveRefinement: ((archiveId) => ipcRenderer.invoke('archive:refine-cancel', archiveId)) as NonNullable<ElectronApi['cancelArchiveRefinement']>,
     onArchiveRefineProgress: ((cb) => subscribe('archive:refine-progress', cb)) as NonNullable<ElectronApi['onArchiveRefineProgress']>,
   } : {}),

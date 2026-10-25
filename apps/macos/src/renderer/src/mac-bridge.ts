@@ -236,6 +236,8 @@ export function createMacBridge(api: ElectronApi): AppBridge {
     discardRecordings: api.discardRecordings ? (ids) => api.discardRecordings!(ids) : undefined,
     getArchiveAudioUrl: api.getArchiveAudioUrl ? (archiveId, recordingId) => api.getArchiveAudioUrl!(archiveId, recordingId) : undefined,
     refineArchive: api.refineArchive ? (archiveId, options) => api.refineArchive!(archiveId, options) : undefined,
+    proofreadArchive: api.proofreadArchive ? (archiveId, options) => api.proofreadArchive!(archiveId, options) : undefined,
+    getCodexStatus: api.getCodexStatus ? () => api.getCodexStatus!() : undefined,
     cancelArchiveRefinement: api.cancelArchiveRefinement ? (archiveId) => api.cancelArchiveRefinement!(archiveId) : undefined,
     onArchiveRefineProgress: api.onArchiveRefineProgress ? (cb) => api.onArchiveRefineProgress!(cb) : undefined,
     getArchiveLibrary: () => api.getArchiveLibrary!(),

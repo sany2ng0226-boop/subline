@@ -7,6 +7,7 @@ import { AudioRecordingStore } from './audio-recordings';
 import { archiveAudioResponse } from './archive-audio-response';
 import { ArchiveRefinementManager } from './archive-refinement';
 import { startRefinementWorker } from './archive-refinement-worker';
+import { getCodexSubscriptionStatus, startCodexProofreading, validateProofreadOptions } from './codex-proofreading';
 import { createRendererRecovery } from './renderer-recovery';
 import { createAsrStopController } from './asr-stop';
 import { resolveLeaveSession } from './leave-session';
@@ -57,6 +58,7 @@ import {
   type CloseGuard,
   type AudioSource,
   type ArchiveRefineOptions,
+  type ArchiveProofreadOptions,
 } from '@rt/core';
 import { localModelCached } from './translation/model-cache';
 import { downloadTranslationModel } from './translation/model-downloader';
@@ -943,6 +945,21 @@ ipcMain.handle('archive:refine', (event, id: string, options: ArchiveRefineOptio
   if (buildVariant !== 'dev' || !win || event.sender !== win.webContents) throw new Error('Recording review is only available in Subline Dev');
   if (typeof id !== 'string' || !getArchive(id)) throw new Error('Archive not found');
   return refinements.run(id, options);
+});
+ipcMain.handle('codex:status', (event) => {
+  if (buildVariant !== 'dev' || !win || event.sender !== win.webContents) throw new Error('Codex proofreading is only available in Subline Dev');
+  return getCodexSubscriptionStatus();
+});
+ipcMain.handle('archive:proofread', (event, id: string, options: ArchiveProofreadOptions) => {
+  if (buildVariant !== 'dev' || !win || event.sender !== win.webContents) throw new Error('Codex proofreading is only available in Subline Dev');
+  if (typeof id !== 'string' || !getArchive(id)) throw new Error('Archive not found');
+  const selected = validateProofreadOptions(options);
+  return refinements.runTask(id, (progress) => {
+    if (sessionActive || pipelineStarting) throw new Error('Stop recording before reviewing an archive');
+    const archive = getArchive(id);
+    if (!archive) throw new Error('Archive not found');
+    return startCodexProofreading(archive, selected, progress);
+  });
 });
 ipcMain.handle('archive:refine-cancel', (event, id: string) => {
   if (!win || event.sender !== win.webContents) throw new Error('Invalid recording review window');

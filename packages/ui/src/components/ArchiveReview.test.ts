@@ -12,11 +12,16 @@ vi.mock('../composables/useSettings', async () => {
   return { settings: ref(makeDefaults([])) };
 });
 // NSelect mounts its popup styles on document; render it as an inert value holder under SSR.
+// Dialogs can't be opened under SSR, so tests that inspect dialog copy render their content inline.
+const view = vi.hoisted(() => ({ dialogs: false }));
 vi.mock('naive-ui', async (importOriginal) => {
   const { defineComponent, h } = await import('vue');
   return {
     ...(await importOriginal<typeof import('naive-ui')>()),
     NSelect: defineComponent({ props: { value: String }, setup: (p) => () => h('span', { 'data-select': p.value }) }),
+    NModal: defineComponent({ props: { title: String }, setup: (p, { slots }) => () =>
+      view.dialogs ? h('div', { role: 'dialog', 'aria-label': p.title }, [slots.default?.(), slots.footer?.()]) : null }),
+    NFormItem: defineComponent({ props: { label: String }, setup: (p, { slots }) => () => h('label', [p.label, slots.default?.()]) }),
   };
 });
 vi.mock('../composables/useModels', async () => {
@@ -40,7 +45,66 @@ function render(r: ArchiveRecord) {
   return renderToString(createSSRApp(ArchiveReview, { record: r }).use(i18n));
 }
 
-beforeEach(() => { i18n.global.locale.value = 'en'; });
+beforeEach(() => { i18n.global.locale.value = 'en'; view.dialogs = false; });
+
+describe('codex proofreading entry', () => {
+  const devHost = () => ({ platform: 'macos', proofreadArchive: vi.fn(), getCodexStatus: vi.fn(), cancelArchiveRefinement: vi.fn() });
+
+  it('is absent on non-Dev hosts, even with local re-transcription', async () => {
+    setBridge({ platform: 'macos', refineArchive: vi.fn() } as unknown as AppBridge);
+    view.dialogs = true;
+    const html = await render(record({ audio }));
+    expect(html).toContain('Re-transcribe');
+    expect(html).not.toContain('Codex proofread');
+    expect(html).not.toContain('OpenAI');
+  });
+
+  it('works for text-only archives without pretending lines can seek', async () => {
+    setBridge(devHost() as unknown as AppBridge);
+    const html = await render(record({ lines: [{ text: 'old line', translation: '', time: '09:00:00' }] }));
+    expect(html).toContain('Codex proofread');
+    expect(html).not.toContain('>Re-transcribe<');
+    expect(html).not.toContain('line-seek');
+  });
+
+  it('states what is sent, quota use and limits before sending, with the source version named', async () => {
+    setBridge(devHost() as unknown as AppBridge);
+    view.dialogs = true;
+    const html = await render(record({ audio }));
+    expect(html).toContain('Source: Live transcript');
+    expect(html).toContain('Caption text is sent to OpenAI. Audio is not uploaded.');
+    expect(html).toContain('Uses your own Codex subscription quota. No API key needed.');
+    expect(html).toContain('Codex doesn’t listen to the recording.');
+    expect(html).toContain('The live transcript and existing versions stay unchanged.');
+    expect(html).not.toMatch(/accura/i);
+    // Sending stays disabled until the local Codex check succeeds.
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Send and proofread/s);
+  });
+
+  it('shows progress of a running proofread and blocks starting another task', async () => {
+    setBridge({ ...devHost(), refineArchive: vi.fn(),
+      onArchiveRefineProgress: (cb: (p: unknown) => void) => { cb({ archiveId: 'arc', state: 'proofreading', completed: 2, total: 8 }); return () => {}; },
+    } as unknown as AppBridge);
+    const html = await render(record({ audio }));
+    expect(html).toContain('Codex is proofreading · 25%');
+    expect(html.match(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*(Re-transcribe|Codex proofread)</gs)).toHaveLength(2);
+  });
+
+  it('explains that retrying an observed Codex failure sends text again only when the request is known', async () => {
+    setBridge({ ...devHost(),
+      onArchiveRefineProgress: (cb: (p: unknown) => void) => {
+        cb({ archiveId: 'arc', state: 'proofreading', completed: 0, total: 1 });
+        cb({ archiveId: 'arc', state: 'error', completed: 0, total: 1, error: 'Codex usage limit reached' });
+        return () => {};
+      },
+    } as unknown as AppBridge);
+    const html = await render(record({ audio }));
+    expect(html).toContain('Codex proofreading didn’t finish. Nothing was changed.');
+    expect(html).toContain('Codex usage limit reached');
+    // This page didn't start the run, so it can't resend it.
+    expect(html).not.toContain('Send again');
+  });
+});
 
 describe('archive review', () => {
   it('makes only precisely mapped lines seekable and keeps clock-only lines static', async () => {

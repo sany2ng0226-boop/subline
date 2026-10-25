@@ -186,6 +186,7 @@ export interface ArchiveLine {
   time?: string;
   text: string;
   translation: string;
+  review?: { needsReview: boolean; note: string; originalText?: string };
 }
 
 export interface ArchiveFolder {
@@ -229,16 +230,31 @@ export interface ArchiveRefineOptions {
   targetLang: UiLang;
 }
 
+export interface ArchiveProofreadOptions {
+  kind: 'codex';
+  targetLang: UiLang;
+  /** Omitted means the immutable live transcript. */
+  sourceRevisionId?: string;
+}
+
+export interface CodexStatus {
+  available: boolean;
+  authenticated: boolean;
+  model: string;
+  error?: string;
+}
+
 export interface ArchiveRevision {
   id: string;
   createdAt: number;
-  options: ArchiveRefineOptions;
+  options: ArchiveRefineOptions | ArchiveProofreadOptions;
   lines: ArchiveLine[];
+  codex?: { model: string };
 }
 
 export interface ArchiveRefineProgress {
   archiveId: string;
-  state: 'transcribing' | 'translating' | 'saving' | 'done' | 'cancelled' | 'error';
+  state: 'transcribing' | 'translating' | 'proofreading' | 'saving' | 'done' | 'cancelled' | 'error';
   completed: number;
   total: number;
   error?: string;

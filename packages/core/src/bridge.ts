@@ -26,6 +26,8 @@ import type {
   ArchiveRecord,
   ArchiveRefineOptions,
   ArchiveRefineProgress,
+  ArchiveProofreadOptions,
+  CodexStatus,
 } from './types';
 
 /** 关闭窗口或退出应用前的确认文案；由 UI 本地化后交给宿主展示。 */
@@ -160,6 +162,8 @@ export interface AppBridge {
   discardRecordings?(ids: string[]): Promise<void>;
   getArchiveAudioUrl?(archiveId: string, recordingId: string): Promise<string>;
   refineArchive?(archiveId: string, options: ArchiveRefineOptions): Promise<ArchiveRecord>;
+  proofreadArchive?(archiveId: string, options: ArchiveProofreadOptions): Promise<ArchiveRecord>;
+  getCodexStatus?(): Promise<CodexStatus>;
   cancelArchiveRefinement?(archiveId: string): Promise<void>;
   onArchiveRefineProgress?(cb: (progress: ArchiveRefineProgress) => void): () => void;
   getArchiveLibrary?(): Promise<ArchiveLibrary>;

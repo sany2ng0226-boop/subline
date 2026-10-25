@@ -17,32 +17,41 @@ export function validateRefinementOptions(options: ArchiveRefineOptions): Archiv
     ...(translation ? { translationModel: translation.id } : {}) };
 }
 
-interface WorkerHandle { result: Promise<ArchiveRevision>; cancel(): void }
+export interface ArchiveReviewWorker { result: Promise<ArchiveRevision>; cancel(): void }
 interface Dependencies {
   prepare(id: string, options: ArchiveRefineOptions): Promise<RefinementJob>;
-  start(job: RefinementJob, progress: (value: ArchiveRefineProgress) => void): WorkerHandle;
+  start(job: RefinementJob, progress: (value: ArchiveRefineProgress) => void): ArchiveReviewWorker;
   save(id: string, revision: ArchiveRevision): Promise<ArchiveRecord>;
   progress(value: ArchiveRefineProgress): void;
 }
 
 /** One bounded job owns its worker; failed/cancelled output never reaches archive persistence. */
 export class ArchiveRefinementManager {
-  private active: { id: string; cancelled: boolean; saving: boolean; worker?: WorkerHandle } | null = null;
+  private active: { id: string; cancelled: boolean; saving: boolean; worker?: ArchiveReviewWorker } | null = null;
   constructor(private readonly deps: Dependencies) {}
   get busy(): boolean { return this.active !== null; }
   isActive(id: string): boolean { return this.active?.id === id; }
 
   async run(id: string, options: ArchiveRefineOptions): Promise<ArchiveRecord> {
-    if (this.active) throw new Error('Another recording review is already running');
     const selected = validateRefinementOptions(options);
-    const active = { id, cancelled: false, saving: false, worker: undefined as WorkerHandle | undefined };
+    return this.runTask(id, async (progress) => {
+      const job = await this.deps.prepare(id, selected);
+      return this.deps.start(job, progress);
+    });
+  }
+
+  async runTask(id: string, start: (progress: (value: ArchiveRefineProgress) => void) => Promise<ArchiveReviewWorker> | ArchiveReviewWorker): Promise<ArchiveRecord> {
+    if (this.active) throw new Error('Another recording review is already running');
+    const active = { id, cancelled: false, saving: false, worker: undefined as ArchiveReviewWorker | undefined };
     this.active = active;
     try {
-      const job = await this.deps.prepare(id, selected);
-      if (active.cancelled) throw new Error('Cancelled');
-      active.worker = this.deps.start(job, (value) => {
+      active.worker = await start((value) => {
         if (!active.cancelled && this.active === active) this.deps.progress({ ...value, archiveId: id });
       });
+      if (active.cancelled) {
+        void active.worker.result.catch(() => {});
+        throw new Error('Cancelled');
+      }
       const revision = await active.worker.result;
       if (active.cancelled) throw new Error('Cancelled');
       active.saving = true;
