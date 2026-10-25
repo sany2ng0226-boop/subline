@@ -25,7 +25,7 @@ function textLang(value?: string): string | undefined {
 const { announcements } = useCaptionAnnouncer(() => props.lines, () => props.announce);
 const scroller = ref<HTMLElement | null>(null);
 const column = ref<HTMLElement | null>(null);
-const followEnd = ref(true);
+
 const newLineCount = ref(0);
 const rows = computed(() => props.draft ? [...props.lines, props.draft] : props.lines);
 const stableText = computed(() => props.stablePartial && props.partial.startsWith(props.stablePartial)
@@ -40,41 +40,52 @@ const tentativeText = computed(() => visiblePartial.value.slice(stableText.value
 // 视觉焦点：正在说的草稿行 + 最近一条定稿行为「当前」，更早的行退为次级墨色。
 const focusFrom = computed(() => Math.max(0, rows.value.length - (props.draft ? 2 : 1)));
 
-// 跟随只由用户向上滚动打断：内容在底部长高（如 out-in 过渡后才插入的多行译文）、
-// 平滑跳转途中继续追加，都不会产生向上的 scroll，因此不会误判为离开底部。
-let lastTop = 0;
-let jumping = false;
-function onScroll(): void {
+type ReadingAnchor = { id: string; top: number };
+let anchor: ReadingAnchor | undefined;
+function sources(): HTMLElement[] {
+  return Array.from(column.value?.querySelectorAll<HTMLElement>('.caption-source') ?? []);
+}
+function rememberAnchor(): void {
   const el = scroller.value;
   if (!el) return;
-  const gap = el.scrollHeight - el.clientHeight - el.scrollTop;
-  if (gap < 40) {
-    followEnd.value = true;
-    newLineCount.value = 0;
-  }
-  else if (el.scrollTop < lastTop - 1) followEnd.value = false;
-  if (gap < 2 || !followEnd.value) jumping = false;
-  lastTop = el.scrollTop;
+  const viewport = el.getBoundingClientRect();
+  const visible = sources().filter(source => {
+    const rect = source.getBoundingClientRect();
+    return rect.bottom > viewport.top && rect.top < viewport.bottom;
+  });
+  const source = visible.find(source => source.getBoundingClientRect().top >= viewport.top) ?? visible[0];
+  const id = source?.closest<HTMLElement>('[data-caption-id]')?.dataset.captionId;
+  anchor = source && id ? { id, top: source.getBoundingClientRect().top - viewport.top } : undefined;
 }
-function pinToEnd(): void {
+function onScroll(): void {
+  rememberAnchor();
   const el = scroller.value;
-  if (!el || !followEnd.value) return;
-  // 平滑跳转进行中有新内容时，把目标改到新的底部，而不是瞬移打断动画。
-  if (jumping) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  else el.scrollTop = el.scrollHeight;
+  if (el && el.scrollHeight - el.clientHeight - el.scrollTop < 40) newLineCount.value = 0;
+}
+function preserveReadingPosition(): void {
+  const el = scroller.value;
+  if (!el) return;
+  const source = anchor && sources().find(source =>
+    source.closest<HTMLElement>('[data-caption-id]')?.dataset.captionId === anchor!.id);
+  if (source && anchor) {
+    const shift = source.getBoundingClientRect().top - el.getBoundingClientRect().top - anchor.top;
+    if (Math.abs(shift) > 0.5) el.scrollTop += shift;
+  }
+  rememberAnchor();
 }
 function jumpToLatest(): void {
   const el = scroller.value;
   if (!el) return;
-  followEnd.value = true;
   newLineCount.value = 0;
-  jumping = true;
-  el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  // An immediate jump establishes one new reading position; it never enables continuous following.
+  el.scrollTop = el.scrollHeight;
+  rememberAnchor();
 }
 watch(() => props.lines.length, (length, previous) => {
-  if (!length || length < previous) newLineCount.value = 0;
-  else if (!followEnd.value) newLineCount.value += length - previous;
-}, { flush: 'sync' });
+  if (!length || length < previous) { newLineCount.value = 0; anchor = undefined; }
+  else if (!props.recording) newLineCount.value = 0;
+  else newLineCount.value += length - previous;
+}, { flush: 'pre' });
 
 function onKeydown(event: KeyboardEvent): void {
   if (!showJump.value || event.key !== 'Enter' || event.isComposing
@@ -84,17 +95,16 @@ function onKeydown(event: KeyboardEvent): void {
   event.preventDefault();
   jumpToLatest();
 }
-// 数据变化后立即贴底（不依赖渲染帧，窗口在后台时也成立）；
-// 过渡结束后才出现的高度变化（新行、译文回填、窗口缩放）由 ResizeObserver 在绘制前补齐。
+// Preserve the same source position through Vue updates and delayed translation transitions.
 watch(() => [props.draft?.text, ...props.lines.map((line) =>
-  [line.text, line.translation, line.translating, line.failed])], () => nextTick(pinToEnd));
+  [line.text, line.translation, line.translating, line.failed])], () => nextTick(preserveReadingPosition));
 let resizeObserver: ResizeObserver | undefined;
 onMounted(() => {
   window.addEventListener('keydown', onKeydown);
-  resizeObserver = new ResizeObserver(pinToEnd);
+  resizeObserver = new ResizeObserver(preserveReadingPosition);
   if (scroller.value) resizeObserver.observe(scroller.value);
   if (column.value) resizeObserver.observe(column.value);
-  pinToEnd();
+  jumpToLatest();
 });
 onBeforeUnmount(() => {
   resizeObserver?.disconnect();
@@ -104,16 +114,20 @@ onBeforeUnmount(() => {
 const jumpAction = computed(() => newLineCount.value
   ? `↓ ${t('main.jumpLatestCount', { count: newLineCount.value }, newLineCount.value)}`
   : t('main.jumpLatest'));
-const jumpLabel = computed(() => `${t('main.followPaused')} · ${jumpAction.value}`);
+const jumpLabel = computed(() => jumpAction.value);
+const latestPreview = computed(() => {
+  const text = Array.from(props.draft ? props.partial : rows.value.at(-1)?.text ?? '');
+  return `${text.length > 80 ? '…' : ''}${text.slice(-80).join('')}`;
+});
 
-const showJump = computed(() => !followEnd.value && rows.value.length > 0);
+const showJump = computed(() => rows.value.length > 0);
 </script>
 
 <template>
   <div class="relative flex min-h-0 flex-1 flex-col">
     <div
       ref="scroller"
-      class="relative flex-1 overflow-y-auto px-6 pb-16 pt-7 max-sm:px-4 max-sm:pb-32"
+      class="transcript-scroller relative flex-1 overflow-y-auto px-6 pb-6 pt-7 max-sm:px-4"
       @scroll="onScroll"
     >
       <p v-if="!recording && !rows.length" class="empty-hint">{{ emptyHint }}</p>
@@ -154,10 +168,8 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 
     <Transition name="jump">
       <div v-if="showJump" class="jump-controls">
+        <div class="latest-preview" :lang="textLang(sourceLang)"><span class="latest-label">{{ t('main.latestSource') }}</span><span class="latest-text"><span class="latest-tail">{{ latestPreview }}</span></span></div>
         <button type="button" class="jump-latest" :class="{ 'has-new': newLineCount > 0 }" :aria-label="jumpLabel" @click="jumpToLatest">
-          <span class="jump-pause-icon" aria-hidden="true" />
-          <span class="jump-paused">{{ t('main.followPaused') }}</span>
-          <span class="jump-sep" aria-hidden="true">·</span>
           <span :key="newLineCount" class="jump-action">{{ jumpAction }}</span>
         </button>
       </div>
@@ -166,6 +178,7 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 </template>
 
 <style scoped>
+.transcript-scroller { overflow-anchor: none; }
 .caption-column { max-width: calc(36 * (var(--transcript-size) + 7px)); }
 
 .caption-row { display: flex; gap: 12px; padding-bottom: 26px; }
@@ -219,17 +232,20 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 }
 
 .jump-controls {
-  position: absolute;
-  left: 50%;
-  bottom: 14px;
+  flex: none;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  transform: translateX(-50%);
+  gap: 14px;
+  min-height: 62px;
+  padding: 10px 24px;
+  border-top: 1px solid var(--rt-line);
+  background: var(--rt-bg);
 }
-/* 跳到最新：停在列表底部留白（pb-16）内，不压住正在读的字幕。
-   无新字幕＝强调色浅底；有新字幕＝强调色实心底，一眼可见。文字对底色均 ≥ 4.5:1。 */
+.latest-preview { min-width: 0; flex: 1; display: flex; align-items: baseline; font-size: 14px; color: var(--rt-ink); }
+.latest-text { min-width: 0; flex: 1; overflow: hidden; }
+.latest-tail { float: right; min-width: 100%; white-space: nowrap; }
+.latest-label { margin-right: 8px; color: var(--rt-ink-3); font-size: 12px; }
+/* The latest strip occupies its own space so it never covers transcript text. */
 .jump-latest {
   display: inline-flex;
   align-items: center;
@@ -257,12 +273,6 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
 }
 .jump-latest.has-new:hover { background: color-mix(in srgb, var(--rt-accent) 88%, var(--rt-ink)); }
 .jump-latest:focus-visible { outline: 2px solid var(--rt-accent); outline-offset: 3px; }
-.jump-paused { opacity: 0.85; font-weight: 500; }
-/* 暂停图标：两条竖线，纯 CSS */
-.jump-pause-icon {
-  width: 8px; height: 10px; flex: none;
-  border-left: 2.5px solid currentColor; border-right: 2.5px solid currentColor;
-}
 /* 日文/韩文：按 :lang() 选本地字体，避免落到 PingFang SC 的中文字形；↓ 固定用 Hiragino 字形以保证居中。 */
 @font-face { font-family: "JumpArrow"; src: local("HiraginoSans-W3"); font-weight: 100 400; unicode-range: U+2193; }
 @font-face { font-family: "JumpArrow"; src: local("HiraginoSans-W4"); font-weight: 401 500; unicode-range: U+2193; }
@@ -273,27 +283,20 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
   font-weight: 400; font-feature-settings: "palt"; letter-spacing: 0.02em;
 }
 .jump-latest:lang(ja).has-new { font-weight: 500; }
-.jump-latest:lang(ja) .jump-paused { font-weight: inherit; }
 .jump-latest:lang(ja) .jump-action { font-family: "JumpArrow", -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; }
 .jump-latest:lang(ko) { font-family: -apple-system, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif; letter-spacing: -0.01em; }
 .jump-latest:lang(ko) .jump-action { font-family: "JumpArrow", -apple-system, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif; }
 /* 数字等宽：计数变化时胶囊宽度不跳 */
-.jump-action, .jump-paused { font-variant-numeric: tabular-nums; }
-/* 分隔点：3px CSS 圆点代替 "·" 字形（文字保留在 DOM，font-size 0） */
-.jump-sep { flex: none; width: 3px; height: 3px; border-radius: 50%; font-size: 0; background: currentColor; opacity: 0.75; }
-/* 新字幕计数变化：轻微放大一下 */
-.jump-latest.has-new .jump-action { display: inline-block; animation: jump-bump 0.28s var(--rt-ease); }
-@keyframes jump-bump { 0% { transform: scale(1.12); } 100% { transform: scale(1); } }
-
+.jump-action { font-variant-numeric: tabular-nums; }
 /* 过渡：只动 opacity（合成层完成，不触发重排/重绘），新行出现与自动滚动不再互相打架 */
 .caption-enter-active { transition: opacity 0.3s ease-out; }
 .caption-enter-from { opacity: 0; }
 .tr-enter-active { transition: opacity 0.25s ease-out; }
 .tr-leave-active { transition: opacity 0.1s linear; }
 .tr-enter-from, .tr-leave-to { opacity: 0; }
-.jump-enter-active { transition: opacity 0.2s ease-out, transform 0.24s var(--rt-ease); }
+.jump-enter-active { transition: opacity 0.2s ease-out; }
 .jump-leave-active { transition: opacity 0.14s ease-in; }
-.jump-enter-from { opacity: 0; transform: translate(-50%, 6px); }
+.jump-enter-from { opacity: 0; }
 .jump-leave-to { opacity: 0; }
 
 /* Keep language-specific CJK glyphs independent of the interface language. */
@@ -308,7 +311,5 @@ const showJump = computed(() => !followEnd.value && rows.value.length > 0);
   .caption-enter-active, .tr-enter-active, .tr-leave-active { transition: none; }
   .caret { animation: none; }
   .jump-enter-active, .jump-leave-active, .jump-latest { transition: none; }
-  .jump-enter-from { transform: translateX(-50%); }
-  .jump-latest.has-new .jump-action { animation: none; }
 }
 </style>
