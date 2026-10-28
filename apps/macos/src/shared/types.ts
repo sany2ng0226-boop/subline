@@ -34,6 +34,7 @@ export type {
   MicPermission,
   ArchiveLine,
   ArchiveRecord,
+  AudioAttachment,
   ArchiveSummary,
   AppSettings,
   AppBridge,
@@ -51,7 +52,7 @@ export type {
 // 对 @rt/ui 呈现为完整会话的 AppBridge。
 export type ElectronApi = AppBridge & {
   /** 渲染层采集到的 PCM 帧经 IPC 送往主进程/ASR 子进程 */
-  sendAudio(samples: Float32Array): void;
+  sendAudio(samples: Float32Array, captureToken?: string): void;
   /** 预热 ASR 管线（后台装模型、不采麦）。preload 恒实现，故在 AppBridge 的可选之上收紧为必实现。 */
   prewarmPipeline: NonNullable<AppBridge['prewarmPipeline']>;
   /**

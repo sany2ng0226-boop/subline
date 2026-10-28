@@ -2,6 +2,8 @@ import { ref, watch } from 'vue';
 import { bridge } from '../bridge';
 import {
   lines,
+  recordingIds,
+  restoreRecordings,
   canUndoDelete,
   recoverySnapshot,
   recordingStartedAt,
@@ -19,6 +21,7 @@ export const RECOVERY_THROTTLE_MS = 10_000;
 export interface RecoverySnapshot {
   version: 1;
   lines: RecoveredLine[];
+  audioIds?: string[];
   /** 识别语言设置 */
   lang?: string;
   /** 录音开始时刻（epoch ms） */
@@ -93,7 +96,8 @@ function parse(json: string | null): RecoverySnapshot | null {
     if (data?.version !== 1 || !Array.isArray(data.lines) || typeof data.savedAt !== 'number') return null;
     const valid = data.lines.filter((l): l is RecoveredLine =>
       !!l && typeof l.time === 'string' && typeof l.text === 'string' && typeof l.translation === 'string');
-    return valid.length ? { ...data, lines: valid } as RecoverySnapshot : null;
+    const audioIds = Array.isArray(data.audioIds) ? data.audioIds.filter((id): id is string => typeof id === 'string') : [];
+    return valid.length || audioIds.length ? { ...data, lines: valid, ...(audioIds.length ? { audioIds } : {}) } as RecoverySnapshot : null;
   } catch {
     return null;
   }
@@ -113,12 +117,13 @@ export function persistRecoveryNow(): void {
   clearTimeout(timer);
   timer = undefined;
   // 清空后的撤销窗口内保留上一份暂存：撤销期过后才真正清除
-  if (!lines.length && canUndoDelete.value) return;
+  if (!lines.length && !recordingIds.length && canUndoDelete.value) return;
   const all = [...(recoveryOffer.value?.lines ?? []), ...recoverySnapshot()];
-  const linesJson = all.length ? JSON.stringify(all) : '';
+  const audioIds = [...new Set([...(recoveryOffer.value?.audioIds ?? []), ...recordingIds])];
+  const linesJson = all.length || audioIds.length ? JSON.stringify({ lines: all, audioIds }) : '';
   if (linesJson === lastLinesJson) return;
   lastLinesJson = linesJson;
-  if (!all.length) {
+  if (!all.length && !audioIds.length) {
     void clearStore();
     return;
   }
@@ -126,6 +131,7 @@ export function persistRecoveryNow(): void {
   const snapshot: RecoverySnapshot = {
     version: 1,
     lines: all,
+    ...(audioIds.length ? { audioIds } : {}),
     ...(langOf() ? { lang: langOf() } : {}),
     ...(recordingStartedAt() ? { startedAt: recordingStartedAt() } : {}),
     savedAt: lastWriteAt,
@@ -151,12 +157,15 @@ export function restoreRecovery(): void {
   if (!offer) return;
   recoveryOffer.value = null;
   restoreLines(offer.lines);
+  restoreRecordings(offer.audioIds ?? []);
   persistRecoveryNow();
 }
 
 /** 丢弃上次未归档的内容 */
 export function discardRecovery(): void {
+  const ids = recoveryOffer.value?.audioIds?.filter((id) => !recordingIds.includes(id)) ?? [];
   recoveryOffer.value = null;
+  void bridge().discardRecordings?.(ids).catch((error) => console.error('[recovery:discard-audio]', error));
   persistRecoveryNow();
 }
 
@@ -168,20 +177,30 @@ export async function initRecovery(options: { lang?: () => string | undefined } 
   if (initCalled) return;
   initCalled = true;
   if (options.lang) langOf = options.lang;
-  const offer = parse(await readStore());
+  const persistedOffer = parse(await readStore());
+  let offer = persistedOffer;
+  // WAV files are independently discoverable if the renderer died before receiving its ID.
+  try {
+    const pending = await bridge().listUnarchivedRecordings?.() ?? [];
+    if (pending.length) offer = {
+      version: 1, lines: offer?.lines ?? [], savedAt: offer?.savedAt ?? Date.now(),
+      ...offer, audioIds: [...new Set([...(offer?.audioIds ?? []), ...pending])],
+    };
+  } catch (error) { console.error('[recovery:audio]', error); }
   if (offer) {
     recoveryOffer.value = offer;
-    lastLinesJson = JSON.stringify(offer.lines);
+    lastLinesJson = persistedOffer
+      ? JSON.stringify({ lines: persistedOffer.lines, audioIds: persistedOffer.audioIds ?? [] }) : '';
   } else {
     // 没有可用暂存（含损坏的）：清掉残留
     await clearStore();
   }
   started = true;
   watch(
-    () => [lines.length, canUndoDelete.value, lines.map((l) => l.translationPartial ? '' : l.translation)],
+    () => [lines.length, [...recordingIds], canUndoDelete.value, lines.map((l) => l.translationPartial ? '' : l.translation)],
     schedule,
   );
-  if (lines.length) schedule();
+  if (lines.length || recordingIds.length) schedule();
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') persistRecoveryNow();

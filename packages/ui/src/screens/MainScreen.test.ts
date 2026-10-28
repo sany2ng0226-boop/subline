@@ -4,7 +4,7 @@ import { makeDefaults, type AppBridge, type ShortcutAction } from '@rt/core';
 
 afterEach(() => vi.unstubAllGlobals());
 
-it('starts and stops from the MainScreen shortcut subscription, then unsubscribes', async () => {
+it('keeps settings available during recording without opening disruptive controls or stopping capture', async () => {
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn() }));
   vi.stubGlobal('localStorage', { getItem: () => null });
   const { setBridge } = await import('../bridge');
@@ -30,7 +30,8 @@ it('starts and stops from the MainScreen shortcut subscription, then unsubscribe
     createText: () => ({}), createComment: () => ({}), setText() {},
     setElementText() {}, parentNode: () => null, nextSibling: () => null,
   });
-  const app = renderer.createApp({ ...MainScreen, render: () => null });
+  const openSettings = vi.fn();
+  const app = renderer.createApp({ ...MainScreen, render: () => null }, { onOpenSettings: openSettings });
   app.provide(ssrContextKey, { modules: new Set() });
   app.use(i18n).mount({});
   try {
@@ -39,6 +40,17 @@ it('starts and stops from the MainScreen shortcut subscription, then unsubscribe
     await vi.waitFor(() => expect(startPipeline).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(state.recordBusy.value).toBe(false));
     expect(state.recording.value).toBe(true);
+    const setup = (app as any)._instance.setupState;
+    const options = setup.mobileMenuOptions as Array<{ key: string; disabled?: boolean }>;
+    expect(options.find(option => option.key === 'settings')?.disabled).toBe(false);
+    expect(options.find(option => option.key === 'view-archive')?.disabled).toBe(true);
+    setup.onMobileMenuSelect('settings');
+    expect(openSettings).toHaveBeenCalledOnce();
+    expect(stopPipeline).not.toHaveBeenCalled();
+    state.recordBusy.value = true;
+    setup.onMobileMenuSelect('settings');
+    expect(openSettings).toHaveBeenCalledOnce();
+    state.recordBusy.value = false;
     listener!('toggleRecording');
     await vi.waitFor(() => expect(stopPipeline).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(state.recordBusy.value).toBe(false));

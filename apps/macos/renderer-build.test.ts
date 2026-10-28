@@ -20,6 +20,11 @@ it('includes current shortcuts, timeline and unified model controls in productio
   expect(code).toContain('picker-trigger');
   expect(code).toContain('settings.chooseModel');
   expect(code).toContain('timeline-time');
+  expect(code).toContain('archive.audioNotSaved');
+  expect(code).toContain('archive.audioIncomplete');
+  expect(code).toContain('archive.audioSeek');
+  expect(code).toContain('settings.recordingLockHint');
+  expect(code).toContain('function stopCurrentRecording(');
   expect(code).toContain('settings.targetLang');
   expect(code).toContain('function onShortcutAction(');
   expect(code).toContain('onUnmounted(onShortcutAction("toggleRecording"');

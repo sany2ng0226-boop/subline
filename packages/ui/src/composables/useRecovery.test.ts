@@ -131,3 +131,98 @@ it('clears after archiving', async () => {
   await archiveSession('x');
   expect(stored()).toBeNull();
 });
+
+it('restores a snapshot containing only audio IDs', async () => {
+  storage.setItem('rt.recovery.v1', JSON.stringify({ version: 1, savedAt: 1, lines: [], audioIds: ['saved-audio'] }));
+  await setup();
+  await recovery.initRecovery();
+  expect(recovery.recoveryOffer.value).toMatchObject({ lines: [], audioIds: ['saved-audio'] });
+  recovery.restoreRecovery();
+  expect(transcription.lines).toEqual([]);
+  expect(transcription.recordingIds).toEqual(['saved-audio']);
+  expect(stored().audioIds).toEqual(['saved-audio']);
+});
+
+it('discovers orphan recordings even without a recovery snapshot', async () => {
+  await setup({ listUnarchivedRecordings: vi.fn(async () => ['orphan']) });
+  await recovery.initRecovery();
+  expect(recovery.recoveryOffer.value).toMatchObject({ lines: [], audioIds: ['orphan'] });
+  recovery.restoreRecovery();
+  expect(transcription.recordingIds).toEqual(['orphan']);
+  expect(stored()).toMatchObject({ audioIds: ['orphan'] });
+});
+
+it('merges independently discovered audio with the saved offer without duplicate IDs', async () => {
+  storage.setItem('rt.recovery.v1', JSON.stringify({ version: 1, savedAt: 1, lines: [], audioIds: ['saved'] }));
+  await setup({ listUnarchivedRecordings: vi.fn(async () => ['saved', 'orphan']) });
+  await recovery.initRecovery();
+  expect(recovery.recoveryOffer.value?.audioIds).toEqual(['saved', 'orphan']);
+});
+
+it('persists new audio IDs immediately without waiting for the first caption', async () => {
+  await setup();
+  await recovery.initRecovery();
+  transcription.restoreRecordings(['first']);
+  await nextTick();
+  expect(stored()).toMatchObject({ lines: [], audioIds: ['first'] });
+  transcription.restoreRecordings(['second']);
+  await nextTick();
+  expect(stored().audioIds).toEqual(['first', 'second']);
+});
+
+it('undo restores audio ownership before dismissing the delete buffer', async () => {
+  const discardRecordings = vi.fn(async () => {});
+  await setup({ discardRecordings });
+  await recovery.initRecovery();
+  transcription.restoreRecordings(['undo-audio']);
+  await nextTick();
+  transcription.deleteTranscript();
+  await nextTick();
+  expect(transcription.canUndoDelete.value).toBe(true);
+  expect(stored().audioIds).toEqual(['undo-audio']);
+  transcription.undoDelete();
+  await nextTick();
+  expect(transcription.recordingIds).toEqual(['undo-audio']);
+  expect(transcription.canUndoDelete.value).toBe(false);
+  expect(discardRecordings).not.toHaveBeenCalled();
+});
+
+it('discarding a recovery offer preserves audio already owned by the current transcript', async () => {
+  storage.setItem('rt.recovery.v1', JSON.stringify({ version: 1, savedAt: 1, lines: [], audioIds: ['shared', 'old'] }));
+  const discardRecordings = vi.fn(async () => {});
+  await setup({ discardRecordings });
+  await recovery.initRecovery();
+  transcription.restoreRecordings(['shared', 'current']);
+  recovery.discardRecovery();
+  expect(discardRecordings).toHaveBeenCalledExactlyOnceWith(['old']);
+  expect(transcription.recordingIds).toEqual(['shared', 'current']);
+  expect(stored().audioIds).toEqual(['shared', 'current']);
+});
+
+it('releases deleted audio only after undo is dismissed', async () => {
+  const discardRecordings = vi.fn(async () => {});
+  await setup({ discardRecordings });
+  await recovery.initRecovery();
+  transcription.restoreRecordings(['discarded']);
+  await nextTick();
+  transcription.deleteTranscript();
+  await nextTick();
+  expect(discardRecordings).not.toHaveBeenCalled();
+  transcription.dismissUndo();
+  await nextTick();
+  expect(discardRecordings).toHaveBeenCalledExactlyOnceWith(['discarded']);
+  expect(stored()).toBeNull();
+});
+
+it('successful archive clears recovery ownership without discarding the archived audio file', async () => {
+  const discardRecordings = vi.fn(async () => {});
+  await setup({ saveArchive: vi.fn(async () => []), discardRecordings });
+  await recovery.initRecovery();
+  transcription.restoreRecordings(['archived-audio']);
+  await nextTick();
+  const { archiveSession } = await import('./useSessionArchive');
+  await archiveSession('audio');
+  expect(transcription.recordingIds).toEqual([]);
+  expect(stored()).toBeNull();
+  expect(discardRecordings).not.toHaveBeenCalled();
+});

@@ -4,7 +4,7 @@ import { NButton, NModal, NTooltip } from 'naive-ui';
 import { ArrowLeft, Trash2 } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import type { ArchiveSummary, ArchiveRecord } from '@rt/core';
-import ConversationLine from '../components/ConversationLine.vue';
+import ArchivePlayback from '../components/ArchivePlayback.vue';
 import ScrollArea from '../components/ScrollArea.vue';
 import UndoBar from '../components/UndoBar.vue';
 import { useArchiveDelete } from '../composables/useArchiveDelete';
@@ -82,13 +82,7 @@ onMounted(async () => {
     <!-- 详情：某条归档的完整对话（按时间顺序） -->
     <ScrollArea v-if="selected" class="flex-1">
       <div class="mx-auto w-full max-w-[640px] px-5 py-4">
-        <ConversationLine
-          v-for="(line, i) in selected.lines"
-          :key="i"
-          :time="line.time"
-          :text="line.text"
-          :translation="line.translation"
-        />
+        <ArchivePlayback :key="selected.id" :record="selected" />
       </div>
     </ScrollArea>
 
