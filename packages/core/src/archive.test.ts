@@ -13,13 +13,17 @@ function record(id: string, createdAt: number, texts: string[]): ArchiveRecord {
 }
 
 describe('toSummary', () => {
-  it('lastLine 取最后一条原文', () => {
-    const s = toSummary(record('a', 1, ['第一句', '第二句']));
-    expect(s).toEqual({ id: 'a', name: '记录a', createdAt: 1, lastLine: '第二句' });
+  it('preview 取第一条有内容的原文，跳过寒暄和课尾短句', () => {
+    const s = toSummary(record('a', 1, ['大家好。', 'えーと、今日は近代日本の美術教育について話します。', 'うん。']));
+    expect(s).toEqual({ id: 'a', name: '记录a', createdAt: 1, preview: 'えーと、今日は近代日本の美術教育について話します。' });
   });
 
-  it('空对话的 lastLine 为空串', () => {
-    expect(toSummary(record('a', 1, [])).lastLine).toBe('');
+  it('全是短句时退回第一条非空原文', () => {
+    expect(toSummary(record('a', 1, [' ', 'うん。', 'なく。'])).preview).toBe('うん。');
+  });
+
+  it('空对话的 preview 为空串', () => {
+    expect(toSummary(record('a', 1, [])).preview).toBe('');
   });
 });
 
@@ -31,7 +35,7 @@ describe('listSummaries', () => {
       record('mid', 200, ['中']),
     ]);
     expect(out.map((s) => s.id)).toEqual(['new', 'mid', 'old']);
-    expect(out[0].lastLine).toBe('新');
+    expect(out[0].preview).toBe('新');
   });
 
   it('不改变入参数组的顺序', () => {

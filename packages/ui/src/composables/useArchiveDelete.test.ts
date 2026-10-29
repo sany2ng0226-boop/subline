@@ -4,9 +4,9 @@ import type { AppBridge, ArchiveSummary } from '@rt/core';
 import { setBridge } from '../bridge';
 import { ARCHIVE_UNDO_MS, useArchiveDelete } from './useArchiveDelete';
 
-const a: ArchiveSummary = { id: 'a', name: 'A', createdAt: 1, lastLine: '' };
-const b: ArchiveSummary = { id: 'b', name: 'B', createdAt: 2, lastLine: '' };
-const c: ArchiveSummary = { id: 'c', name: 'C', createdAt: 3, lastLine: '' };
+const a: ArchiveSummary = { id: 'a', name: 'A', createdAt: 1, preview: '' };
+const b: ArchiveSummary = { id: 'b', name: 'B', createdAt: 2, preview: '' };
+const c: ArchiveSummary = { id: 'c', name: 'C', createdAt: 3, preview: '' };
 let stored: ArchiveSummary[];
 let deleteArchive: ReturnType<typeof vi.fn>;
 
