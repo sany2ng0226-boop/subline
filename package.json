@@ -14,9 +14,10 @@
     "dist": "pnpm --filter @rt/macos dist",
     "dist:dir": "pnpm --filter @rt/macos dist:dir",
     "test:metrics": "pnpm --filter @rt/core exec vitest run --root ../.. tests/bridge-metrics.test.ts",
-    "check": "pnpm test:metrics && pnpm --filter @rt/core test && pnpm --filter @rt/macos test && pnpm --filter @rt/web test && pnpm test:ui && pnpm --filter @rt/macos test-eval-corpus && pnpm --filter @rt/macos type-check && pnpm --filter @rt/web type-check && pnpm --filter @rt/ios type-check",
+    "check": "pnpm test:metrics && pnpm --filter @rt/core test && pnpm --filter @rt/macos test && pnpm --filter @rt/web test && pnpm test:ui && pnpm --filter @rt/macos test-eval-corpus && pnpm --filter @rt/macos type-check && pnpm --filter @rt/web type-check && pnpm --filter @rt/ios type-check && pnpm test:ios",
     "dist:windows": "pnpm --filter @rt/macos dist:windows",
-    "test:ui": "pnpm --filter @rt/core exec vitest run --root ../.. packages/ui/src"
+    "test:ui": "pnpm --filter @rt/core exec vitest run --root ../.. packages/ui/src",
+    "test:ios": "pnpm --filter @rt/core exec vitest run --root ../.. apps/ios/src"
   },
   "keywords": [],
   "author": "",
