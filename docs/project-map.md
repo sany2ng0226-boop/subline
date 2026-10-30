@@ -12,6 +12,7 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 | `apps/web` (`@rt/web`) | 浏览器 PWA 宿主：使用 IndexedDB/Cache Storage 存储，AudioWorklet 采集，Web Worker 中运行 sherpa-onnx WASM 与本地翻译，并管理 Service Worker 外壳缓存；应用入口是 `apps/web/src/main.ts`，平台契约实现是 `apps/web/src/bridge.ts`。 |
 | `apps/ios` (`@rt/ios`) | Capacitor 宿主和 WebView 侧桥接，设置/归档使用 Preferences；应用入口是 `apps/ios/src/main.ts`，平台契约实现是 `apps/ios/src/bridge.ts`。 |
 | `apps/ios/native-plugin` | iOS 原生能力：`AVAudioEngine` 音频采集、sherpa-onnx ASR、模型下载/管理和 iOS 18+ Apple Translation；TypeScript 契约从 `definitions.ts` 导出，Swift 主入口是 `ios/RealtimeAsrPlugin.swift`。 |
+| [`apps/glasses`](../apps/glasses/README.md) | 独立的原生 iPhone 个人研究候选：手机内置麦克风与 Apple 原生日语识别/翻译驱动眼镜原厂字幕窗口；厂商 framework 和固定版本的 Turbo IO 在仓库外取得并由准备脚本暂存，不属于正式 `apps/ios` 产品宿主。 |
 | `assets` | 三端图标的共享源资产，满版母版为 `assets/icon.svg`；`apps/macos/scripts/gen-icon.mjs`、`apps/web/scripts/gen-icons.mjs` 和 `apps/ios/scripts/gen-icons.mjs` 由此生成各端尺寸和格式，macOS 取景另加投影与描边。 |
 | 根工作区配置 | `package.json` 和 `pnpm-workspace.yaml` 定义工作区、共享依赖版本与跨模块质量门禁；`.github/workflows/ci.yml` 运行检查；仅仓库变量 `ENABLE_PAGES=true` 时启用 GitHub Pages 的变更探测与部署。 |
 
