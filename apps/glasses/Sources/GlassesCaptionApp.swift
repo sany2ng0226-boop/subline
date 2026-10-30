@@ -66,6 +66,9 @@ struct GlassesCaptionApp: App {
                                 .disabled(!model.connected || model.hasActiveSession)
                             Button("发送下一条字幕测试") { model.sendTest() }
                                 .disabled(!model.displayReady || model.recording || model.starting || model.stopping)
+                            Button("提醒查看聊天") { model.remindToCheckChat() }
+                                .disabled(!model.displayReady || model.recording || model.starting || model.stopping)
+                                .accessibilityIdentifier("glasses-remind-chat")
                             Text("音频包 \(model.audioPackets) · PCM \(model.pcmSamples) · 已发字幕 \(model.sentCount)")
                                 .font(.caption).accessibilityIdentifier("glasses-counters")
                             Text(model.latestEvent).font(.caption).foregroundStyle(.secondary)
@@ -241,6 +244,18 @@ final class GlassesCaptionModel: ObservableObject {
         source = text.0; translation = text.1
         if !pager.enqueue(text.1, now: ProcessInfo.processInfo.systemUptime) { retainOverflow(text.1) }
         queueFrame(); armPagerUpdate()
+    }
+
+    func remindToCheckChat() {
+        guard displayReady, let sid = sessionID, lens.sessionID == sid, lens.ready,
+              !recording, !starting, !stopping else { return }
+        pagerTask?.cancel(); pagerTask = nil; pager.reset()
+        source = "チャットをご確認ください。"
+        translation = "请查看聊天，有一项需要确认。"
+        _ = pager.enqueue(translation, now: ProcessInfo.processInfo.systemUptime)
+        status = "正在提醒你查看聊天…"
+        queueFrame(); armPagerUpdate()
+        diagnostic("chat_reminder_queued")
     }
 
     private func queueFrame() {
