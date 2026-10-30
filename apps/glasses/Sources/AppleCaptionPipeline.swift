@@ -16,7 +16,8 @@ final class AppleCaptionPipeline: ObservableObject {
     @Published private(set) var lastTranslationAt: Date?
 
     var onSource: ((String) -> Void)?
-    var onTranslation: ((String) -> Void)?
+    /// Called with the finalized Japanese text and its completed Chinese translation, in finalization order.
+    var onTranslation: ((String, String) -> Void)?
     var onError: ((String) -> Void)?
 
     private var analyzer: SpeechAnalyzer?
@@ -199,7 +200,7 @@ final class AppleCaptionPipeline: ObservableObject {
                     self.recentSource = Array((self.recentSource + [String(text.suffix(400))]).suffix(2))
                     self.translationCount += 1
                     self.lastTranslationAt = Date()
-                    self.onTranslation?(translated)
+                    self.onTranslation?(text, translated)
                 } catch {
                     guard self.generation == token, !Task.isCancelled else { return }
                     if error is DeadlineFailure { self.poisoned = true }

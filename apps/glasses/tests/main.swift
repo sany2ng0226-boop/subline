@@ -14,23 +14,25 @@ func verifyLayout(japanese: String, chinese: String) -> LensCaptionFrame {
     return frame
 }
 let short = verifyLayout(japanese: "今日は授業です。", chinese: "今天有课。")
-check(short.text == "日 今日は授業です。\n\n中 今天有课。\n", "Short bilingual text is shown completely without page numbers")
+check(short.text == "今日は授業です。\n\n今天有课。\n", "Short bilingual text is shown completely, without labels or page numbers")
 check(!short.chineseTruncated && !short.japaneseWindowed, "Short text has no omission warnings")
 _ = verifyLayout(japanese: "\n今日は\r\n\t授業です。  ", chinese: "  今天\t有课。\r\n请注意。\n")
 let blank = verifyLayout(japanese: "\r\n\t \u{00a0}", chinese: "\t \n\r")
-check(blank.text.contains("等待日语") && blank.text.contains("等待译文"), "Whitespace-only input uses waiting labels")
+check(blank.text == "\n\n\n", "Whitespace-only input leaves the lens blank instead of showing placeholders")
+let chineseOnly = verifyLayout(japanese: "", chinese: "请查看聊天。")
+check(chineseOnly.text == "\n\n请查看聊天。\n", "Chinese keeps the bottom lines when Japanese is empty")
 let longJP = String(repeating: "前の文章。", count: 40) + "最後の日本語です。"
 let longCN = "重要结论在这里。" + String(repeating: "后续完整中文与English 123。", count: 100)
 let long = verifyLayout(japanese: longJP, chinese: longCN)
-check(long.japaneseWindowed && long.text.hasPrefix("日 …"), "Japanese uses a visibly marked latest tail window")
+check(long.japaneseWindowed && long.text.hasPrefix("…"), "Japanese uses a visibly marked latest tail window")
 check(long.text.components(separatedBy: "\n").prefix(2).joined().hasSuffix("最後の日本語です。"), "Japanese keeps the current utterance ending")
 check(long.chineseTruncated && long.text.hasSuffix("…"), "Long Chinese has an explicit omission marker")
-check(long.text.contains("中 重要结论在这里。"), "Chinese keeps the newest completed translation beginning")
+check(long.text.components(separatedBy: "\n")[2].hasPrefix("重要结论在这里。"), "Chinese keeps the newest completed translation beginning on the third line")
 let family = "👩‍👩‍👧‍👦"
 let unicode = verifyLayout(japanese: String(repeating: family, count: 50), chinese: String(repeating: family + "e\u{301}", count: 100))
 check(unicode.chineseTruncated, "Large UTF-8 graphemes must remain within the same bounded view")
 for line in unicode.text.components(separatedBy: "\n") {
-    let body = line.replacingOccurrences(of: "日 ", with: "").replacingOccurrences(of: "中 ", with: "").replacingOccurrences(of: "…", with: "")
+    let body = line.replacingOccurrences(of: "…", with: "")
     check(body.allSatisfy { String($0) == family || String($0) == "e\u{301}" }, "Emoji families and combining characters are never split")
 }
 let giant = "a" + String(repeating: "\u{301}", count: 150)

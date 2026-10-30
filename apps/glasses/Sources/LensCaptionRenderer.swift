@@ -11,21 +11,21 @@ enum LensCaptionRenderer {
     static let lineCharacters = 20
     private static let lineBytes = 95
 
+    /// Japanese always occupies the top two lines and Chinese the bottom two, so position alone
+    /// tells the languages apart; empty input leaves its lines blank instead of showing a placeholder.
     static func render(japanese: String, chinese: String) -> LensCaptionFrame {
-        let normalizedJapanese = normalizeWhitespace(japanese)
-        let original = Array(normalizedJapanese.isEmpty ? "等待日语" : normalizedJapanese)
-        var start = max(0, original.count - (lineCharacters * 2 - 2))
+        let original = Array(normalizeWhitespace(japanese))
+        var start = max(0, original.count - (lineCharacters * 2 - 1))
         var japaneseLines: (first: String, second: String, consumed: Int)
         while true {
             let visible = Array((start > 0 ? "…" : "") + String(original.dropFirst(start)))
-            japaneseLines = lines(visible, prefix: "日 ")
+            japaneseLines = lines(visible)
             if japaneseLines.consumed == visible.count { break }
             start += 1
         }
 
-        let normalizedChinese = normalizeWhitespace(chinese)
-        let translated = Array(normalizedChinese.isEmpty ? "等待译文" : normalizedChinese)
-        var chineseLines = lines(translated, prefix: "中 ")
+        let translated = Array(normalizeWhitespace(chinese))
+        var chineseLines = lines(translated)
         let truncated = chineseLines.consumed < translated.count
         if truncated {
             while chineseLines.second.count + 1 > lineCharacters || chineseLines.second.utf8.count + "…".utf8.count > lineBytes {
@@ -41,10 +41,9 @@ enum LensCaptionRenderer {
         text.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
     }
 
-    private static func lines(_ characters: [Character], prefix: String) -> (first: String, second: String, consumed: Int) {
+    private static func lines(_ characters: [Character]) -> (first: String, second: String, consumed: Int) {
         var offset = 0
-        let first = prefix + take(characters, offset: &offset, count: lineCharacters - prefix.count,
-                                  bytes: lineBytes - prefix.utf8.count)
+        let first = take(characters, offset: &offset, count: lineCharacters, bytes: lineBytes)
         let second = take(characters, offset: &offset, count: lineCharacters, bytes: lineBytes)
         return (first, second, offset)
     }
