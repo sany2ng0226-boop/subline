@@ -197,7 +197,7 @@ export async function initRecovery(options: { lang?: () => string | undefined } 
   }
   started = true;
   watch(
-    () => [lines.length, [...recordingIds], canUndoDelete.value, lines.map((l) => l.translationPartial ? '' : l.translation)],
+    () => [lines.length, [...recordingIds], canUndoDelete.value, lines.map((l) => [l.translationPartial ? '' : l.translation, l.nativeTranslation?.completed, l.nativeTranslation?.failed])],
     schedule,
   );
   if (lines.length || recordingIds.length) schedule();

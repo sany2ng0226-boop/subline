@@ -6,6 +6,7 @@ import type { SettingsPatch } from './settings';
 import type {
   ShortcutAction,
   SegmentPayload,
+  NativeTranslationReference,
   PartialPayload,
   TranslationPayload,
   StatusPayload,
@@ -92,13 +93,16 @@ export interface AppBridge {
   /** Subscribe to pinning changes (including the app menu); returns an unsubscribe function. */
   onAlwaysOnTopChange?(cb: (on: boolean) => void): () => void;
   /** Persist unarchived JSON for crash recovery; UI throttles calls to roughly 10 seconds.
-   * Web/iOS leave this unimplemented; UI falls back to localStorage.
+   * Hosts without these methods fall back to localStorage.
    */
   saveRecovery?(json: string): Promise<void>;
-  /** Read the recovery JSON, or null when missing, unreadable, or corrupt. Web/iOS use localStorage. */
+  /** Read the recovery JSON, or null when missing, unreadable, or corrupt. Hosts without recovery storage use localStorage. */
   loadRecovery?(): Promise<string | null>;
-  /** Remove crash recovery after archiving/discarding. Web/iOS use localStorage. */
+  /** Remove crash recovery after archiving/discarding. Hosts without recovery storage use localStorage. */
   clearRecovery?(): Promise<void>;
+  /** Bind restored UI row identities to durable native jobs, without restarting translation. */
+  restoreNativeTranslationRows?(rows: { id: number; text: string; lang?: string; translation: string;
+    nativeTranslation: NativeTranslationReference }[]): void;
   getSettings(): Promise<AppSettings>;
   saveSettings(settings: SettingsPatch): Promise<AppSettings>;
   /**

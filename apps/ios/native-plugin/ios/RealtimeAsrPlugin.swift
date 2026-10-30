@@ -37,6 +37,11 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   public let identifier = "RealtimeAsrPlugin"
   public let jsName = "RealtimeAsr"
   public let pluginMethods: [CAPPluginMethod] = [
+    CAPPluginMethod(name: "configureBackgroundTranslation", returnType: CAPPluginReturnPromise),
+    CAPPluginMethod(name: "drainTranslationResults", returnType: CAPPluginReturnPromise),
+    CAPPluginMethod(name: "ackTranslationResults", returnType: CAPPluginReturnPromise),
+    CAPPluginMethod(name: "drainPendingSegments", returnType: CAPPluginReturnPromise),
+    CAPPluginMethod(name: "ackPendingSegments", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name: "start", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name: "prewarm", returnType: CAPPluginReturnPromise),
@@ -54,7 +59,16 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   /// (e.g. headphones unplugged) and a media-services reset all stop the engine out of
   /// band; without handling them the UI would stay stuck "running" while capture is dead.
   override public func load() {
+    journal.restoreStoppedState()
+    recordingTranslations.onChanged = { [weak self] in
+      self?.emitEvent("translationResultsAvailable", data: [:])
+    }
+    try? reconcilePendingTranslations()
     let center = NotificationCenter.default
+    center.addObserver(self, selector: #selector(handleAppActivity(_:)),
+                       name: UIApplication.didBecomeActiveNotification, object: nil)
+    center.addObserver(self, selector: #selector(handleAppActivity(_:)),
+                       name: UIApplication.didEnterBackgroundNotification, object: nil)
     center.addObserver(self, selector: #selector(handleInterruption(_:)),
                        name: AVAudioSession.interruptionNotification, object: nil)
     center.addObserver(self, selector: #selector(handleRouteChange(_:)),
@@ -87,6 +101,9 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
 
   // MARK: - Capacitor / threading state
 
+  private let deliveryLock = NSRecursiveLock()
+  private let journal = NativeSegmentJournal()
+  private let recordingTranslations = NativeRecordingTranslationQueue()
   private let audioEngine = AVAudioEngine()
   /// All recognizer + VAD work runs here, off the audio render thread.
   private let asrQueue = DispatchQueue(label: "io.github.baijunjie.realtimetranslator.asr")
@@ -133,6 +150,85 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   private var totalSamples = 0
   private var lastPartialAtSamples = 0
 
+  private func emitEvent(_ name: String, data: [String: Any]) {
+    deliveryLock.lock(); defer { deliveryLock.unlock() }
+    do {
+      let routed = name == "segment" ? data.merging(recordingTranslations.route(data)) { _, new in new } : data
+      var payload = try journal.record(name: name, data: routed)
+      if name == "segment", payload["translationMode"] as? String == "native", !recordingTranslations.enqueue(payload) {
+        payload["translationMode"] = "foreground"
+        try journal.updateSegment(payload)
+      }
+      notifyListeners(name, data: payload)
+      if name == "segment", payload["fixtureInput"] as? Bool == true,
+         let sequence = payload["sequence"] as? Int {
+        Task { @MainActor in BackgroundCaptureProbe.recordSequence(sequence) }
+      }
+    } catch {
+      let message = error.localizedDescription
+      notifyListeners("status", data: ["state": "error", "error": message, "code": "native-journal"])
+      abortCapture(reason: message)
+    }
+  }
+
+  @objc func configureBackgroundTranslation(_ call: CAPPluginCall) {
+    let enabled = call.getBool("enabled") ?? false
+    let engine = call.getString("engine") ?? "local"
+    let target = call.getString("target") ?? "zh"
+    Task {
+      let configuration = await self.recordingTranslations.configure(enabled: enabled, engine: engine, target: target)
+      call.resolve(configuration)
+    }
+  }
+
+  @objc func drainTranslationResults(_ call: CAPPluginCall) {
+    call.resolve(recordingTranslations.snapshot())
+  }
+
+  @objc func ackTranslationResults(_ call: CAPPluginCall) {
+    let sequences = call.getArray("sequences", Int.self) ?? []
+    do {
+      try recordingTranslations.acknowledge(Set(sequences))
+      call.resolve(["ok": true])
+    } catch { call.resolve(["ok": false, "error": error.localizedDescription]) }
+  }
+
+  private func reconcilePendingTranslations() throws {
+    for var segment in journal.snapshot()["segments"] as? [[String: Any]] ?? [] {
+      if segment["translationMode"] as? String == "native", !recordingTranslations.enqueue(segment) {
+        segment["translationMode"] = "foreground"
+        try journal.updateSegment(segment)
+      }
+    }
+  }
+
+  @objc func drainPendingSegments(_ call: CAPPluginCall) {
+    deliveryLock.lock(); defer { deliveryLock.unlock() }
+    do {
+      // Drain can race a raw outbox write before its job is established; close that window here.
+      try reconcilePendingTranslations()
+      call.resolve(journal.snapshot())
+    } catch {
+      var snapshot = journal.snapshot()
+      snapshot["segments"] = []
+      snapshot["journalError"] = error.localizedDescription
+      call.resolve(snapshot)
+    }
+  }
+
+  @objc func ackPendingSegments(_ call: CAPPluginCall) {
+    deliveryLock.lock(); defer { deliveryLock.unlock() }
+    guard let through = call.getInt("through"), through >= 0 else {
+      call.resolve(["ok": false, "error": "missing or invalid sequence"])
+      return
+    }
+    do {
+      try journal.acknowledge(through: through)
+      try recordingTranslations.acknowledgeRaw(through: through)
+      call.resolve(["ok": true])
+    } catch { call.resolve(["ok": false, "error": error.localizedDescription]) }
+  }
+
   // MARK: - Capacitor methods (match ../definitions.ts)
 
   /// Start on-device ASR: ensure the requested model is loaded, request mic, open capture, begin
@@ -146,7 +242,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
       guard let self = self else { return }
       guard granted else {
         let msg = "microphone permission denied"
-        self.notifyListeners("status", data: ["state": "error", "error": msg, "code": "mic-permission"])
+        self.emitEvent("status", data: ["state": "error", "error": msg, "code": "mic-permission"])
         call.resolve(["ok": false, "error": msg, "code": "mic-permission"])
         return
       }
@@ -160,7 +256,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
         // the serial queue makes this check cover both an already-running session and one still
         // in the (multi-second) model-load / startCapture phase — no double installTap.
         guard !self.isRunning else {
-          self.notifyListeners("status", data: ["state": "running"])
+          self.emitEvent("status", data: ["state": "running"])
           call.resolve(["ok": true])
           return
         }
@@ -168,9 +264,10 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
         // model/language change. After prewarm with the same model+language the reuse path is
         // sub-second and flashing a model-loading hint would be misleading.
         if !self.engineMatches(modelId, language) {
-          self.notifyListeners("status", data: ["state": "loading"])
+          self.emitEvent("status", data: ["state": "loading"])
         }
         do {
+          try self.journal.beginSession()
           if modelId == "apple-speech" {
             guard #available(iOS 26.0, *) else {
               throw self.asrError("Apple 语音识别需要 iOS 26 或更新版本")
@@ -182,7 +279,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
             let session = try self.awaitApple {
               let session = AppleSpeechSession()
               try await session.start(language: language, event: { [weak plugin = self] name, data in
-                plugin?.notifyListeners(name, data: data)
+                plugin?.emitEvent(name, data: data)
               }, failure: { [weak plugin = self] error in plugin?.abortCapture(reason: error) })
               return session
             }
@@ -198,11 +295,11 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
             try self.startCapture()
           }
           self.isRunning = true
-          self.notifyListeners("status", data: ["state": "running"])
+          self.emitEvent("status", data: ["state": "running"])
           call.resolve(["ok": true])
         } catch {
           let msg = error.localizedDescription
-          self.notifyListeners("status", data: ["state": "error", "error": msg, "code": "asr-init-failed"])
+          self.emitEvent("status", data: ["state": "error", "error": msg, "code": "asr-init-failed"])
           call.resolve(["ok": false, "error": msg, "code": "asr-init-failed"])
         }
       }
@@ -220,8 +317,8 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
       self.finishRecognition()
 
       self.isRunning = false
-      self.notifyListeners("partial", data: ["text": ""])
-      self.notifyListeners("status", data: ["state": "stopped"])
+      self.emitEvent("partial", data: ["text": ""])
+      self.emitEvent("status", data: ["state": "stopped"])
       call.resolve(["ok": true])
     }
   }
@@ -238,7 +335,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
     if modelId == "apple-speech" {
       asrQueue.async { [weak self] in
         guard let self = self, !self.isRunning else { return }
-        self.notifyListeners("status", data: ["state": "stopped"])
+        self.emitEvent("status", data: ["state": "stopped"])
       }
       return
     }
@@ -249,16 +346,16 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
       // Models not downloaded yet (the setup/download flow handles fetching), or the requested
       // engine is already loaded: nothing to load, just release the record button.
       guard self.modelsReady(modelId), !self.engineMatches(modelId, language) else {
-        self.notifyListeners("status", data: ["state": "stopped"])
+        self.emitEvent("status", data: ["state": "stopped"])
         return
       }
-      self.notifyListeners("status", data: ["state": "loading"])
+      self.emitEvent("status", data: ["state": "loading"])
       do {
         try self.ensureEngineLoaded(modelId, language: language)
-        self.notifyListeners("status", data: ["state": "stopped"])
+        self.emitEvent("status", data: ["state": "stopped"])
       } catch {
         print("[prewarm] ASR engine load failed: \(error.localizedDescription)")
-        self.notifyListeners("status", data: ["state": "stopped"])
+        self.emitEvent("status", data: ["state": "stopped"])
       }
     }
   }
@@ -274,13 +371,17 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
       self.finishRecognition()
 
       self.isRunning = false
-      self.notifyListeners("partial", data: ["text": ""])
+      self.emitEvent("partial", data: ["text": ""])
       if let reason = reason {
-        self.notifyListeners("status", data: ["state": "error", "error": reason, "code": "audio-interrupted"])
+        self.emitEvent("status", data: ["state": "error", "error": reason, "code": "audio-interrupted"])
       } else {
-        self.notifyListeners("status", data: ["state": "stopped"])
+        self.emitEvent("status", data: ["state": "stopped"])
       }
     }
+  }
+
+  @objc private func handleAppActivity(_ note: Notification) {
+    emitEvent("appActive", data: ["active": note.name == UIApplication.didBecomeActiveNotification])
   }
 
   @objc private func handleInterruption(_ note: Notification) {
@@ -289,7 +390,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
     // Interruption began (incoming call, Siri, another app took the session): the engine has
     // been stopped by the system. Reflect it as stopped rather than a stuck "running".
     if type == .began {
-      abortCapture(reason: nil)
+      abortCapture(reason: "录音因来电或其他音频中断而停止，请重新开始")
     }
   }
 
@@ -299,7 +400,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
     // The active input went away (e.g. wired/Bluetooth mic unplugged). Its format no longer
     // matches the installed tap, so stop instead of risking an NSException on the stale tap.
     if reason == .oldDeviceUnavailable {
-      abortCapture(reason: nil)
+      abortCapture(reason: "麦克风连接已改变，录音已停止，请重新开始")
     }
   }
 
@@ -677,7 +778,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
       vad.pop()
       finalizeSegment(samples: segment.samples, startSample: segment.start)
       // A real final landed; clear the in-progress partial.
-      notifyListeners("partial", data: ["text": ""])
+      emitEvent("partial", data: ["text": ""])
       speechBuffer.removeAll(keepingCapacity: true)
       lastPartialAtSamples = 0
     }
@@ -727,7 +828,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
         }
       }
       previousPartial = current
-      notifyListeners("partial", data: ["text": text])
+      emitEvent("partial", data: ["text": text])
     }
   }
 
@@ -742,7 +843,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
       vad.pop()
       finalizeSegment(samples: segment.samples, startSample: segment.start)
     }
-    notifyListeners("partial", data: ["text": ""])
+    emitEvent("partial", data: ["text": ""])
     speechBuffer.removeAll(keepingCapacity: true)
     wasSpeechDetected = false
     lastPartialAtSamples = totalSamples
@@ -787,7 +888,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
     segmentId += 1
     let start = Double(startSample) / Double(sampleRate)
     let duration = Double(samples.count) / Double(sampleRate)
-    notifyListeners("segment", data: [
+    emitEvent("segment", data: [
       "id": id,
       "text": chosen.text,
       // SenseVoice lang short code: zh/en/ja/yue/ko. Defensively strip any <|..|>
@@ -963,7 +1064,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
       }
       let baseCompleted = completedBytes
       try downloadFile(from: file.urls, to: dest, expected: file) { loadedThisFile in
-        self.notifyListeners("setupProgress", data: [
+        self.emitEvent("setupProgress", data: [
           "kind": "asr",
           "id": modelId,
           "loaded": baseCompleted + loadedThisFile,
@@ -976,7 +1077,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
     guard modelsReady(modelId) else {
       throw asrError("ASR model verification failed after download")
     }
-    notifyListeners("setupProgress", data: ["kind": "asr", "id": modelId, "loaded": totalBytes, "total": totalBytes])
+    emitEvent("setupProgress", data: ["kind": "asr", "id": modelId, "loaded": totalBytes, "total": totalBytes])
   }
 
   /// Download `dest` from an ordered list of sources, trying each once until one succeeds; throws an
@@ -1213,6 +1314,8 @@ private final class AppleSpeechSession {
   private var resultsTask: Task<Void, Never>?
   private var tapInstalled = false
   private var stopping = false
+  private var fixtureTask: Task<Void, Never>?
+  private var probe: BackgroundCaptureProbe?
 
   private static func locale(language: String) async throws -> Locale {
     let identifiers = ["ja": "ja-JP", "zh": "zh-CN", "en": "en-US", "ko": "ko-KR"]
@@ -1265,9 +1368,13 @@ private final class AppleSpeechSession {
             guard !text.isEmpty else { continue }
             if result.isFinal {
               id += 1
-              event("segment", ["id": id, "text": text, "lang": language,
-                                "start": result.range.start.seconds,
-                                "duration": result.range.duration.seconds])
+              var payload: [String: Any] = ["id": id, "text": text, "lang": language,
+                                            "start": result.range.start.seconds,
+                                            "duration": result.range.duration.seconds]
+              if ProcessInfo.processInfo.arguments.contains("--subline-background-fixture") {
+                payload["fixtureInput"] = true
+              }
+              event("segment", payload)
               event("partial", ["text": ""])
             } else {
               event("partial", ["text": text])
@@ -1279,7 +1386,12 @@ private final class AppleSpeechSession {
       }
       try await analyzer.prepareToAnalyze(in: target)
       try await analyzer.start(inputSequence: stream)
+      let fixtureEnabled = ProcessInfo.processInfo.arguments.contains("--subline-background-fixture")
+      let probe = fixtureEnabled ? BackgroundCaptureProbe() : nil
+      self.probe = probe
       audioEngine.inputNode.installTap(onBus: 0, bufferSize: 2048, format: source) { buffer, _ in
+        probe?.countMicrophoneFrames(Int(buffer.frameLength))
+        if fixtureEnabled { return }
         let capacity = AVAudioFrameCount(ceil(Double(buffer.frameLength) * target.sampleRate / source.sampleRate)) + 1024
         guard let converted = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return }
         var supplied = false
@@ -1297,6 +1409,44 @@ private final class AppleSpeechSession {
       tapInstalled = true
       audioEngine.prepare()
       try audioEngine.start()
+      probe?.start()
+      if fixtureEnabled {
+        let fixtureURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+          .appendingPathComponent("subline-background-fixture.wav")
+        try FileManager.default.setAttributes(
+          [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+          ofItemAtPath: fixtureURL.path)
+        let file = try AVAudioFile(forReading: fixtureURL)
+        guard let fixtureConverter = AVAudioConverter(from: file.processingFormat, to: target), file.length > 0 else {
+          throw NSError(domain: "RealtimeAsrFixture", code: -1,
+                        userInfo: [NSLocalizedDescriptionKey: "后台测试音频不可读"])
+        }
+        fixtureTask = Task { [weak self] in
+          do {
+            // Delay leaves time to lock the device before the first fixture words.
+            try await Task.sleep(nanoseconds: 5_000_000_000)
+            while !Task.isCancelled {
+              if file.framePosition >= file.length { file.framePosition = 0; fixtureConverter.reset() }
+              let frames = AVAudioFrameCount(file.processingFormat.sampleRate * 0.5)
+              guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frames) else { break }
+              try file.read(into: buffer, frameCount: frames)
+              let capacity = AVAudioFrameCount(ceil(Double(buffer.frameLength) * target.sampleRate / file.processingFormat.sampleRate)) + 1024
+              guard let converted = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { break }
+              var supplied = false
+              var conversionError: NSError?
+              fixtureConverter.convert(to: converted, error: &conversionError) { _, status in
+                if supplied { status.pointee = .noDataNow; return nil }
+                supplied = true; status.pointee = .haveData; return buffer
+              }
+              if let error = conversionError { throw error }
+              if converted.frameLength > 0 { continuation.yield(AnalyzerInput(buffer: converted)) }
+              try await Task.sleep(nanoseconds: 500_000_000)
+            }
+          } catch {
+            if !Task.isCancelled && self?.stopping == false { failure(error.localizedDescription) }
+          }
+        }
+      }
     } catch {
       await stop()
       throw error
@@ -1306,6 +1456,10 @@ private final class AppleSpeechSession {
   func stop() async {
     guard !stopping else { return }
     stopping = true
+    fixtureTask?.cancel()
+    fixtureTask = nil
+    probe?.stop()
+    probe = nil
     if tapInstalled {
       audioEngine.inputNode.removeTap(onBus: 0)
       tapInstalled = false
@@ -1328,5 +1482,217 @@ private final class AppleSpeechSession {
     resultsTask = nil
     analyzer = nil
     try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+  }
+}
+
+/// WKWebView may suspend while the audio background mode keeps native ASR alive.
+/// Persist before delivery; only a durable JS acknowledgement removes a final.
+private final class NativeSegmentJournal {
+  private let lock = NSLock()
+  private let maxSegments = 2_000
+  private let maxBytes = 4 * 1024 * 1024
+  private let url: URL
+  private var nextSequence = 1
+  private var sessionId = ""
+  private var startedAt: Double = 0
+  private var pending: [[String: Any]] = []
+  private var status: [String: Any] = ["state": "stopped"]
+  private var fault: String?
+  private var loadFailed = false
+
+  init() {
+    let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    url = root.appendingPathComponent("native-asr-journal.json")
+    guard FileManager.default.fileExists(atPath: url.path) else { return }
+    do {
+      let data = try Data(contentsOf: url)
+      guard data.count <= maxBytes,
+            let record = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let next = record["nextSequence"] as? Int,
+            let segments = record["pending"] as? [[String: Any]],
+            segments.count <= maxSegments, next > 0 else {
+        throw Self.error("无法读取原生字幕暂存，请保留数据并重新打开应用")
+      }
+      nextSequence = next
+      pending = segments
+      sessionId = record["sessionId"] as? String ?? ""
+      startedAt = record["startedAt"] as? Double ?? 0
+      status = record["status"] as? [String: Any] ?? ["state": "stopped"]
+    } catch { fault = error.localizedDescription; loadFailed = true }
+  }
+
+  func restoreStoppedState() {
+    lock.lock()
+    defer { lock.unlock() }
+    guard fault == nil else { return }
+    if status["state"] as? String != "error" {
+      status = enriched(["state": "stopped"])
+    }
+    do { try save() } catch { fault = error.localizedDescription }
+  }
+
+  func beginSession() throws {
+    lock.lock()
+    defer { lock.unlock() }
+    if let fault = fault { throw Self.error(fault) }
+    guard pending.count < maxSegments else {
+      throw Self.error("后台字幕暂存已满，请回到前台保存字幕后再录音")
+    }
+    sessionId = UUID().uuidString
+    startedAt = Date().timeIntervalSince1970 * 1000
+    status = enriched(["state": "loading"])
+    try save()
+  }
+
+  func record(name: String, data: [String: Any]) throws -> [String: Any] {
+    guard name == "segment" || name == "status" else { return data }
+    lock.lock()
+    defer { lock.unlock() }
+    guard !loadFailed else { throw Self.error(fault ?? "字幕暂存无法读取") }
+    var payload = enriched(data)
+    if name == "segment" {
+      guard fault == nil, pending.count < maxSegments else {
+        let message = fault ?? "后台字幕暂存已满，录音已停止，请回到前台保存字幕"
+        fault = message
+        throw Self.error(message)
+      }
+      payload["sequence"] = nextSequence
+      pending.append(payload)
+      nextSequence += 1
+    } else {
+      status = payload
+    }
+    do { try save() }
+    catch {
+      if name == "segment" { pending.removeLast(); nextSequence -= 1 }
+      fault = "字幕暂存写入失败，录音已停止：\(error.localizedDescription)"
+      throw Self.error(fault!)
+    }
+    return payload
+  }
+
+  func updateSegment(_ segment: [String: Any]) throws {
+    lock.lock(); defer { lock.unlock() }
+    guard !loadFailed, let sequence = segment["sequence"] as? Int,
+          let index = pending.firstIndex(where: { $0["sequence"] as? Int == sequence }) else {
+      throw Self.error("无法更新原生字幕路由")
+    }
+    let original = pending[index]
+    pending[index] = segment
+    do { try save() }
+    catch { pending[index] = original; fault = error.localizedDescription; throw error }
+  }
+
+  func snapshot() -> [String: Any] {
+    lock.lock()
+    defer { lock.unlock() }
+    var snapshot: [String: Any] = ["segments": pending, "status": enriched(status)]
+    if let fault = fault {
+      snapshot["journalError"] = fault
+      snapshot["status"] = enriched(["state": "error", "code": "native-journal", "error": fault])
+    }
+    return snapshot
+  }
+
+  func acknowledge(through sequence: Int) throws {
+    lock.lock()
+    defer { lock.unlock() }
+    guard !loadFailed else { throw Self.error(fault ?? "字幕暂存无法读取") }
+    guard sequence < nextSequence else { throw Self.error("字幕确认序号超出已生成范围") }
+    let original = pending
+    pending.removeAll { ($0["sequence"] as? Int ?? Int.max) <= sequence }
+    do { try save(); fault = nil }
+    catch { pending = original; throw error }
+  }
+
+  private func enriched(_ data: [String: Any]) -> [String: Any] {
+    var value = data
+    value["sessionId"] = sessionId
+    value["startedAt"] = startedAt
+    return value
+  }
+
+  private func save() throws {
+    let data = try JSONSerialization.data(withJSONObject: [
+      "nextSequence": nextSequence, "sessionId": sessionId,
+      "startedAt": startedAt, "pending": pending, "status": status,
+    ])
+    guard data.count <= maxBytes else { throw Self.error("后台字幕暂存已满，请回到前台保存字幕") }
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    var protectedURL = url
+    var values = URLResourceValues()
+    values.isExcludedFromBackup = true
+    try? protectedURL.setResourceValues(values)
+  }
+
+  private static func error(_ message: String) -> NSError {
+    NSError(domain: "RealtimeAsrJournal", code: -1,
+            userInfo: [NSLocalizedDescriptionKey: message])
+  }
+}
+
+/// Opt-in fixture diagnostics never read or save microphone samples or energy metrics.
+private final class BackgroundCaptureProbe {
+  private let lock = NSLock()
+  private var microphoneFrames = 0
+  private var ticker: Task<Void, Never>?
+  private static let writer = DispatchQueue(label: "subline.background-fixture-log")
+
+  func countMicrophoneFrames(_ count: Int) {
+    lock.lock()
+    microphoneFrames += count
+    lock.unlock()
+  }
+
+  @MainActor func start() {
+    writeSample(event: "start")
+    ticker = Task { @MainActor [weak self] in
+      while !Task.isCancelled {
+        do { try await Task.sleep(nanoseconds: 2_000_000_000) }
+        catch { return }
+        self?.writeSample(event: "capture")
+      }
+    }
+  }
+
+  @MainActor func stop() {
+    ticker?.cancel()
+    ticker = nil
+    writeSample(event: "stop")
+  }
+
+  @MainActor private func writeSample(event: String) {
+    lock.lock()
+    let frames = microphoneFrames
+    lock.unlock()
+    let row: [String: Any] = [
+      "timestamp": Date().timeIntervalSince1970, "event": event,
+      "appForeground": UIApplication.shared.applicationState == .active,
+      "protectedDataAvailable": UIApplication.shared.isProtectedDataAvailable,
+      "microphoneFrames": frames, "fixtureInput": true,
+    ]
+    Self.write(row)
+  }
+
+  @MainActor static func recordSequence(_ sequence: Int) {
+    write(["timestamp": Date().timeIntervalSince1970, "event": "segment",
+           "sequence": sequence, "appForeground": UIApplication.shared.applicationState == .active,
+           "protectedDataAvailable": UIApplication.shared.isProtectedDataAvailable, "fixtureInput": true])
+  }
+
+  private static func write(_ row: [String: Any]) {
+    writer.async {
+      let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+      let url = directory.appendingPathComponent("subline-background-fixture.jsonl")
+      guard let data = try? JSONSerialization.data(withJSONObject: row) else { return }
+      if !FileManager.default.fileExists(atPath: url.path) {
+        try? Data().write(to: url, options: [.completeFileProtectionUntilFirstUserAuthentication])
+      }
+      guard let handle = try? FileHandle(forWritingTo: url) else { return }
+      defer { try? handle.close() }
+      _ = try? handle.seekToEnd()
+      try? handle.write(contentsOf: data + Data([10]))
+    }
   }
 }

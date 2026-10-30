@@ -193,3 +193,44 @@ it('retries failed finalization for archive without requiring a new capture', as
   expect(state.recordingIds).toEqual(['partial-audio']);
   expect(state.recording.value).toBe(false);
 });
+
+it('restores iOS native running state and the original clock before replaying background finals', async () => {
+  const { setBridge, bridge } = await import('../bridge');
+  setBridge({ ...bridge(), platform: 'ios' });
+  const epoch = new Date(2026, 9, 30, 11, 20, 0).getTime();
+  callbacks.onStatus({ state: 'running', sessionId: 'native-session', startedAt: epoch, resumed: true });
+  expect(state.recording.value).toBe(true);
+  expect(state.recordingStartedAt()).toBe(epoch);
+  callbacks.onSegment({ id: 200, text: 'Background final', start: 90, duration: 2, startedAt: epoch });
+  expect(state.lines[0].time).toBe('11:21:30');
+  callbacks.onStatus({ state: 'stopped', sessionId: 'native-session', startedAt: epoch, resumed: true });
+  expect(state.recording.value).toBe(false);
+});
+
+it('uses each iOS replayed segment clock even when a prior session is already stopped', async () => {
+  const { setBridge, bridge } = await import('../bridge');
+  setBridge({ ...bridge(), platform: 'ios' });
+  const epoch = new Date(2026, 9, 30, 8, 0, 0).getTime();
+  callbacks.onSegment({ id: 201, text: 'Earlier session', start: 5, duration: 1, startedAt: epoch });
+  expect(state.lines[0].time).toBe('08:00:05');
+  expect(state.recording.value).toBe(false);
+});
+
+it('preserves native translation references through recovery and binds restored row identities without restarting work', async () => {
+  const { setBridge, bridge } = await import('../bridge');
+  const bind = vi.fn();
+  setBridge({ ...bridge(), platform: 'ios', restoreNativeTranslationRows: bind });
+  const reference = { sessionId: 'session-a', revision: 7, target: 'zh', sequences: [1, 2], completed: false };
+  callbacks.onSegment({ id: 300, text: '復元する原文です。', lang: 'ja', start: 0, duration: 2, nativeTranslation: reference });
+  callbacks.onTranslation({ id: 300, text: '', pending: true });
+  expect(state.recoverySnapshot()[0].nativeTranslation?.completed).toBe(false);
+  callbacks.onTranslation({ id: 300, text: '', failed: true, error: 'Native queue failed' });
+  const snapshot = state.recoverySnapshot();
+  expect(snapshot[0].nativeTranslation).toMatchObject({ completed: true, failed: true, error: 'Native queue failed', sequences: [1, 2] });
+  state.clearTranscript();
+  state.restoreLines(snapshot);
+  expect(state.lines[0]).toMatchObject({ failed: true, failedDetail: 'Native queue failed', translating: false });
+  expect(state.lines[0].id).toBeLessThan(0);
+  expect(bind).toHaveBeenCalledWith([expect.objectContaining({ id: state.lines[0].id,
+    nativeTranslation: expect.objectContaining({ sessionId: 'session-a', sequences: [1, 2] }) })]);
+});
