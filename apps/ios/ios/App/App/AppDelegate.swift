@@ -47,3 +47,37 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
 }
+
+// Current iOS SDKs require scene ownership even for a single-window app.
+class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+    var window: UIWindow?
+
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        for context in connectionOptions.urlContexts {
+            forward(context)
+        }
+        for activity in connectionOptions.userActivities {
+            continueActivity(activity)
+        }
+    }
+
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        for context in URLContexts { forward(context) }
+    }
+
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        continueActivity(userActivity)
+    }
+
+    private func forward(_ context: UIOpenURLContext) {
+        _ = ApplicationDelegateProxy.shared.application(UIApplication.shared, open: context.url, options: [
+            .sourceApplication: context.options.sourceApplication as Any,
+            .annotation: context.options.annotation as Any,
+            .openInPlace: context.options.openInPlace,
+        ])
+    }
+
+    private func continueActivity(_ activity: NSUserActivity) {
+        _ = ApplicationDelegateProxy.shared.application(UIApplication.shared, continue: activity, restorationHandler: { _ in })
+    }
+}

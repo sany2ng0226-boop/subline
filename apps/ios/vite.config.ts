@@ -15,6 +15,13 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(buildVersion(fileURLToPath(new URL('.', import.meta.url)))),
   },
   plugins: [vue(), tailwindcss()],
+  resolve: {
+    alias: {
+      // Injected workspace copies can lag behind source-only UI modules.
+      '@rt/ui/styles': fileURLToPath(new URL('../../packages/ui/src/styles.css', import.meta.url)),
+      '@rt/ui': fileURLToPath(new URL('../../packages/ui/src/index.ts', import.meta.url)),
+    },
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

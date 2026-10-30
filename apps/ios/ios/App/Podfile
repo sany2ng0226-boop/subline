@@ -21,4 +21,13 @@ end
 
 post_install do |installer|
   assertDeploymentTarget(installer)
+  # Match the app's deployment floor instead of Capacitor's older pod defaults.
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      version = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+      if version && Gem::Version.new(version) < Gem::Version.new('15.1')
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+      end
+    end
+  end
 end

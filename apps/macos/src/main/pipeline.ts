@@ -98,6 +98,8 @@ export function buildModelConfig(
         ...(spec.modelType ? { modelType: spec.modelType } : {}),
         ...common,
       };
+    default:
+      throw new Error(`Unsupported desktop recognition engine: ${spec.engine}`);
   }
 }
 

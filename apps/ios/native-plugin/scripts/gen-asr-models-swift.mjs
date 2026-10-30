@@ -123,7 +123,7 @@ struct AsrModelSpec {
   let id: String
   /// 模型文件所在子目录（相对 models 根目录）。
   let dir: String
-  /// 识别引擎类型，供装配对应的 sherpa-onnx 识别器（iOS 目前仅 senseVoice）。
+  /// 识别引擎类型，用于选择 sherpa-onnx 或系统识别管线。
   let engine: String
   /// 该模型的全部需下载文件（不含公共依赖 Silero VAD）。
   let files: [AsrModelFile]
@@ -135,7 +135,7 @@ enum AsrModels {
   /// 默认 ASR 模型 id（多语种、全平台可用）。
   static let defaultModelId = ${swiftString(DEFAULT_ASR_MODEL_ID)}
 
-  /// Silero VAD：所有 ASR 模型共用的语音端点检测依赖，不进模型选择列表，随任一模型一并下载。
+  /// Silero VAD：下载型 ASR 的语音端点检测依赖；系统识别管线无需该文件。
   static let vad = ${fileLiteral(SILERO_VAD, '')}
 
   /// iOS 支持的全部 ASR 模型规格（platforms 含 'ios'）。

@@ -29,6 +29,7 @@ export interface RealtimeAsrPlugin {
    * 启动端上 ASR 管线：按 modelId 加载对应识别模型（若已就绪）、打开麦克风
    * （AVAudioEngine，16kHz 单声道）、开始识别。后续通过 'partial' / 'segment' / 'status'
    * 事件回吐结果。iOS 由原生直接采集麦克风，无需 JS 侧 getUserMedia / sendAudio。
+   * apple-speech 使用 iOS 26+ 系统端上 SpeechTranscriber，需指定 ja/zh/en/ko；模型由系统管理。
    * language 为 SenseVoice 的识别语言（auto/zh/en/ja/ko/yue）；与已加载识别器不同（或 modelId
    * 不同）时原生会重建识别器。options 省略时原生按默认模型 + auto 处理。
    */
@@ -45,13 +46,13 @@ export interface RealtimeAsrPlugin {
   prewarm(options?: { modelId: string; language: string }): Promise<void>;
 
   /** 查询指定 ASR 模型（含公共依赖 VAD）是否已就绪（已下载/已随包内置）。 */
-  getSetupStatus(options: { modelId: string }): Promise<SetupStatus>;
+  getSetupStatus(options: { modelId: string; language?: string }): Promise<SetupStatus>;
 
   /**
    * 确保指定 ASR 模型已就绪（首次需下载该模型 + Silero VAD）。
    * 进度通过 'setupProgress' 事件上报。
    */
-  downloadModels(options: { modelId: string }): Promise<{ ok: boolean; error?: string }>;
+  downloadModels(options: { modelId: string; language?: string }): Promise<{ ok: boolean; error?: string }>;
 
   /**
    * 列出本地各 ASR 模型的占用与状态（遍历生成表逐模型判断文件是否齐全、磁盘字节和）。
@@ -121,6 +122,7 @@ export interface RealtimeTranslatePlugin {
     text: string;
     source: string;
     target: string;
+    context?: string[];
   }): Promise<TranslateResult>;
 
   /** 查询某语言对的端上可用性（installed / supported / unsupported）。 */

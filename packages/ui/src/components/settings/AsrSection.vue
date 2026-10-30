@@ -23,7 +23,7 @@ const asrLangOptions = computed(() => [
 const platform = bridge().platform;
 const asrModelOptions = computed(() =>
   asrModelsFor(props.form.asr.language, platform).map((m) => ({
-    label: `${t(m.nameKey)}（${humanBytes(m.approxBytes)}）`,
+    label: m.engine === 'appleSpeech' ? `${t(m.nameKey)} · ${t('models.systemManaged')}` : `${t(m.nameKey)}（${humanBytes(m.approxBytes)}）`,
     value: m.id,
   })),
 );

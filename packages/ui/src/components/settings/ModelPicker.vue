@@ -30,6 +30,7 @@ const downloadTasks = ref<DownloadTask[]>([]);
 
 function statusText(row: typeof rows.value[number]): string {
   if (!row.modelId) return '';
+  if (row.systemManaged) return t('models.systemManaged');
   if (isDownloading(props.kind, row.modelId)) return t('download.downloading');
   if (downloadFailed(props.kind, row.modelId)) return t('download.retry');
   return t(row.status === 'downloaded' ? 'settings.downloaded'
@@ -60,7 +61,7 @@ function choose(row: typeof rows.value[number]): void {
   close();
 }
 function canDownload(row: typeof rows.value[number]): boolean {
-  return !!row.model && (props.kind === 'asr' || typeof bridge().downloadTranslationModel === 'function');
+  return !row.systemManaged && !!row.model && (props.kind === 'asr' || typeof bridge().downloadTranslationModel === 'function');
 }
 function requestDownload(row: typeof rows.value[number]): void {
   if (!row.modelId || !canDownload(row)) return;
@@ -125,7 +126,7 @@ async function remove(id: string): Promise<boolean> {
                 </small>
               </span>
             </button>
-            <template v-if="row.modelId">
+            <template v-if="row.modelId && !row.systemManaged">
               <div v-if="isDownloading(kind, row.modelId)" class="download-action">
                 <n-progress type="line" :percentage="percentOf(kind, row.modelId)" :show-indicator="false" :height="4"
                   :processing="!downloadEntry(kind, row.modelId)?.total" />
