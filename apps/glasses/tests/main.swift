@@ -4,40 +4,51 @@ func check(_ condition: @autoclosure () -> Bool, _ message: String) {
     precondition(condition(), message)
 }
 
-let initial = LensCaptionRenderer.render(japanese: "今日は", chinese: "今天")
-check(initial.text == "日 今日は\n中 今天", "Both languages must share one verified display field")
-let partial = LensCaptionRenderer.render(japanese: "今日は授業です", chinese: "今天")
-check(partial.text.contains("日 今日は授業です"), "A partial replaces the Japanese portion")
-check(partial.text.hasSuffix("中 今天"), "A new partial preserves the latest completed translation")
-let translated = LensCaptionRenderer.render(japanese: "今日は授業です", chinese: "今天有课")
-check(translated.text == "日 今日は授業です\n中 今天有课", "A translation updates Chinese without replacing Japanese")
-
-let multiline = LensCaptionRenderer.render(japanese: "\n今日は\r\n\t授業です。  ", chinese: "  今天\t有课。\r\n请注意。\n")
-check(multiline.text == "日 今日は 授業です。\n中 今天 有课。 请注意。", "Input whitespace must not create extra lens lines")
-check(multiline.text.filter { $0 == "\n" }.count == 1, "Only the renderer's language separator may remain")
-let blank = LensCaptionRenderer.render(japanese: "\r\n\t  \u{00a0}", chinese: "\t \n\r")
-check(blank.text == "日 等待日语\n中 等待译文", "Whitespace-only input uses the waiting labels")
-let longMultiline = LensCaptionRenderer.render(japanese: String(repeating: "日本語\r\n", count: 100),
-                                            chinese: String(repeating: "中文\t\n", count: 300))
-check(longMultiline.text.utf8.count <= 384 && longMultiline.text.filter { $0 == "\n" }.count == 1,
-      "Normalized multiline text must still obey the whole-frame byte budget")
-
-let longJapanese = String(repeating: "前の文章。", count: 40) + "最後の日本語です。"
-let longChinese = String(repeating: "这是完整中文。", count: 100)
-let bounded = LensCaptionRenderer.render(japanese: longJapanese, chinese: longChinese)
-check(bounded.text.utf8.count <= 384, "The complete bilingual frame including labels and warnings must fit")
-check(bounded.japaneseWindowed && bounded.chineseTruncated, "Both bounded portions must report their limits")
-check(bounded.text.contains("最後の日本語です。\n中 "), "Japanese must retain its latest tail")
-check(bounded.text.hasSuffix("…（未完）"), "Chinese truncation must be visible")
-check(bounded.text.hasPrefix("日 …"), "A Japanese tail window must visibly mark the omitted prefix")
-
+func verifyLayout(japanese: String, chinese: String) {
+    let pages = LensCaptionRenderer.chinesePages(chinese)
+    let normalized = LensCaptionRenderer.normalizeWhitespace(chinese)
+    check(pages.map { $0.first + $0.second }.joined() == (normalized.isEmpty ? "等待译文" : normalized),
+          "Paging must preserve all representable Chinese characters")
+    for (index, page) in pages.enumerated() {
+        let frame = LensCaptionRenderer.render(japanese: japanese, page: page, pageIndex: index + 1,
+                                               pageCount: pages.count, backlog: true)
+        let lines = frame.text.components(separatedBy: "\n")
+        check(lines.count == 4, "Display must always have two Japanese and two Chinese lines")
+        check(lines.allSatisfy { $0.count <= 16 && $0.utf8.count <= 95 }, "Labels, page numbers and warnings fit each line")
+        check(frame.text.utf8.count <= 384, "The complete four-line frame fits the device packet budget")
+        check(!frame.text.contains("\r") && !frame.text.contains("\t"), "Input whitespace cannot create hidden rows")
+        check(lines[3].hasSuffix("\(index + 1)/\(pages.count)"), "Every Chinese page has an explicit index")
+    }
+}
+verifyLayout(japanese: "今日は授業です。", chinese: "今天有课。")
+verifyLayout(japanese: "\n今日は\r\n\t授業です。  ", chinese: "  今天\t有课。\r\n请注意。\n")
+verifyLayout(japanese: "\r\n\t \u{00a0}", chinese: "\t \n\r")
+verifyLayout(japanese: String(repeating: "前の文章。", count: 40) + "最後の日本語です。",
+             chinese: String(repeating: "这是完整中文，English text 123。", count: 100))
 let family = "👩‍👩‍👧‍👦"
-let graphemes = LensCaptionRenderer.render(japanese: String(repeating: family, count: 50),
-                                         chinese: String(repeating: "e\u{301}", count: 300))
-check(graphemes.text.utf8.count <= 384, "Complex graphemes still obey the UTF-8 budget")
-let jpLine = String(graphemes.text.split(separator: "\n")[0]).dropFirst(3)
-check(jpLine.allSatisfy { String($0) == family }, "A family emoji must never be split into separate people")
-check(graphemes.text.hasSuffix("…（未完）"), "Combining-character truncation must remain marked")
+verifyLayout(japanese: String(repeating: family, count: 50), chinese: String(repeating: family + "e\u{301}", count: 100))
+
+var pager = LensChinesePager()
+let longChinese = String(repeating: "完整中文不会被下一条直接替换。", count: 4)
+check(pager.enqueue(longChinese, now: 0), "First translation opens its first page")
+let firstPage = pager.page
+for index in 0...20 {
+    _ = LensCaptionRenderer.render(japanese: "变化\(index)", page: pager.page, pageIndex: pager.pageIndex,
+                                   pageCount: pager.pageCount, backlog: false)
+}
+check(pager.page == firstPage && pager.delay(now: 1.5) == 1.5, "Japanese partial rendering cannot reset Chinese dwell")
+check(pager.enqueue("下一句一", now: 0.1) && pager.enqueue("下一句二", now: 0.2), "Two pending translations are retained")
+check(!pager.enqueue("溢出的新句", now: 0.3), "A full queue explicitly rejects overflow rather than replacing unread pages")
+check(pager.pendingCount == 2 && pager.overflowCount == 1 && pager.page == firstPage, "Backlog is bounded and visible")
+check(!pager.advance(now: 2.99) && pager.advance(now: 3), "A page keeps its three-second dwell")
+var now = 3.0
+while pager.pageIndex < pager.pageCount { now += 3; check(pager.advance(now: now), "Every active page remains readable") }
+check(pager.pendingCount == 2, "The next translation waits until the last old page has had its dwell")
+now += 3
+check(pager.advance(now: now) && pager.pageIndex == 1 && pager.page.first == "下一句一", "Next translation starts only after the old final page")
+pager.reset()
+check(pager.delay(now: 100) == nil && pager.pendingCount == 0 && pager.overflowCount == 0, "Stop/new session clears all pager state")
+check(pager.enqueue(longChinese, now: 100) && pager.page == firstPage, "Restart can show the same translation from page one")
 
 var gate = LensCaptionScheduler()
 gate.begin(sessionID: "first")
