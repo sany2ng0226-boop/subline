@@ -145,7 +145,7 @@ const messages = {
       reazonspeechJa: 'ReazonSpeech (Japanese)',
       senseVoice: 'SenseVoice (Multilingual)',
       appleSpeech: 'Apple Speech (macOS / iOS 26+)',
-      systemManaged: 'Managed by iOS',
+      systemManaged: 'System-managed',
     },
     modelsScreen: {
       ultra: 'Ultra quality',
@@ -379,7 +379,7 @@ const messages = {
       reazonspeechJa: 'ReazonSpeech（日本語）',
       senseVoice: 'SenseVoice（多言語）',
       appleSpeech: 'Apple音声認識（macOS / iOS 26以降）',
-      systemManaged: 'iOSが管理',
+      systemManaged: 'システムが管理',
     },
     modelsScreen: {
       ultra: '超高品質',
@@ -612,7 +612,7 @@ const messages = {
       reazonspeechJa: 'ReazonSpeech (일본어)',
       senseVoice: 'SenseVoice (다국어)',
       appleSpeech: 'Apple 음성 인식 (macOS / iOS 26 이상)',
-      systemManaged: 'iOS에서 관리',
+      systemManaged: '시스템에서 관리',
     },
     modelsScreen: {
       ultra: '최고 품질',
@@ -842,7 +842,7 @@ const messages = {
       reazonspeechJa: 'ReazonSpeech（日语专用）',
       senseVoice: 'SenseVoice（多语言）',
       appleSpeech: 'Apple 语音识别（macOS / iOS 26+）',
-      systemManaged: '由 iOS 管理',
+      systemManaged: '由系统管理',
     },
     modelsScreen: {
       ultra: '超高质量',

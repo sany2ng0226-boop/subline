@@ -34,7 +34,7 @@ const form = reactive<SettingsFormData>({
   fontSize: current.fontSize,
   theme: current.theme,
   asr: { ...current.asr },
-  // 三态：未开启翻译 → 无；云端引擎 → 云端；其余本地引擎 → 本地模型（主页无独立开关，选方式即开启）。
+  // 三态：未开启翻译 → 无；云端引擎 → 云端；其余本地引擎 → 本地模型（选择方式或使用主页开关均可启停翻译）。
   translationMode: !current.translation.enabled ? 'none' : currentEngine === 'cloud' ? 'cloud' : 'local',
   // 本地模型：持久化引擎为注册表内本地模型 id 则沿用，否则（云端/未知）落默认本地模型。
   translationModel:

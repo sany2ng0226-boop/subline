@@ -1038,7 +1038,13 @@ ipcMain.handle('settings:save', (_event, next: SettingsPatch): AppSettings => {
   if (saved.translation.enabled && (engineChanged || enabledTurnedOn)) {
     const canPreheat = saved.translation.engine === 'cloud' || translationModelCached();
     if (canPreheat) {
-      ensureTranslateChild().proc.send({ type: 'preheat' });
+      try {
+        ensureTranslateChild().proc.send({ type: 'preheat' }, (error) => {
+          if (error) sendToRenderer('translation:status', { state: 'error', error: error.message });
+        });
+      } catch (error) {
+        sendToRenderer('translation:status', { state: 'error', error: (error as Error).message });
+      }
     }
   }
   // 返回收敛后的设置（与 settings:get 一致），保证 UI 拿到本机实际生效的音源。
