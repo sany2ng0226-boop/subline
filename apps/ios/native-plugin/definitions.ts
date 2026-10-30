@@ -16,6 +16,9 @@ export interface NativeSegmentPayload extends SegmentPayload {
   sequence: number;
   sessionId: string;
   startedAt: number;
+  translationMode?: 'native' | 'foreground';
+  translationRevision?: number;
+  target?: string;
 }
 
 export interface NativeRecordingStatus extends StatusPayload {
@@ -25,7 +28,19 @@ export interface NativeRecordingStatus extends StatusPayload {
 }
 
 /** 插件向 JS 发的事件名 → 事件载荷类型 */
+export interface NativeTranslationResult {
+  sequence: number;
+  sessionId: string;
+  revision: number;
+  target: string;
+  state: 'pending' | 'done' | 'error';
+  text: string;
+  error?: string;
+  skipped?: boolean;
+}
+
 export interface RealtimeAsrEventMap {
+  translationResultsAvailable: Record<string, never>;
   appActive: { active: boolean };
   /** 实时部分识别结果（说话过程中持续更新；text 为空表示清除） */
   partial: PartialPayload;
@@ -38,6 +53,15 @@ export interface RealtimeAsrEventMap {
 }
 
 export interface RealtimeAsrPlugin {
+  configureBackgroundTranslation(options: {
+    enabled: boolean;
+    engine: 'local' | 'cloud';
+    target: string;
+    revision?: number;
+  }): Promise<{ available: boolean; revision: number }>;
+  drainTranslationResults(): Promise<{ results: NativeTranslationResult[]; error?: string }>;
+  ackTranslationResults(options: { sequences: number[] }): Promise<{ ok: boolean; error?: string }>;
+
   /** Durable native finals remain here while WKWebView is suspended. */
   drainPendingSegments(): Promise<{
     segments: NativeSegmentPayload[];

@@ -1,8 +1,20 @@
 // 平台无关的领域类型：在 macOS/iOS 等各端之间共享的纯数据结构。
 // Electron 进程间的 IPC 契约（MainToAsr 等）保留在各端，不放这里。
 
+/** Durable association between a displayed line and native translation jobs on iOS. */
+export interface NativeTranslationReference {
+  sessionId: string;
+  revision: number;
+  target: string;
+  sequences: number[];
+  completed?: boolean;
+  failed?: boolean;
+  error?: string;
+}
+
 /** 一条最终确定的转写结果 */
 export interface SegmentPayload {
+  nativeTranslation?: NativeTranslationReference;
   recordingId?: string;
   /** 段序号，译文异步回来时用它对应到正确的行 */
   id: number;
@@ -179,6 +191,7 @@ export interface ModelInfo {
 
 /** 归档里的一行对话 */
 export interface ArchiveLine {
+  nativeTranslation?: NativeTranslationReference;
   lang?: string;
   /** Offset in seconds into this recording, excluding pauses between captures. */
   audio?: { recordingId: string; start: number; duration: number };

@@ -1,10 +1,11 @@
 import { computed, reactive, ref } from 'vue';
-import type { ArchiveLine, PipelineErrorCode, TranslationStatusPayload } from '@rt/core';
+import type { ArchiveLine, NativeTranslationReference, PipelineErrorCode, TranslationStatusPayload } from '@rt/core';
 import { fmtClock } from '../utils/datetime';
 import { pipelineErrorCode } from '../utils/micPermission';
 import { bridge } from '../bridge';
 
 export interface TranscriptLine {
+  nativeTranslation?: NativeTranslationReference;
   /** Stable view identity survives provisional text becoming a finalized segment. */
   displayId: number;
   lang?: string;
@@ -87,6 +88,7 @@ export function registerTranscriptionListeners(): void {
     const line = draftLine.value ?? makeDraft(seg.text);
     Object.assign(line, {
       id: seg.id, time: fmtTime(seg.start), text: seg.text, lang: seg.lang,
+      ...(seg.nativeTranslation ? { nativeTranslation: { ...seg.nativeTranslation } } : {}),
       ...(seg.recordingId ? { audio: { recordingId: seg.recordingId, start: seg.start, duration: seg.duration } } : {}),
       translation: '', translating: false, failed: false,
     });
@@ -107,6 +109,10 @@ export function registerTranscriptionListeners(): void {
     // 撤销窗口内被删除的行仍接收译文，撤销恢复后不会卡在「翻译中」。
     const line = lines.find((l) => l.id === tr.id) ?? clearedLines.find((l) => l.id === tr.id);
     if (!line) return;
+    if (line.nativeTranslation && !tr.partial) {
+      line.nativeTranslation = { ...line.nativeTranslation, completed: !tr.pending,
+        ...(tr.failed ? { failed: true, error: tr.error } : { failed: false, error: undefined }) };
+    }
     if (tr.partial) {
       line.translation = tr.text;
       line.translationPartial = true;
@@ -305,6 +311,7 @@ function resetDraft(): void {
 export function archiveSnapshot() {
   return lines.map(line => ({ time: line.time, text: line.text,
     translation: line.translationPartial ? '' : line.translation,
+    ...(line.nativeTranslation ? { nativeTranslation: { ...line.nativeTranslation } } : {}),
     ...(line.lang ? { lang: line.lang } : {}), ...(line.audio ? { audio: { ...line.audio } } : {}) }));
 }
 
@@ -312,11 +319,12 @@ export function archiveSnapshot() {
 export function recoverySnapshot(): RecoveredLine[] {
   return lines.map((line) => ({ time: line.time, text: line.text,
     translation: line.translationPartial ? '' : line.translation,
+    ...(line.nativeTranslation ? { nativeTranslation: { ...line.nativeTranslation } } : {}),
     ...(line.audio ? { audio: { ...line.audio } } : {}),
     ...(line.lang ? { lang: line.lang } : {}) }));
 }
 
-export interface RecoveredLine { time: string; text: string; translation: string; lang?: string; audio?: ArchiveLine['audio'] }
+export interface RecoveredLine { nativeTranslation?: NativeTranslationReference; time: string; text: string; translation: string; lang?: string; audio?: ArchiveLine['audio'] }
 
 // 恢复行用负 id：新会话的 segment id 从头计数，不能让迟到的译文串到旧行上
 let nextRecoveredId = -2;
@@ -324,12 +332,20 @@ let nextRecoveredId = -2;
 /** 把上次未归档的行恢复到当前内容之前 */
 export function restoreLines(saved: RecoveredLine[]): void {
   lastArchivedAt.value = null;
-  lines.unshift(...saved.map((line): TranscriptLine => ({
+  const recovered = saved.map((line): TranscriptLine => ({
     displayId: ++nextDisplayId, id: nextRecoveredId--, time: line.time, text: line.text,
-    translation: line.translation, translating: false, failed: false,
+    translation: line.translation, translating: !!line.nativeTranslation && !line.nativeTranslation.completed,
+    failed: !!line.nativeTranslation?.failed,
+    ...(line.nativeTranslation?.error ? { failedDetail: line.nativeTranslation.error } : {}),
+    ...(line.nativeTranslation ? { nativeTranslation: { ...line.nativeTranslation } } : {}),
     ...(line.audio ? { audio: { ...line.audio } } : {}),
     ...(line.lang ? { lang: line.lang } : {}),
-  })));
+  }));
+  lines.unshift(...recovered);
+  const restored = recovered.filter((line) => line.nativeTranslation).map((line) => ({
+    id: line.id, text: line.text, lang: line.lang, translation: line.translation, nativeTranslation: line.nativeTranslation!,
+  }));
+  if (restored.length) bridge().restoreNativeTranslationRows?.(restored);
 }
 
 /** 当前录音的开始时刻（epoch ms）；尚未录音时为 0 */

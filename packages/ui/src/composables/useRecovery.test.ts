@@ -226,3 +226,19 @@ it('successful archive clears recovery ownership without discarding the archived
   expect(stored()).toBeNull();
   expect(discardRecordings).not.toHaveBeenCalled();
 });
+
+it('persists native completion metadata even when a skipped translation leaves its text empty', async () => {
+  let file: string | null = null;
+  const save = vi.fn(async (json: string) => { file = json; });
+  await setup({ platform: 'ios', saveRecovery: save, loadRecovery: async () => null, clearRecovery: async () => {} });
+  await recovery.initRecovery();
+  callbacks.onSegment({ id: 77, text: '无需翻译的原文。', lang: 'zh', start: 0, duration: 3,
+    nativeTranslation: { sessionId: 'session-a', revision: 7, target: 'zh', sequences: [1], completed: false } });
+  await nextTick();
+  expect(JSON.parse(file!).lines[0].nativeTranslation.completed).toBe(false);
+  callbacks.onTranslation({ id: 77, text: '' });
+  await nextTick();
+  await vi.advanceTimersByTimeAsync(recovery.RECOVERY_THROTTLE_MS);
+  expect(JSON.parse(file!).lines[0]).toMatchObject({ translation: '', nativeTranslation: { completed: true } });
+  expect(save).toHaveBeenCalledTimes(2);
+});

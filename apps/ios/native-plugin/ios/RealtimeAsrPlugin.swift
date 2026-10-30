@@ -37,6 +37,9 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   public let identifier = "RealtimeAsrPlugin"
   public let jsName = "RealtimeAsr"
   public let pluginMethods: [CAPPluginMethod] = [
+    CAPPluginMethod(name: "configureBackgroundTranslation", returnType: CAPPluginReturnPromise),
+    CAPPluginMethod(name: "drainTranslationResults", returnType: CAPPluginReturnPromise),
+    CAPPluginMethod(name: "ackTranslationResults", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name: "drainPendingSegments", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name: "ackPendingSegments", returnType: CAPPluginReturnPromise),
     CAPPluginMethod(name: "start", returnType: CAPPluginReturnPromise),
@@ -57,6 +60,10 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   /// band; without handling them the UI would stay stuck "running" while capture is dead.
   override public func load() {
     journal.restoreStoppedState()
+    recordingTranslations.onChanged = { [weak self] in
+      self?.emitEvent("translationResultsAvailable", data: [:])
+    }
+    try? reconcilePendingTranslations()
     let center = NotificationCenter.default
     center.addObserver(self, selector: #selector(handleAppActivity(_:)),
                        name: UIApplication.didBecomeActiveNotification, object: nil)
@@ -94,7 +101,9 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
 
   // MARK: - Capacitor / threading state
 
+  private let deliveryLock = NSRecursiveLock()
   private let journal = NativeSegmentJournal()
+  private let recordingTranslations = NativeRecordingTranslationQueue()
   private let audioEngine = AVAudioEngine()
   /// All recognizer + VAD work runs here, off the audio render thread.
   private let asrQueue = DispatchQueue(label: "io.github.baijunjie.realtimetranslator.asr")
@@ -142,8 +151,14 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   private var lastPartialAtSamples = 0
 
   private func emitEvent(_ name: String, data: [String: Any]) {
+    deliveryLock.lock(); defer { deliveryLock.unlock() }
     do {
-      let payload = try journal.record(name: name, data: data)
+      let routed = name == "segment" ? data.merging(recordingTranslations.route(data)) { _, new in new } : data
+      var payload = try journal.record(name: name, data: routed)
+      if name == "segment", payload["translationMode"] as? String == "native", !recordingTranslations.enqueue(payload) {
+        payload["translationMode"] = "foreground"
+        try journal.updateSegment(payload)
+      }
       notifyListeners(name, data: payload)
       if name == "segment", payload["fixtureInput"] as? Bool == true,
          let sequence = payload["sequence"] as? Int {
@@ -156,17 +171,60 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
     }
   }
 
+  @objc func configureBackgroundTranslation(_ call: CAPPluginCall) {
+    let enabled = call.getBool("enabled") ?? false
+    let engine = call.getString("engine") ?? "local"
+    let target = call.getString("target") ?? "zh"
+    Task {
+      let configuration = await self.recordingTranslations.configure(enabled: enabled, engine: engine, target: target)
+      call.resolve(configuration)
+    }
+  }
+
+  @objc func drainTranslationResults(_ call: CAPPluginCall) {
+    call.resolve(recordingTranslations.snapshot())
+  }
+
+  @objc func ackTranslationResults(_ call: CAPPluginCall) {
+    let sequences = call.getArray("sequences", Int.self) ?? []
+    do {
+      try recordingTranslations.acknowledge(Set(sequences))
+      call.resolve(["ok": true])
+    } catch { call.resolve(["ok": false, "error": error.localizedDescription]) }
+  }
+
+  private func reconcilePendingTranslations() throws {
+    for var segment in journal.snapshot()["segments"] as? [[String: Any]] ?? [] {
+      if segment["translationMode"] as? String == "native", !recordingTranslations.enqueue(segment) {
+        segment["translationMode"] = "foreground"
+        try journal.updateSegment(segment)
+      }
+    }
+  }
+
   @objc func drainPendingSegments(_ call: CAPPluginCall) {
-    call.resolve(journal.snapshot())
+    deliveryLock.lock(); defer { deliveryLock.unlock() }
+    do {
+      // Drain can race a raw outbox write before its job is established; close that window here.
+      try reconcilePendingTranslations()
+      call.resolve(journal.snapshot())
+    } catch {
+      var snapshot = journal.snapshot()
+      snapshot["segments"] = []
+      snapshot["journalError"] = error.localizedDescription
+      call.resolve(snapshot)
+    }
   }
 
   @objc func ackPendingSegments(_ call: CAPPluginCall) {
+    deliveryLock.lock(); defer { deliveryLock.unlock() }
     guard let through = call.getInt("through"), through >= 0 else {
       call.resolve(["ok": false, "error": "missing or invalid sequence"])
       return
     }
     do {
       try journal.acknowledge(through: through)
+      try recordingTranslations.acknowledgeRaw(through: through)
       call.resolve(["ok": true])
     } catch { call.resolve(["ok": false, "error": error.localizedDescription]) }
   }
@@ -1511,6 +1569,18 @@ private final class NativeSegmentJournal {
       throw Self.error(fault!)
     }
     return payload
+  }
+
+  func updateSegment(_ segment: [String: Any]) throws {
+    lock.lock(); defer { lock.unlock() }
+    guard !loadFailed, let sequence = segment["sequence"] as? Int,
+          let index = pending.firstIndex(where: { $0["sequence"] as? Int == sequence }) else {
+      throw Self.error("无法更新原生字幕路由")
+    }
+    let original = pending[index]
+    pending[index] = segment
+    do { try save() }
+    catch { pending[index] = original; fault = error.localizedDescription; throw error }
   }
 
   func snapshot() -> [String: Any] {

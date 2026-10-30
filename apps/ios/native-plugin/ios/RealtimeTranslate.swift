@@ -8,8 +8,10 @@
 //  alternative; this plugin powers the non-cloud ("device-local") engine.
 //
 //  --- Why this is structured the way it is -----------------------------------
-//  Apple only exposes `TranslationSession` through SwiftUI's `.translationTask`
-//  view modifier — there is NO public initializer. To drive it headlessly from a
+//  iOS 18–25 require SwiftUI's `.translationTask` for TranslationSession access.
+//  iOS 26+ also supports init(installedSource:target:) without UI, used by the
+//  native recording translation queue below when language packs are installed.
+//  For foreground consent/download support we continue driving sessions from a
 //  UIKit/Capacitor plugin we host a tiny, off-screen SwiftUI view inside a
 //  `UIHostingController` attached to the app window (0pt frame, hidden). That view
 //  has `.translationTask(config)`; the action closure receives the live
@@ -179,7 +181,6 @@ public class RealtimeTranslatePlugin: CAPPlugin, CAPBridgedPlugin {
 
 #if canImport(Translation)
 
-@available(iOS 18.0, *)
 enum TranslateOutcome {
   case success(String)
   case unavailable(String)
@@ -307,7 +308,8 @@ private final class SessionHost {
       let work = TranslateWork(text: text, context: context) { outcome in box.resume(outcome) }
       continuation.yield(work)
       box.setTimeoutTask(Task {
-        try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+        do { try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000)) }
+        catch { return }
         box.resume(.unavailable("translation timed out"))
       })
     }
@@ -382,11 +384,7 @@ private struct TranslationDriverView: View {
         for await item in work {
           do {
             let translated: String
-            if #available(iOS 26.4, *), !item.context.isEmpty {
-              translated = try await translateWithContext(item, session: session)
-            } else {
-              translated = try await session.translate(item.text).targetText
-            }
+            translated = try await translateAppleText(item.text, context: item.context, session: session)
             item.completion(.success(translated))
           } catch {
             item.completion(.unavailable("translation failed: \(error.localizedDescription)"))
@@ -399,27 +397,328 @@ private struct TranslationDriverView: View {
       }
   }
 
-  @available(iOS 26.4, *)
-  private func translateWithContext(_ item: TranslateWork, session: TranslationSession) async throws -> String {
-    // Preserve source attribution through Apple's formatted-text API; never guess an output suffix.
+
+}
+
+/// Shared by foreground requests and the native recording queue; context contains source text only.
+@available(iOS 18.0, *)
+private func translateAppleText(_ text: String, context: [String], session: TranslationSession) async throws -> String {
+  if #available(iOS 26.4, *), !context.isEmpty {
     let marker = URL(string: "https://subline.invalid/translation/current")!
-    var input = AttributedString(item.context.joined(separator: " ") + " ")
-    var current = AttributedString(item.text)
+    var input = AttributedString(context.joined(separator: " ") + " ")
+    var current = AttributedString(text)
     current.link = marker
     input.append(current)
     do {
       let response = try await session.translate(input)
       if let target = response.attributedTargetText {
         let runs = target.runs.filter { $0.link == marker }
-        let text = runs.map { String(target[$0.range].characters) }.joined()
+        let result = runs.map { String(target[$0.range].characters) }.joined()
           .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !text.isEmpty { return text }
+        if !result.isEmpty { return result }
       }
     } catch {
-      // Formatting is optional: an unsupported attribution path must not lose the current sentence.
+      // Formatted output is optional; never guess which output suffix belongs to the current text.
     }
-    return try await session.translate(item.text).targetText
   }
+  return try await session.translate(text).targetText
 }
 
 #endif
+
+/// Recording-owned local translation survives WKWebView suspension and raw-caption acknowledgements.
+final class NativeRecordingTranslationQueue {
+  private struct Configuration: Codable, Equatable {
+    var enabled = false
+    var engine = "local"
+    var target = "zh"
+    var revision = 0
+  }
+  private struct Job: Codable {
+    let sequence: Int
+    let sessionId: String
+    let revision: Int
+    let source: String
+    let target: String
+    let sourceText: String
+    let context: [String]
+    let fixture: Bool
+    var state = "pending"
+    var text = ""
+    var error: String?
+    var skipped = false
+  }
+  private struct Archive: Codable {
+    var configuration: Configuration
+    var jobs: [Job]
+    var contextKey: String?
+    var recentSource: [String]?
+    var rawAcknowledgedThrough: Int?
+    var acknowledgedSequences: [Int]?
+  }
+  private let lock = NSLock()
+  private let url: URL
+  private var configuration = Configuration()
+  private var jobs: [Job] = []
+  private var rawAcknowledgedThrough = 0
+  private var acknowledgedSequences: Set<Int> = []
+  private var installedSources: Set<String> = []
+  private var contextKey = ""
+  private var recentSource: [String] = []
+  private var running = false
+  private var installedTranslator: Any?
+  private var fault: String?
+  private var unreadable = false
+  private var requestGeneration = 0
+  private let maxJobs = 2_000
+  private let maxBytes = 8 * 1024 * 1024
+  var onChanged: (() -> Void)?
+
+  init() {
+    let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    url = root.appendingPathComponent("native-translation-journal.json")
+    guard FileManager.default.fileExists(atPath: url.path) else { return }
+    do {
+      let data = try Data(contentsOf: url)
+      guard data.count <= maxBytes else { throw Self.failure("原生翻译暂存超过上限") }
+      let archive = try JSONDecoder().decode(Archive.self, from: data)
+      guard archive.jobs.count <= maxJobs else { throw Self.failure("原生翻译暂存超过上限") }
+      configuration = archive.configuration
+      jobs = archive.jobs
+      rawAcknowledgedThrough = archive.rawAcknowledgedThrough ?? 0
+      acknowledgedSequences = Set(archive.acknowledgedSequences ?? [])
+      contextKey = archive.contextKey ?? ""
+      recentSource = Array((archive.recentSource ?? []).suffix(2)).map { String($0.suffix(400)) }
+    } catch { fault = error.localizedDescription; unreadable = true }
+  }
+
+  func configure(enabled: Bool, engine: String, target: String) async -> [String: Any] {
+    let generation = locked { () -> Int in requestGeneration += 1; return requestGeneration }
+    var installed: Set<String> = []
+    if #available(iOS 26.0, *), enabled && engine == "local" {
+      let targetLanguage = Locale.Language(identifier: target)
+      for source in ["ja", "zh", "en", "ko", "yue"] {
+        let normalized = source == "yue" ? "zh" : source
+        if normalized != target {
+          let status = await LanguageAvailability().status(from: Locale.Language(identifier: normalized), to: targetLanguage)
+          if status == .installed { installed.insert(source) }
+        }
+      }
+    }
+    let result: [String: Any] = locked {
+      guard generation == requestGeneration else {
+        return ["available": !installedSources.isEmpty, "revision": configuration.revision]
+      }
+      if configuration.enabled != enabled || configuration.engine != engine || configuration.target != target || installedSources != installed {
+        configuration = Configuration(enabled: enabled, engine: engine, target: target, revision: configuration.revision + 1)
+        contextKey = ""; recentSource = []
+      }
+      installedSources = installed
+      do { try save() } catch { fault = error.localizedDescription }
+      return ["available": fault == nil && !installed.isEmpty, "revision": configuration.revision]
+    }
+    pump()
+    return result
+  }
+
+  func route(_ segment: [String: Any]) -> [String: Any] {
+    locked {
+      let source = Self.source(segment)
+      return ["translationMode": configuration.enabled && configuration.engine == "local" && fault == nil && installedSources.contains(source) ? "native" : "foreground",
+              "translationRevision": configuration.revision, "target": configuration.target]
+    }
+  }
+
+  @discardableResult func enqueue(_ segment: [String: Any]) -> Bool {
+    guard segment["translationMode"] as? String == "native",
+          let sequence = segment["sequence"] as? Int,
+          let session = segment["sessionId"] as? String,
+          let revision = segment["translationRevision"] as? Int,
+          let target = segment["target"] as? String,
+          let text = segment["text"] as? String else { return false }
+    let accepted = locked { () -> Bool in
+      if sequence <= rawAcknowledgedThrough || acknowledgedSequences.contains(sequence) || jobs.contains(where: { $0.sequence == sequence }) { return true }
+      guard !unreadable else { return false }
+      let source = Self.source(segment)
+      let key = "\(session)|\(revision)|\(source)->\(target)"
+      if contextKey != key { recentSource = []; contextKey = key }
+      let context = recentSource
+      recentSource = Array((recentSource + [String(text.suffix(400))]).suffix(2))
+      var job = Job(sequence: sequence, sessionId: session, revision: revision, source: source,
+                    target: target, sourceText: text, context: context,
+                    fixture: segment["fixtureInput"] as? Bool == true)
+      if source == target || (source == "yue" && target == "zh") {
+        job.state = "done"; job.skipped = true
+        recentSource = []
+      }
+      guard jobs.count < maxJobs else { fault = "后台翻译暂存已满，请返回前台保存字幕"; return false }
+      jobs.append(job)
+      do { try save() }
+      catch { jobs.removeLast(); fault = "后台翻译暂存写入失败：\(error.localizedDescription)"; return false }
+      return true
+    }
+    onChanged?()
+    pump()
+    return accepted
+  }
+
+  func snapshot() -> [String: Any] {
+    locked {
+      let data = (try? JSONEncoder().encode(jobs)) ?? Data("[]".utf8)
+      var result: [String: Any] = ["results": (try? JSONSerialization.jsonObject(with: data)) ?? []]
+      if let fault = fault { result["error"] = fault }
+      return result
+    }
+  }
+
+  func acknowledge(_ sequences: Set<Int>) throws {
+    try locked {
+      guard !unreadable else { throw Self.failure(fault ?? "翻译暂存无法读取") }
+      let original = jobs
+      let previousAcknowledgements = acknowledgedSequences
+      for job in jobs where sequences.contains(job.sequence) && job.state != "pending" && job.sequence > rawAcknowledgedThrough {
+        acknowledgedSequences.insert(job.sequence)
+      }
+      jobs.removeAll { sequences.contains($0.sequence) && $0.state != "pending" }
+      do { try save(); fault = nil }
+      catch { jobs = original; acknowledgedSequences = previousAcknowledgements; throw error }
+    }
+    pump()
+  }
+
+  func acknowledgeRaw(through sequence: Int) throws {
+    try locked {
+      let previousThrough = rawAcknowledgedThrough
+      let previousAcknowledgements = acknowledgedSequences
+      rawAcknowledgedThrough = max(rawAcknowledgedThrough, sequence)
+      acknowledgedSequences = acknowledgedSequences.filter { $0 > rawAcknowledgedThrough }
+      do { try save() }
+      catch { rawAcknowledgedThrough = previousThrough; acknowledgedSequences = previousAcknowledgements; throw error }
+    }
+  }
+
+  private func pump() {
+    let shouldStart = locked { () -> Bool in
+      guard !running && fault == nil && jobs.contains(where: { $0.state == "pending" }) else { return false }
+      running = true
+      return true
+    }
+    guard shouldStart else { return }
+    Task { @MainActor in
+      if #available(iOS 26.0, *), self.installedTranslator == nil {
+        self.installedTranslator = InstalledRecordingTranslator()
+      }
+      while let job = self.locked({ self.fault == nil ? self.jobs.first(where: { $0.state == "pending" }) : nil }) {
+        let outcome: TranslateOutcome
+        if #available(iOS 26.0, *), let translator = self.installedTranslator as? InstalledRecordingTranslator {
+          outcome = await translator.translate(job.sourceText, source: job.source, target: job.target, context: job.context)
+        } else { outcome = .unavailable("后台翻译需要 iOS 26 或更新版本") }
+        self.locked {
+          if let index = self.jobs.firstIndex(where: { $0.sequence == job.sequence }) {
+            switch outcome {
+            case .success(let text): self.jobs[index].state = "done"; self.jobs[index].text = text
+            case .unavailable(let reason): self.jobs[index].state = "error"; self.jobs[index].error = reason
+            }
+            do { try self.save() }
+            catch { self.fault = "后台译文保存失败：\(error.localizedDescription)" }
+          }
+        }
+        if job.fixture {
+          self.logFixtureCompletion(sequence: job.sequence, session: job.sessionId, outcome: outcome)
+        }
+        self.onChanged?()
+      }
+      self.locked { self.running = false }
+      // An enqueue may have raced the loop's empty check before running was cleared.
+      self.pump()
+    }
+  }
+
+  private func locked<T>(_ action: () throws -> T) rethrows -> T {
+    lock.lock(); defer { lock.unlock() }
+    return try action()
+  }
+
+  private func save() throws {
+    guard !unreadable else { throw Self.failure(fault ?? "翻译暂存无法读取") }
+    let data = try JSONEncoder().encode(Archive(configuration: configuration, jobs: jobs, contextKey: contextKey, recentSource: recentSource, rawAcknowledgedThrough: rawAcknowledgedThrough, acknowledgedSequences: acknowledgedSequences.sorted()))
+    guard data.count <= maxBytes else { throw Self.failure("后台翻译暂存已满，请返回前台保存字幕") }
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    var protectedURL = url
+    var values = URLResourceValues(); values.isExcludedFromBackup = true
+    try? protectedURL.setResourceValues(values)
+  }
+
+  private static func source(_ segment: [String: Any]) -> String {
+    let text = segment["text"] as? String ?? ""
+    if text.range(of: "[぀-ヿㇰ-ㇿｦ-ﾟ]", options: .regularExpression) != nil { return "ja" }
+    if text.range(of: "[가-힣ᄀ-ᇿ㄰-㆏]", options: .regularExpression) != nil { return "ko" }
+    return segment["lang"] as? String ?? ""
+  }
+
+  private static func failure(_ message: String) -> NSError {
+    NSError(domain: "NativeRecordingTranslation", code: -1, userInfo: [NSLocalizedDescriptionKey: message])
+  }
+
+  @MainActor private func logFixtureCompletion(sequence: Int, session: String, outcome: TranslateOutcome) {
+    let succeeded: Bool
+    switch outcome { case .success: succeeded = true; case .unavailable: succeeded = false }
+    let row: [String: Any] = ["event": "translation", "timestamp": Date().timeIntervalSince1970,
+      "sequence": sequence, "sessionId": session, "succeeded": succeeded,
+      "appForeground": UIApplication.shared.applicationState == .active,
+      "protectedDataAvailable": UIApplication.shared.isProtectedDataAvailable, "fixtureInput": true]
+    guard let data = try? JSONSerialization.data(withJSONObject: row) else { return }
+    let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+      .appendingPathComponent("subline-background-translation-fixture.jsonl")
+    if !FileManager.default.fileExists(atPath: url.path) {
+      try? Data().write(to: url, options: [.completeFileProtectionUntilFirstUserAuthentication])
+    }
+    guard let handle = try? FileHandle(forWritingTo: url) else { return }
+    defer { try? handle.close() }
+    _ = try? handle.seekToEnd(); try? handle.write(contentsOf: data + Data([10]))
+  }
+}
+
+@available(iOS 26.0, *)
+@MainActor
+private final class InstalledRecordingTranslator {
+  private var sessions: [String: TranslationSession] = [:]
+  private var timedOut = false
+
+  func translate(_ text: String, source: String, target: String, context: [String]) async -> TranslateOutcome {
+    guard !timedOut else { return .unavailable("Apple 翻译会话超时，请重新打开应用后重试") }
+    let normalizedSource = source == "yue" ? "zh" : source
+    let sourceLanguage = Locale.Language(identifier: normalizedSource)
+    let targetLanguage = Locale.Language(identifier: target)
+    guard await LanguageAvailability().status(from: sourceLanguage, to: targetLanguage) == .installed else {
+      return .unavailable("语言包尚未安装，请返回前台准备翻译语言")
+    }
+    let key = "\(source)->\(target)"
+    let session = sessions[key] ?? TranslationSession(installedSource: sourceLanguage, target: targetLanguage)
+    sessions[key] = session
+    return await withCheckedContinuation { continuation in
+      let box = ResumeOnceBox(continuation)
+      let request = Task { @MainActor in
+        do {
+          let result = try await translateAppleText(text, context: context, session: session)
+          if result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            box.resume(.unavailable("Apple 翻译未返回译文"))
+          } else { box.resume(.success(result)) }
+        } catch {
+          self.sessions[key] = nil
+          box.resume(.unavailable("translation failed: \(error.localizedDescription)"))
+        }
+      }
+      box.setTimeoutTask(Task { @MainActor in
+        do { try await Task.sleep(nanoseconds: 30_000_000_000) } catch { return }
+        // Return independently of the framework's cancellation response; one hung task maximum.
+        self.timedOut = true
+        self.sessions[key] = nil
+        session.cancel()
+        request.cancel()
+        box.resume(.unavailable("Apple 翻译超时，请重新打开应用后重试"))
+      })
+    }
+  }
+}

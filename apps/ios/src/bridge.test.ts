@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   listeners: new Map<string, (value: any) => void>(),
   start: vi.fn(), stop: vi.fn(), translate: vi.fn(), setup: vi.fn(), download: vi.fn(),
   journal: undefined as any, ack: vi.fn(), prewarm: vi.fn(),
+  nativeConfigure: undefined as any, nativeResultDrain: undefined as any, nativeResultAck: vi.fn(),
 }));
 vi.mock('@capacitor/preferences', () => ({ Preferences: {
   get: vi.fn(async ({ key }: { key: string }) => ({ value: mocks.storage.get(key) ?? null })),
@@ -13,6 +14,9 @@ vi.mock('@capacitor/preferences', () => ({ Preferences: {
 } }));
 vi.mock('../native-plugin', () => ({
   RealtimeAsr: {
+    get configureBackgroundTranslation() { return mocks.nativeConfigure; },
+    get drainTranslationResults() { return mocks.nativeResultDrain; },
+    ackTranslationResults: mocks.nativeResultAck,
     get drainPendingSegments() { return mocks.journal; }, ackPendingSegments: mocks.ack, prewarm: mocks.prewarm,
     start: mocks.start, stop: mocks.stop, getSetupStatus: mocks.setup, downloadModels: mocks.download,
     addListener: vi.fn((event: string, callback: (value: any) => void) => {
@@ -52,6 +56,7 @@ async function setup(engine: AppSettings['translation']['engine'] = 'm2m100') {
 beforeEach(() => {
   vi.useFakeTimers();
   mocks.storage.clear(); mocks.listeners.clear();
+  mocks.nativeConfigure = undefined; mocks.nativeResultDrain = undefined; mocks.nativeResultAck.mockReset().mockResolvedValue({ ok: true });
   mocks.journal = undefined; mocks.ack.mockReset().mockResolvedValue({ ok: true }); mocks.prewarm.mockReset().mockResolvedValue(undefined);
   mocks.start.mockReset().mockResolvedValue({ ok: true });
   mocks.stop.mockReset().mockResolvedValue({ ok: true });
@@ -342,5 +347,146 @@ describe('iOS native foreground translation gating', () => {
     expect(mocks.translate).toHaveBeenCalledTimes(1);
     emit('appActive', { active: true }); await settleJournal();
     expect(mocks.translate).toHaveBeenCalledTimes(2);
+  });
+});
+
+function nativeTranslations() {
+  const state = { results: [] as any[], error: undefined as string | undefined };
+  mocks.nativeConfigure = vi.fn(async () => ({ available: true, revision: 7 }));
+  mocks.nativeResultDrain = vi.fn(async () => ({ results: [...state.results], ...(state.error ? { error: state.error } : {}) }));
+  return state;
+}
+function nativeFragment(sequence: number, text: string, start = sequence - 1) {
+  return { ...journalSegment(sequence, text, 'session-a', start), translationMode: 'native' as const, translationRevision: 7, target: 'zh' };
+}
+function nativeResult(sequence: number, text: string, state: 'pending' | 'done' | 'error' = 'done', extra: object = {}) {
+  return { sequence, sessionId: 'session-a', revision: 7, target: 'zh', text, state, ...extra };
+}
+function nativeSnapshot(line: SegmentPayload, translation: string, completed: boolean, failed = false) {
+  return JSON.stringify({ version: 1, savedAt: 1, lines: [{ time: '11:00:00', text: line.text, lang: line.lang, translation,
+    nativeTranslation: { ...line.nativeTranslation, completed, failed } }] });
+}
+
+describe('iOS independent durable native translation jobs', () => {
+  it('joins every native source chunk in order, normalizes target script, and acknowledges only the durably saved complete translation', async () => {
+    const results = nativeTranslations();
+    const { bridge, segments, translations, snapshot } = await journalSetup();
+    const a = nativeFragment(1, '駅まで'), b = nativeFragment(2, '歩いてください。');
+    snapshot.segments.push(a, b); emit('segment', a); emit('segment', b);
+    results.results = [nativeResult(1, '車站'), nativeResult(2, '', 'pending')];
+    await settleJournal();
+    expect(segments).toHaveLength(1);
+    expect(segments[0].nativeTranslation).toMatchObject({ sequences: [1, 2], revision: 7, target: 'zh' });
+    expect(mocks.translate).not.toHaveBeenCalled();
+    expect(translations.at(-1)).toMatchObject({ pending: true });
+    await bridge.saveRecovery!(nativeSnapshot(segments[0], '', false));
+    expect(mocks.ack).toHaveBeenLastCalledWith({ through: 2 });
+    expect(mocks.nativeResultAck).not.toHaveBeenCalled();
+    results.results[1] = nativeResult(2, '請步行。');
+    emit('translationResultsAvailable', {}); await settleJournal();
+    expect(translations.at(-1)).toMatchObject({ id: segments[0].id, text: '车站请步行。' });
+    const { Preferences } = await import('@capacitor/preferences');
+    vi.mocked(Preferences.set).mockRejectedValueOnce(new Error('disk full'));
+    await expect(bridge.saveRecovery!(nativeSnapshot(segments[0], '车站请步行。', true))).rejects.toThrow('disk full');
+    expect(mocks.nativeResultAck).not.toHaveBeenCalled();
+    await bridge.saveRecovery!(nativeSnapshot(segments[0], '车站请步行。', true));
+    expect(mocks.nativeResultAck).toHaveBeenLastCalledWith({ sequences: [1, 2] });
+    emit('translationResultsAvailable', {}); await settleJournal();
+    expect(translations.filter((t) => t.text === '车站请步行。')).toHaveLength(1);
+  });
+
+  it('keeps pending jobs independent of acknowledged source text and binds their results to a restored negative UI id', async () => {
+    const results = nativeTranslations();
+    const reference = { sessionId: 'session-a', revision: 7, target: 'zh', sequences: [1, 2], completed: false };
+    const json = JSON.stringify({ version: 1, savedAt: 1, lines: [{ time: '11:00:00', text: '駅まで歩いてください。', lang: 'ja', translation: '', nativeTranslation: reference }] });
+    mocks.storage.set('realtime-translator.recovery', JSON.stringify({ through: 2, json }));
+    mocks.journal = vi.fn(async () => ({ segments: [], status: { state: 'stopped', sessionId: 'session-a', startedAt: sessionStart } }));
+    results.results = [nativeResult(1, '車站'), nativeResult(2, '請步行。')];
+    const bridge = createIosBridge();
+    const translations: TranslationPayload[] = [];
+    bridge.onSegment(() => {}); bridge.onTranslation((t) => translations.push(t));
+    expect(await bridge.loadRecovery!()).toBe(json);
+    await settleJournal();
+    expect(translations).toHaveLength(0);
+    expect(mocks.nativeResultAck).not.toHaveBeenCalled();
+    bridge.restoreNativeTranslationRows!([{ id: -2, text: '駅まで歩いてください。', lang: 'ja', translation: '', nativeTranslation: reference }]);
+    await settleJournal();
+    expect(translations).toEqual([{ id: -2, text: '车站请步行。' }]);
+    expect(mocks.translate).not.toHaveBeenCalled();
+    await bridge.saveRecovery!(nativeSnapshot({ ...fragment('駅まで歩いてください。'), nativeTranslation: reference }, '车站请步行。', true));
+    expect(mocks.nativeResultAck).toHaveBeenLastCalledWith({ sequences: [1, 2] });
+  });
+
+  it('refuses to archive while native translation is pending and patches the final translation into the retry snapshot', async () => {
+    const results = nativeTranslations();
+    const { bridge, segments, snapshot } = await journalSetup();
+    const segment = nativeFragment(1, '翻訳を待っている文です。');
+    snapshot.segments.push(segment); emit('segment', segment);
+    results.results = [nativeResult(1, '', 'pending')]; await settleJournal();
+    await bridge.stopPipeline(); await settleJournal();
+    const lines = [{ time: '11:00:00', text: segments[0].text, translation: '', nativeTranslation: segments[0].nativeTranslation }];
+    await expect(bridge.saveArchive('pending', lines)).rejects.toThrow('翻译仍在处理中');
+    expect(mocks.storage.get('realtime-translator.archives')).toBeUndefined();
+    expect(mocks.nativeResultAck).not.toHaveBeenCalled();
+    results.results = [nativeResult(1, '正在等待翻译的句子。')];
+    emit('translationResultsAvailable', {}); await settleJournal();
+    await bridge.saveArchive('complete', lines);
+    const saved = JSON.parse(mocks.storage.get('realtime-translator.archives')!);
+    expect(saved[0].lines[0]).toMatchObject({ translation: '正在等待翻译的句子。', nativeTranslation: { completed: true } });
+  });
+
+  it('does not show translation pending for the same language and preserves core script conversion', async () => {
+    const results = nativeTranslations();
+    const { bridge, segments, translations, snapshot } = await journalSetup();
+    const segment = { ...nativeFragment(1, '這是繁體中文。'), lang: 'zh', duration: 3 };
+    snapshot.segments.push(segment); emit('segment', segment); await settleJournal();
+    await bridge.stopPipeline(); await settleJournal();
+    expect(translations.some((t) => t.pending)).toBe(false);
+    expect(translations.at(-1)).toMatchObject({ text: '这是繁体中文。' });
+    expect(mocks.translate).not.toHaveBeenCalled();
+    expect(segments).toHaveLength(1);
+    results.results = [nativeResult(1, '', 'done', { skipped: true })];
+  });
+
+  it('surfaces a translation journal failure on its row while leaving ASR running and permitting original-text archive', async () => {
+    const results = nativeTranslations();
+    const { bridge, segments, translations, snapshot } = await journalSetup();
+    const segment = nativeFragment(1, '原文を残す必要があります。');
+    snapshot.segments.push(segment); emit('segment', segment); await settleJournal();
+    results.error = 'Translation queue is full';
+    emit('translationResultsAvailable', {}); await settleJournal();
+    expect(translations.at(-1)).toMatchObject({ failed: true, error: 'Translation queue is full' });
+    expect(mocks.stop).not.toHaveBeenCalled();
+    await bridge.saveArchive('original', [{ time: '', text: segments[0].text, translation: '', nativeTranslation: segments[0].nativeTranslation }]);
+    expect(mocks.nativeResultAck).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges completed detached jobs only after the user durably discards the recovery offer', async () => {
+    const results = nativeTranslations();
+    const reference = { sessionId: 'session-a', revision: 7, target: 'zh', sequences: [1], completed: false };
+    mocks.storage.set('realtime-translator.recovery', JSON.stringify({ through: 1,
+      json: JSON.stringify({ version: 1, savedAt: 1, lines: [{ time: '', text: '未復元です。', lang: 'ja', translation: '', nativeTranslation: reference }] }) }));
+    mocks.journal = vi.fn(async () => ({ segments: [], status: { state: 'stopped', sessionId: 'session-a', startedAt: sessionStart } }));
+    results.results = [nativeResult(1, '尚未恢复。')];
+    const bridge = createIosBridge(); bridge.onSegment(() => {});
+    await bridge.loadRecovery!(); await settleJournal();
+    expect(mocks.nativeResultAck).not.toHaveBeenCalled();
+    await bridge.clearRecovery!();
+    expect(mocks.nativeResultAck).toHaveBeenLastCalledWith({ sequences: [1] });
+  });
+
+  it('rejects results from another translation revision and supports auto-language native routing with an explicit fixed target', async () => {
+    const results = nativeTranslations();
+    const { bridge, snapshot, translations } = await journalSetup();
+    const segment = nativeFragment(1, '正しい設定を使う文です。');
+    snapshot.segments.push(segment); emit('segment', segment);
+    results.results = [nativeResult(1, '错误旧配置', 'done', { revision: 6 })]; await settleJournal();
+    expect(translations.some((t) => t.text === '错误旧配置')).toBe(false);
+    expect(translations.at(-1)).toMatchObject({ pending: true });
+    results.results = [nativeResult(1, '使用正确设置。')]; emit('translationResultsAvailable', {}); await settleJournal();
+    expect(translations.at(-1)).toMatchObject({ text: '使用正确设置。' });
+    await bridge.stopPipeline();
+    await bridge.saveSettings({ asr: { language: 'auto' } });
+    expect(mocks.nativeConfigure).toHaveBeenLastCalledWith({ enabled: true, engine: 'local', target: 'zh' });
   });
 });

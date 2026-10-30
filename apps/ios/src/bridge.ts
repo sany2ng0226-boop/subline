@@ -35,6 +35,8 @@ import {
   getAsrModel,
   SentenceAssembler,
   TranslationContext,
+  planTranslation,
+  guardAsrLang,
 } from '@rt/core';
 import type {
   AppBridge,
@@ -55,9 +57,10 @@ import type {
   TranslationPayload,
   StatusPayload,
   TranslationStatusPayload,
+  NativeTranslationReference,
 } from '@rt/core';
 import { RealtimeAsr, RealtimeTranslate } from '../native-plugin';
-import type { NativeSegmentPayload, NativeRecordingStatus } from '../native-plugin/definitions';
+import type { NativeSegmentPayload, NativeRecordingStatus, NativeTranslationResult } from '../native-plugin/definitions';
 
 const SETTINGS_KEY = 'realtime-translator.settings';
 const ARCHIVES_KEY = 'realtime-translator.archives';
@@ -100,6 +103,7 @@ export function createIosBridge(): AppBridge {
       }
     }
     cachedSettings = applyPlatformConstraints(withDefaults(raw, defaults));
+    await configureNativeTranslation(cachedSettings);
     return cachedSettings;
   }
 
@@ -117,6 +121,7 @@ export function createIosBridge(): AppBridge {
         resetReverseTranslationContext(reverseCtx);
       }
       cachedSettings = saved;
+      await configureNativeTranslation(saved);
       return saved;
     });
     settingsSaveQueue = operation.catch(() => undefined);
@@ -184,6 +189,155 @@ export function createIosBridge(): AppBridge {
     for (const wake of foregroundWaiters) wake();
     foregroundWaiters.clear();
     translationContext.reset();
+  }
+
+  const hasNativeTranslation = typeof RealtimeAsr.configureBackgroundTranslation === 'function' &&
+    typeof RealtimeAsr.drainTranslationResults === 'function';
+  interface NativeRow {
+    id: number;
+    text: string;
+    lang?: string;
+    reference: NativeTranslationReference;
+    attached: boolean;
+    result?: { text: string; failed?: boolean; error?: string };
+    delivered?: string;
+  }
+  const nativeRows = new Map<string, NativeRow>();
+  const nativeResults = new Map<number, NativeTranslationResult>();
+  const discardedNative = new Set<number>();
+  const acknowledgedTranslations = new Set<number>();
+  let nativeTranslationDrain: Promise<void> | null = null;
+  let nativeTranslationTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function rowKey(reference: NativeTranslationReference): string {
+    return `${reference.sessionId}:${reference.revision}:${reference.target}:${reference.sequences.join(',')}`;
+  }
+  function validReference(value: unknown): value is NativeTranslationReference {
+    const ref = value as NativeTranslationReference | undefined;
+    return !!ref && typeof ref.sessionId === 'string' && Number.isSafeInteger(ref.revision) &&
+      typeof ref.target === 'string' && Array.isArray(ref.sequences) && ref.sequences.length > 0 &&
+      ref.sequences.every((n) => Number.isSafeInteger(n) && n > 0);
+  }
+  async function configureNativeTranslation(settings: AppSettings): Promise<void> {
+    if (!hasNativeTranslation) return;
+    try {
+      await RealtimeAsr.configureBackgroundTranslation({
+        enabled: settings.translation.enabled,
+        engine: settings.translation.engine === 'cloud' ? 'cloud' : 'local',
+        target: settings.translation.targetLang ?? settings.nativeLang,
+      });
+    } catch { /* Older systems retain the foreground Translation framework path. */ }
+  }
+  function captureNativeRow(line: SegmentPayload, sources: NativeSegmentPayload[]): NativeRow | null {
+    const translated = sources.filter((source) => source.translationMode === 'native');
+    if (!translated.length) return null;
+    const first = translated[0];
+    if (!Number.isSafeInteger(first.translationRevision) || !first.target) return null;
+    const reference: NativeTranslationReference = { sessionId: first.sessionId,
+      revision: first.translationRevision!, target: first.target, sequences: translated.map((source) => source.sequence) };
+    const mixed = translated.length !== sources.length || translated.some((source) =>
+      source.sessionId !== first.sessionId || source.translationRevision !== first.translationRevision || source.target !== first.target);
+    const plan = planTranslation(M2M100_SPEC, guardAsrLang(line.text, line.lang), reference.target, line.text);
+    const row: NativeRow = { id: line.id, text: line.text, lang: line.lang, reference, attached: true,
+      ...(mixed ? { result: { text: '', failed: true, error: 'Translation configuration changed within this sentence' } }
+        : plan.kind === 'skip' ? { result: { text: '' } }
+          : plan.kind === 'script' ? { result: { text: plan.text } } : {}) };
+    reference.completed = !!row.result;
+    if (row.result?.failed) { reference.failed = true; reference.error = row.result.error; }
+    line.nativeTranslation = { ...reference, sequences: [...reference.sequences] };
+    nativeRows.set(rowKey(reference), row);
+    return row;
+  }
+  function hydrateNativeRows(json: string | null): void {
+    if (!json) return;
+    try {
+      const snapshot = JSON.parse(json);
+      for (const line of Array.isArray(snapshot.lines) ? snapshot.lines : []) {
+        if (!validReference(line.nativeTranslation)) continue;
+        const reference = line.nativeTranslation as NativeTranslationReference;
+        nativeRows.set(rowKey(reference), { id: -1, text: line.text, lang: line.lang, reference,
+          attached: false, ...(reference.completed ? { result: { text: line.translation ?? '',
+            ...(reference.failed ? { failed: true, error: reference.error } : {}) } } : {}) });
+      }
+    } catch { /* A corrupt recovery offer cannot acknowledge native jobs. */ }
+  }
+  function nativeResultFor(sequence: number, reference: NativeTranslationReference): NativeTranslationResult | undefined {
+    const result = nativeResults.get(sequence);
+    return result?.sessionId === reference.sessionId && result.revision === reference.revision && result.target === reference.target
+      ? result : undefined;
+  }
+  function settleNativeRow(row: NativeRow): void {
+    if (!row.result) {
+      const chunks = row.reference.sequences.map((sequence) => nativeResultFor(sequence, row.reference));
+      if (chunks.some((chunk) => !chunk || chunk.state === 'pending')) return;
+      const failure = chunks.find((chunk) => chunk?.state === 'error');
+      const text = chunks.filter((chunk) => !chunk!.skipped).map((chunk) => chunk!.text.trim()).filter(Boolean)
+        .join(row.reference.target === 'en' || row.reference.target === 'ko' ? ' ' : '');
+      const plan = planTranslation(M2M100_SPEC, guardAsrLang(row.text, row.lang ?? ''), row.reference.target, row.text);
+      row.result = failure ? { text: '', failed: true, error: failure.error ?? 'Native translation failed' }
+        : !text && plan.kind === 'translate' ? { text: '', failed: true, error: 'Native translation returned no text' }
+          : { text: plan.kind === 'script' ? plan.text : plan.kind === 'translate' && plan.toScript ? plan.toScript(text) : text };
+    }
+    if (!row.attached) return;
+    const signature = JSON.stringify(row.result);
+    if (row.delivered === signature) return;
+    row.delivered = signature;
+    row.reference.completed = true;
+    row.reference.failed = row.result.failed ?? false;
+    row.reference.error = row.result.error;
+    translationCb.emit({ id: row.id, ...row.result });
+  }
+  function scheduleNativeTranslationDrain(): void {
+    if (!hasNativeTranslation || !isForeground() || nativeTranslationTimer) return;
+    const pending = [...nativeRows.values()].some((row) => row.attached && !row.result && row.reference.sequences.some((sequence) =>
+      !acknowledgedTranslations.has(sequence) && nativeResultFor(sequence, row.reference)?.state !== 'done' &&
+      nativeResultFor(sequence, row.reference)?.state !== 'error'));
+    if (!pending) return;
+    nativeTranslationTimer = setTimeout(() => {
+      nativeTranslationTimer = undefined;
+      void drainNativeTranslations().catch(() => undefined);
+    }, 1000);
+  }
+  function drainNativeTranslations(): Promise<void> {
+    if (!hasNativeTranslation || !isForeground()) return Promise.resolve();
+    if (nativeTranslationDrain) return nativeTranslationDrain;
+    const operation = (async () => {
+      const snapshot = await RealtimeAsr.drainTranslationResults();
+      for (const result of snapshot.results) nativeResults.set(result.sequence, result);
+      if (snapshot.error) for (const row of nativeRows.values()) {
+        if (!row.result) row.result = { text: '', failed: true, error: snapshot.error };
+      }
+      for (const row of nativeRows.values()) settleNativeRow(row);
+      const discarded = [...discardedNative].filter((sequence) => nativeResults.get(sequence)?.state !== 'pending' && nativeResults.has(sequence));
+      if (discarded.length) await acknowledgeTranslationResults(discarded);
+    })();
+    nativeTranslationDrain = operation.finally(() => { nativeTranslationDrain = null; scheduleNativeTranslationDrain(); });
+    return nativeTranslationDrain;
+  }
+  async function acknowledgeTranslationResults(sequences: number[]): Promise<void> {
+    const unique = [...new Set(sequences)].filter((sequence) => !acknowledgedTranslations.has(sequence));
+    if (!unique.length || !hasNativeTranslation) return;
+    try {
+      const result = await RealtimeAsr.ackTranslationResults({ sequences: unique });
+      if (result.ok) for (const sequence of unique) {
+        acknowledgedTranslations.add(sequence); nativeResults.delete(sequence); discardedNative.delete(sequence);
+      }
+    } catch { /* UI data is already durable; the acknowledgement can be retried on resume. */ }
+  }
+  function translationAcknowledgements(json: string | null): number[] {
+    if (!json) return [];
+    try {
+      const snapshot = JSON.parse(json);
+      return (Array.isArray(snapshot.lines) ? snapshot.lines : []).flatMap((line: any) => {
+        if (!validReference(line.nativeTranslation) || !line.nativeTranslation.completed) return [];
+        const row = nativeRows.get(rowKey(line.nativeTranslation));
+        if (!row?.result || row.result.text !== line.translation || !!row.result.failed !== !!line.nativeTranslation.failed) return [];
+        return row.reference.sequences.filter((sequence) => {
+          const result = nativeResultFor(sequence, row.reference);
+          return result?.state === 'done' || result?.state === 'error';
+        });
+      });
+    } catch { return []; }
   }
 
   // ---- 翻译：segment 到达时按当前设置翻成母语（识别语言为 auto 时母语段反向翻成上一次的外语）。
@@ -262,9 +416,16 @@ export function createIosBridge(): AppBridge {
   };
   const sentences = new SentenceAssembler((segment) => {
     const line: SegmentPayload = { ...segment, id: nextLineId++ };
-    markNativeRendered(segment);
+    const sources = markNativeRendered(segment);
+    const nativeRow = captureNativeRow(line, sources);
     segmentCb.emit(line);
-    translateWhenVisible(line);
+    if (nativeRow) {
+      if (!nativeRow.result) translationCb.emit({ id: line.id, text: '', pending: true });
+      else settleNativeRow(nativeRow);
+      queueMicrotask(() => { void drainNativeTranslations().catch(() => undefined); });
+    } else if (sources.some((source) => source.translationMode === 'native')) {
+      translationCb.emit({ id: line.id, text: '', failed: true, error: 'Native translation metadata is incomplete' });
+    } else translateWhenVisible(line);
     publishPartial();
     queueMicrotask(markRenderable);
   });
@@ -288,29 +449,31 @@ export function createIosBridge(): AppBridge {
   let draining: Promise<void> | null = null;
 
   function markRenderable(): void {
-    while (renderedNative.has(renderableSequence + 1)) {
-      renderedNative.delete(++renderableSequence);
-    }
+    const open = Math.min(...unrenderedNative.keys());
+    const eligible = [...renderedNative].filter((sequence) => sequence < open);
+    if (eligible.length) renderableSequence = Math.max(renderableSequence, ...eligible);
+    for (const sequence of eligible) renderedNative.delete(sequence);
   }
 
-  function markNativeRendered(segment: SegmentPayload): void {
+  function markNativeRendered(segment: SegmentPayload): NativeSegmentPayload[] {
     const first = segment as NativeSegmentPayload;
-    if (!Number.isSafeInteger(first.sequence)) return;
+    if (!Number.isSafeInteger(first.sequence)) return [];
     let text = '';
-    const covered: number[] = [];
+    const covered: NativeSegmentPayload[] = [];
     for (const [sequence, source] of unrenderedNative) {
       if (sequence < first.sequence) continue;
       if (source.sessionId !== first.sessionId) break;
       const separator = /[A-Za-z0-9]$/.test(text) && /^[A-Za-z0-9]/.test(source.text) ? ' ' : '';
       text += separator + source.text;
-      covered.push(sequence);
+      covered.push(source);
       if (text === segment.text) {
-        for (const sequence of covered) { renderedNative.add(sequence); unrenderedNative.delete(sequence); }
+        for (const source of covered) { renderedNative.add(source.sequence); unrenderedNative.delete(source.sequence); }
         markRenderable();
-        return;
+        return covered;
       }
-      if (!segment.text.startsWith(text)) return;
+      if (!segment.text.startsWith(text)) return [];
     }
+    return [];
   }
 
   function readDurableRecovery(): Promise<string | null> {
@@ -323,7 +486,9 @@ export function createIosBridge(): AppBridge {
           processedSequence = Math.max(processedSequence, durableSequence);
           renderableSequence = Math.max(renderableSequence, durableSequence);
         }
-        return typeof record.json === 'string' ? record.json : null;
+        const json = typeof record.json === 'string' ? record.json : null;
+        hydrateNativeRows(json);
+        return json;
       } catch { return null; }
     });
     return recoveryLoaded;
@@ -337,13 +502,27 @@ export function createIosBridge(): AppBridge {
 
   function persistRecovery(json: string | null): Promise<void> {
     const through = renderableSequence;
+    const translated = translationAcknowledgements(json);
+    const knownRows = [...nativeRows.keys()];
     const write = recoveryWrites.then(async () => {
       await readDurableRecovery();
       const savedThrough = Math.max(durableSequence, through);
       await Preferences.set({ key: RECOVERY_KEY, value: JSON.stringify({ json, through: savedThrough }) });
       durableSequence = savedThrough;
       recoveryLoaded = Promise.resolve(json);
+      const retained = new Set<string>();
+      try { for (const line of json ? JSON.parse(json).lines ?? [] : []) {
+        if (validReference(line.nativeTranslation)) retained.add(rowKey(line.nativeTranslation));
+      } } catch { /* Invalid UI snapshots cannot retain native row bindings. */ }
+      for (const key of knownRows) if (!retained.has(key)) {
+        const row = nativeRows.get(key);
+        if (row) { row.attached = false; for (const sequence of row.reference.sequences) discardedNative.add(sequence); }
+      }
       await acknowledgeDurable();
+      const discardedReady = [...discardedNative].filter((sequence) => {
+        const result = nativeResults.get(sequence); return result?.state === 'done' || result?.state === 'error';
+      });
+      await acknowledgeTranslationResults([...translated, ...discardedReady]);
     });
     recoveryWrites = write.catch(() => undefined);
     return write;
@@ -398,6 +577,7 @@ export function createIosBridge(): AppBridge {
       : snapshot.status);
     await acknowledgeDurable();
     translateDeferred();
+    await drainNativeTranslations();
   }
 
   function drainNative(): Promise<void> {
@@ -447,12 +627,19 @@ export function createIosBridge(): AppBridge {
       else reportNativeStatus(status);
     }).catch(() => undefined);
     void RealtimeAsr.addListener('setupProgress', (p) => setupProgressCb.emit(p)).catch(() => undefined);
+    if (hasNativeTranslation) void RealtimeAsr.addListener('translationResultsAvailable', () => {
+      void drainNativeTranslations().catch(() => undefined);
+    }).catch(() => undefined);
     if (hasJournal) {
       void RealtimeAsr.addListener('appActive', ({ active }) => {
         nativeAppActive = active;
         if (active) resumeNative();
+        else { clearTimeout(nativeTranslationTimer); nativeTranslationTimer = undefined; }
       }).catch(() => undefined);
-      if (typeof document !== 'undefined') document.addEventListener('visibilitychange', resumeNative);
+      if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => {
+        if (!isForeground()) { clearTimeout(nativeTranslationTimer); nativeTranslationTimer = undefined; }
+        resumeNative();
+      });
       if (typeof window !== 'undefined') window.addEventListener('pageshow', resumeNative);
     }
   }
@@ -497,6 +684,7 @@ export function createIosBridge(): AppBridge {
       const operation = (async (): Promise<StartResult> => {
         try {
           await settingsSaveQueue;
+          await configureNativeTranslation(await readSettingsOnce());
           await nativeEvents;
           const r = await RealtimeAsr.start(await currentAsrOptions());
           if (!r.ok) finishPendingSpeech();
@@ -551,6 +739,16 @@ export function createIosBridge(): AppBridge {
       return json;
     },
     async clearRecovery(): Promise<void> { await persistRecovery(null); },
+    restoreNativeTranslationRows(rows): void {
+      for (const restored of rows) {
+        if (!validReference(restored.nativeTranslation)) continue;
+        const key = rowKey(restored.nativeTranslation);
+        let row = nativeRows.get(key);
+        if (!row) { hydrateNativeRows(JSON.stringify({ lines: [restored] })); row = nativeRows.get(key); }
+        if (row) { row.id = restored.id; row.attached = true; row.delivered = undefined; settleNativeRow(row); }
+      }
+      void drainNativeTranslations().catch(() => undefined);
+    },
 
     // ===== 设置（Preferences）=====
     getSettings(): Promise<AppSettings> {
@@ -630,13 +828,22 @@ export function createIosBridge(): AppBridge {
 
     // ===== 归档（Preferences）=====
     async saveArchive(name: string, lines: ArchiveLine[]): Promise<ArchiveSummary[]> {
+      await drainNativeTranslations();
+      if (lines.some((line) => validReference(line.nativeTranslation) &&
+          !nativeRows.get(rowKey(line.nativeTranslation))?.result)) {
+        throw new Error('翻译仍在处理中，请完成后再保存归档；原文已保留。');
+      }
+      const completedLines = lines.map((line) => {
+        const row = validReference(line.nativeTranslation) ? nativeRows.get(rowKey(line.nativeTranslation)) : undefined;
+        return row?.result ? { ...line, translation: row.result.text, nativeTranslation: { ...row.reference, completed: true } } : line;
+      });
       const records = await readArchives();
       const createdAt = Date.now();
       const record: ArchiveRecord = {
         id: makeArchiveId(createdAt),
         name,
         createdAt,
-        lines,
+        lines: completedLines,
       };
       records.push(record);
       await writeArchives(records);
