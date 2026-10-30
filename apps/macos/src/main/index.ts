@@ -1,3 +1,6 @@
+import { AudioRecordingStore } from './audio-recordings';
+import { archiveAudioResponse } from './archive-audio-response';
+import { randomUUID } from 'node:crypto';
 import type { SettingsPatch } from '@rt/core';
 import { createGlobalShortcuts, dispatchShortcut } from './global-shortcuts';
 import { createQuitFlow, setupSingleInstance } from './quit-flow';
@@ -23,6 +26,7 @@ import {
   globalShortcut,
   ipcMain,
   powerSaveBlocker,
+  protocol,
   session,
   shell,
   systemPreferences,
@@ -48,12 +52,13 @@ import {
   type ModelInfo,
   type ModelKind,
   type CloseGuard,
+  type AudioSource,
 } from '@rt/core';
 import { localModelCached } from './translation/model-cache';
 import { downloadTranslationModel } from './translation/model-downloader';
 import { loadSettings, saveSettings } from './settings';
 import { asrModelsReady, downloadAsrModels } from './model-downloader';
-import { listArchives, getArchive, saveArchive, deleteArchive } from './archives';
+import { listArchives, getArchive, saveArchive, deleteArchive, archivedRecordingIds } from './archives';
 import { ArchiveLibraryStore } from './archive-library';
 import { listSummaries, suggestArchiveTitle } from '@rt/core';
 import { systemAudioSupported } from '../shared/audio-source';
@@ -70,6 +75,10 @@ import type {
   ArchiveLine,
   MicPermission,
 } from '../shared/types';
+
+protocol.registerSchemesAsPrivileged([{ scheme: 'subline-audio', privileges: {
+  standard: true, secure: true, supportFetchAPI: true, stream: true,
+} }]);
 
 // A development preview must not reuse a running installation's settings or archives.
 const previewProfile = !app.isPackaged ? process.env['RT_PREVIEW_PROFILE'] : undefined;
@@ -164,7 +173,15 @@ function confirmLeave(): Promise<boolean> {
       cancelId: 2,
       noLink: true,
     });
-    return resolveLeaveSession(response, () => archiveBeforeClose(target), () => recoveryStore.clearRecovery());
+    return resolveLeaveSession(response, () => archiveBeforeClose(target), async () => {
+      if (response === 1) {
+        sessionActive = false;
+        activeCaptureToken = undefined;
+        await audioRecordings.finish();
+        await audioRecordings.remove(await unarchivedRecordingIds());
+      }
+      await recoveryStore.clearRecovery();
+    });
   })().finally(() => {
     leavePrompt = null;
   });
@@ -178,6 +195,11 @@ let asrChildConfig: { modelId: string; language: AsrLang } | null = null;
 // 是否处于录音会话（start 进入 running 后为真、stop/子进程退出后为假）。
 // prewarm 冷启动完成时据此判断：会话已由 start 接管（running）则不再发 stopped 覆盖。
 let sessionActive = false;
+let activeCaptureToken: string | undefined;
+let activeRecordingId: string | undefined;
+let activeSource: AudioSource | undefined;
+let activeAudioSamples = 0;
+const audioRecordings = new AudioRecordingStore(() => path.join(app.getPath('userData'), 'recordings'));
 
 // 渲染层的行 id：主进程单调递增，跨 ASR 子进程重启不归零。
 // 子进程内部的段序号随进程生命周期从 0 计，直接透传会与既有行冲突、译文回填错行。
@@ -323,10 +345,12 @@ function createWindow(): void {
     stopSession: () => {
       closeGuard = null;
       sessionActive = false;
+      activeCaptureToken = undefined;
+      audioRecordings.markIncomplete();
       reconfigureAsr();
       reconfigureTranslate();
     },
-    flushRecovery: () => recoveryStore.flush(),
+    flushRecovery: async () => { await audioRecordings.finish(); await recoveryStore.flush(); },
     reload: () => target.webContents.reload(),
     reportFailure: () => {
       const messages = {
@@ -498,6 +522,8 @@ function startAsrChild(): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     let settled = false;
     child.on('message', (m: AsrToMain) => {
+      // A timed-out or replaced worker must not attach late captions to the next capture.
+      if (asrChild !== child) return;
       switch (m.type) {
         case 'ready':
           settled = true;
@@ -505,7 +531,8 @@ function startAsrChild(): Promise<void> {
           break;
         case 'segment': {
           // 行 id 改写为主进程计数器的值：UI 上屏与译文回填都以它对应
-          const payload: SegmentPayload = { ...m.payload, id: nextLineId++ };
+          const payload: SegmentPayload = { ...m.payload, id: nextLineId++,
+            ...(activeRecordingId ? { recordingId: activeRecordingId } : {}) };
           sendToRenderer('pipeline:segment', payload); // 原文立即上屏
           translateSegment(payload); // 译文异步回填
           break;
@@ -567,44 +594,57 @@ function ensureAsr(): Promise<void> {
   return asrReady ?? Promise.resolve();
 }
 
-ipcMain.handle('pipeline:start', async (): Promise<StartResult> => {
-  // 系统音频 + 开发模式提示：CoreAudio Tap 的 TCC 责任进程是「启动 Electron 的父程序」——
-  // 从终端/IDE 跑 dev 时责任落在终端/IDE，它们的 Info.plist 没有 NSAudioCaptureUsageDescription，
-  // macOS 会给一条不弹窗、无报错的**静音流**。解法：给终端/IDE 手动授予「仅录制系统音频」权限，
-  // 或用打包产物验证（应用自身 Info.plist 已带该 key，不受影响）。
-  if (!app.isPackaged && effectiveSettings().audioSource === 'system') {
-    console.warn(
-      '[system-audio] dev 模式下若采集到的系统音频为静音：请在 系统设置 → 隐私与安全性 → ' +
-        '屏幕与系统音频录制 → 仅录制系统音频 中加入你的终端/IDE，或用打包应用验证'
-    );
-  }
-  // 仅麦克风音源需申请麦克风权限；系统音频音源不触碰麦克风权限
-  // （系统音频的录制授权在渲染层 getDisplayMedia 时由系统弹出，见 mac-bridge）。
-  if (effectiveSettings().audioSource === 'mic' && process.platform === 'darwin') {
-    const granted = await systemPreferences.askForMediaAccess('microphone');
-    if (!granted) {
-      return { ok: false, error: '未获得麦克风权限，请在系统设置中授权', code: 'mic-permission' };
-    }
-  }
-
+let pipelineStarting = false;
+ipcMain.handle('pipeline:start', async (event): Promise<StartResult> => {
+  if (!win || event.sender !== win.webContents) return { ok: false, error: 'Invalid recording window' };
+  if (sessionActive) return { ok: true, captureSource: activeSource, captureToken: activeCaptureToken, recordingId: activeRecordingId };
+  if (pipelineStarting) return { ok: false, error: 'Recording startup is already in progress' };
+  pipelineStarting = true;
   try {
-    // 仅真冷启动（fork 子进程装模型）才报 loading：预热后复用路径瞬时完成，
-    // 报 loading 会让每次开始录音都闪一次「识别模型加载中」的误导提示。
-    if (!asrChild) {
-      sendToRenderer('pipeline:status', { state: 'loading' });
+    const source = effectiveSettings().audioSource;
+    // 系统音频 + 开发模式提示：CoreAudio Tap 的 TCC 责任进程是「启动 Electron 的父程序」——
+    // 从终端/IDE 跑 dev 时责任落在终端/IDE，它们的 Info.plist 没有 NSAudioCaptureUsageDescription，
+    // macOS 会给一条不弹窗、无报错的**静音流**。解法：给终端/IDE 手动授予「仅录制系统音频」权限，
+    // 或用打包产物验证（应用自身 Info.plist 已带该 key，不受影响）。
+    if (!app.isPackaged && source === 'system') {
+      console.warn(
+        '[system-audio] dev 模式下若采集到的系统音频为静音：请在 系统设置 → 隐私与安全性 → ' +
+          '屏幕与系统音频录制 → 仅录制系统音频 中加入你的终端/IDE，或用打包应用验证'
+      );
     }
-    await ensureAsr();
-  } catch (err) {
-    return { ok: false, error: (err as Error).message };
-  }
-  // 子进程跨会话复用：每次开始录音都重置计时基线，segment.start 相对本次会话起点
-  asrChild?.postMessage({ type: 'reset' });
-  resetReverseTranslationContext(reverseCtx); // 外语历史只在本次会话内有效
-  translationContext.reset();
-  sendToRenderer('pipeline:status', { state: 'running' });
-  sessionActive = true;
-  displaySleep.start();
-  return { ok: true };
+    // 仅麦克风音源需申请麦克风权限；系统音频音源不触碰麦克风权限
+    // （系统音频的录制授权在渲染层 getDisplayMedia 时由系统弹出，见 mac-bridge）。
+    if (source === 'mic' && process.platform === 'darwin') {
+      const granted = await systemPreferences.askForMediaAccess('microphone');
+      if (!granted) {
+        return { ok: false, error: '未获得麦克风权限，请在系统设置中授权', code: 'mic-permission' };
+      }
+    }
+
+    try {
+      // 仅真冷启动（fork 子进程装模型）才报 loading：预热后复用路径瞬时完成，
+      // 报 loading 会让每次开始录音都闪一次「识别模型加载中」的误导提示。
+      if (!asrChild) {
+        sendToRenderer('pipeline:status', { state: 'loading' });
+      }
+      await ensureAsr();
+      await audioRecordings.finish();
+      activeRecordingId = process.platform === 'darwin' ? (await audioRecordings.start(source)).id : undefined;
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+    // 子进程跨会话复用：每次开始录音都重置计时基线，segment.start 相对本次会话起点
+    asrChild?.postMessage({ type: 'reset' });
+    resetReverseTranslationContext(reverseCtx); // 外语历史只在本次会话内有效
+    translationContext.reset();
+    sendToRenderer('pipeline:status', { state: 'running' });
+    sessionActive = true;
+    activeSource = source;
+    activeAudioSamples = 0;
+    activeCaptureToken = randomUUID();
+    displaySleep.start();
+    return { ok: true, captureSource: source, captureToken: activeCaptureToken, recordingId: activeRecordingId };
+  } finally { pipelineStarting = false; }
 });
 
 // 预热 ASR 管线：把识别模型装载进内存，绝不触碰麦克风、不申请权限；模型未下载时静默跳过。
@@ -810,8 +850,8 @@ ipcMain.handle(
   }
 );
 
-ipcMain.on('pipeline:audio', (_event, samples: Float32Array) => {
-  if (!asrChild) return;
+ipcMain.on('pipeline:audio', (event, samples: Float32Array, captureToken?: string) => {
+  if (!win || event.sender !== win.webContents || !sessionActive || captureToken !== activeCaptureToken) return;
   // IPC 过来的其实是字节视图，必须还原成 Float32Array 再转发，否则子进程会把
   // 8192 字节当成 8192 个浮点（值为 0-255）→ 音频变噪声、识别全错
   const f = new Float32Array(
@@ -819,8 +859,14 @@ ipcMain.on('pipeline:audio', (_event, samples: Float32Array) => {
     samples.byteOffset,
     samples.byteLength / Float32Array.BYTES_PER_ELEMENT
   );
-  // 主进程只转发音频给识别子进程，不做推理
-  asrChild.postMessage({ type: 'audio', samples: f });
+  if (activeRecordingId) {
+    try { audioRecordings.append(f); activeAudioSamples += f.length; }
+    catch (error) {
+      sendToRenderer('pipeline:status', { state: 'error', code: 'recording-write-failed', error: String(error) });
+    }
+  }
+  try { asrChild?.postMessage({ type: 'audio', samples: f }); }
+  catch (error) { sendToRenderer('pipeline:status', { state: 'error', code: 'asr-crashed', error: String(error) }); }
 });
 
 const internalArchives = process.platform === 'win32' || app.getName().endsWith('Internal') || !!previewProfile;
@@ -838,21 +884,46 @@ ipcMain.handle('archive:get', async (_event, id: string) => {
   const record = getArchive(id);
   return record && internalArchives ? (await archiveLibrary.decorate([record]))[0] : record;
 });
-ipcMain.handle('archive:save', async (_event, name: string, lines: ArchiveLine[], folderId?: string | null) => {
+async function unarchivedRecordingIds(): Promise<string[]> {
+  const archived = archivedRecordingIds();
+  return (await audioRecordings.list()).map((audio) => audio.id).filter((id) => !archived.has(id));
+}
+async function archiveAudio(ids: string[] = []) {
+  if (!Array.isArray(ids) || ids.length > 2000) throw new Error('Invalid recording list');
+  if (sessionActive) throw new Error('Stop recording before saving the archive');
+  await audioRecordings.finish();
+  return audioRecordings.resolve(ids);
+}
+ipcMain.handle('recordings:unarchived', () => unarchivedRecordingIds());
+ipcMain.handle('recordings:discard', async (_event, ids: string[]) => {
+  if (!Array.isArray(ids) || ids.length > 2000) throw new Error('Invalid recording list');
+  const protectedIds = archivedRecordingIds();
+  await audioRecordings.remove(ids.filter((id) => !(sessionActive && id === activeRecordingId) && !protectedIds.has(id)));
+});
+ipcMain.handle('archive:audio-url', (_event, archiveId: string, recordingId: string) => {
+  if (!getArchive(archiveId)?.audio?.some((audio) => audio.id === recordingId)) throw new Error('Recording not found in archive');
+  return `subline-audio://archive/${encodeURIComponent(archiveId)}/${encodeURIComponent(recordingId)}`;
+});
+
+ipcMain.handle('archive:save', async (_event, name: string, lines: ArchiveLine[], folderId?: string | null, audioIds?: string[]) => {
+  const audio = await archiveAudio(audioIds);
   if (internalArchives) {
     const library = await archiveLibrary.library();
     const destination = folderId === undefined ? library.lastFolderId : folderId;
     if (destination !== null && !library.folders.some((folder) => folder.id === destination)) throw new Error('Folder not found');
-    await saveArchive(name.trim() || suggestArchiveTitle(lines, new Date().toLocaleString()), lines, Date.now(), destination);
+    await saveArchive(name.trim() || suggestArchiveTitle(lines, new Date().toLocaleString()), lines, Date.now(), destination, audio);
     // The archive is already durable; an optional preference write must not invite a duplicate save.
     try { await archiveLibrary.remember(destination); }
     catch (error) { console.error('保存归档默认文件夹失败:', error); }
     return archiveSummaries();
   }
-  return saveArchive(name, lines, Date.now());
+  return saveArchive(name, lines, Date.now(), undefined, audio);
 });
 ipcMain.handle('archive:delete', async (_event, id: string) => {
+  const audioIds = getArchive(id)?.audio?.map(audio => audio.id) ?? [];
   await deleteArchive(id);
+  const protectedIds = archivedRecordingIds();
+  await audioRecordings.remove(audioIds.filter(id => !protectedIds.has(id)));
   return archiveSummaries();
 });
 ipcMain.handle('archive:library', () => { requireArchiveLibrary(); return archiveLibrary.library(); });
@@ -954,21 +1025,29 @@ ipcMain.handle(
 );
 
 const asrStop = createAsrStopController();
-ipcMain.handle('pipeline:stop', async () => {
+ipcMain.handle('pipeline:stop', async (_event, options?: { captureIncomplete?: boolean }) => {
+  if (options?.captureIncomplete) audioRecordings.markIncomplete();
   displaySleep.stop();
-  try {
-    if (asrChild) await asrStop.stop(asrChild);
-    sessionActive = false;
-    sendToRenderer('pipeline:status', { state: 'stopped' });
-    return { ok: true };
-  } catch (error) {
-    sessionActive = false;
-    sendToRenderer('pipeline:status', {
-      state: 'error', code: 'asr-crashed',
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw error;
+  sessionActive = false;
+  activeCaptureToken = undefined;
+  const emptyRecordingIds = activeRecordingId && activeAudioSamples === 0 ? [activeRecordingId] : [];
+  const results = await Promise.allSettled([
+    asrChild ? asrStop.stop(asrChild) : Promise.resolve(),
+    audioRecordings.finish(),
+  ]);
+  if (results[0]?.status === 'rejected') reconfigureAsr();
+  const failure = results.find((result) => result.status === 'rejected');
+  if (failure?.status === 'rejected') {
+    sendToRenderer('pipeline:status', { state: 'error',
+      code: results[1]?.status === 'rejected' ? 'recording-write-failed' : 'asr-crashed',
+      error: String(failure.reason) });
+    throw failure.reason;
   }
+  activeRecordingId = undefined;
+  activeSource = undefined;
+  if (emptyRecordingIds.length) await audioRecordings.remove(emptyRecordingIds);
+  sendToRenderer('pipeline:status', { state: 'stopped' });
+  return { ok: true, ...(emptyRecordingIds.length ? { emptyRecordingIds } : {}) };
 });
 
 const isPrimaryInstance = setupSingleInstance({
@@ -984,6 +1063,12 @@ const isPrimaryInstance = setupSingleInstance({
 const quitFlow = createQuitFlow({
   hasUnsavedContent,
   confirmLeave,
+  prepare: async () => {
+    sessionActive = false;
+    activeCaptureToken = undefined;
+    await audioRecordings.finish();
+    await recoveryStore.flush();
+  },
   cleanup: () => {
     // Attempt every release even if one native resource has already gone away.
     for (const release of [
@@ -1007,13 +1092,20 @@ let terminating = false;
 
 app.whenReady().then(() => {
   if (!isPrimaryInstance) return;
+  protocol.handle('subline-audio', request => archiveAudioResponse(request, (archiveId, recordingId) => {
+    if (!getArchive(archiveId)?.audio?.some(audio => audio.id === recordingId)) return null;
+    return audioRecordings.pathFor(recordingId);
+  }));
   // Electron installs its native shutdown handlers before ready, replacing earlier Node handlers.
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.on(signal, () => {
       if (terminating) return;
       terminating = true;
+      audioRecordings.markIncomplete();
       closeGuard = null;
-      void recoveryStore.flush().catch((error) => console.error('Termination recovery flush failed', error))
+      sessionActive = false;
+      activeCaptureToken = undefined;
+      void audioRecordings.finish().then(() => recoveryStore.flush()).catch((error) => console.error('Termination recovery flush failed', error))
         .finally(() => quitFlow.windowsClosed());
     });
   }
@@ -1027,7 +1119,7 @@ app.whenReady().then(() => {
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     const frame = request.frame;
     if (!frame || !win || win.isDestroyed() || frame !== win.webContents.mainFrame
-      || !request.audioRequested || effectiveSettings().audioSource !== 'system' || !systemAudioAvailable()) {
+      || !request.audioRequested || (activeSource ?? effectiveSettings().audioSource) !== 'system' || !systemAudioAvailable()) {
       callback({});
       return;
     }
@@ -1071,7 +1163,7 @@ app.on('will-quit', (event) => {
   displaySleep.stop();
   if (recoveryFlushed) return;
   event.preventDefault();
-  void recoveryStore.flush().then(() => {
+  void Promise.allSettled([audioRecordings.finish(), recoveryStore.flush()]).then(() => {
     recoveryFlushed = true;
     app.quit();
   });

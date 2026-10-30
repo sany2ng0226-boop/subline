@@ -9,7 +9,7 @@ import type { SettingsFormData } from './form';
 
 const { t } = useI18n();
 // 父组件持有 reactive 表单对象，子组件直接修改其字段
-const props = defineProps<{ form: SettingsFormData }>();
+const props = defineProps<{ form: SettingsFormData; disabled?: boolean }>();
 
 // 平台是否支持本地翻译（Web 在 iOS 上为 false：WebKit 内存装不下本地模型）。
 // 不可用时从模型下拉去掉本地模型（仍保留 不翻译 / API 服务）。iOS 上持久化的 engine
@@ -43,7 +43,7 @@ const cloudFilled = computed(
     (loopback.value || props.form.cloud.apiKey.trim() !== '') &&
     props.form.cloud.model.trim() !== '',
 );
-const canTest = computed(() => cloudFilled.value && cloudTest.value !== 'testing');
+const canTest = computed(() => !props.disabled && cloudFilled.value && cloudTest.value !== 'testing');
 
 async function runCloudTest(): Promise<void> {
   if (!canTest.value) return;
@@ -71,6 +71,7 @@ watch(
 const selection = computed<string>({
   get: () => props.form.translationMode === 'local' ? props.form.translationModel : props.form.translationMode,
   set: (value) => {
+    if (props.disabled) return;
     if (value === 'none' || value === 'cloud') props.form.translationMode = value;
     else {
       props.form.translationModel = value as SettingsFormData['translationModel'];
@@ -175,7 +176,7 @@ const modelOptions = computed(() => {
 <template>
   <div>
     <n-form-item :label="t('settings.translationModel')" :show-feedback="false">
-      <model-picker v-model:value="selection" kind="translation" :options="modelChoices" />
+      <model-picker v-model:value="selection" kind="translation" :disabled="disabled" :options="modelChoices" />
     </n-form-item>
 
     <div v-if="form.translationMode === 'cloud'" class="pt-5">
@@ -183,6 +184,7 @@ const modelOptions = computed(() => {
       <n-form-item :label="t('settings.baseUrl')">
         <n-auto-complete
           v-model:value="form.cloud.baseURL"
+          :disabled="disabled"
           :options="baseUrlOptions"
           :render-label="renderBaseUrlLabel"
           :get-show="() => true"
@@ -193,6 +195,7 @@ const modelOptions = computed(() => {
       <n-form-item :label="t('settings.model')">
         <n-auto-complete
           v-model:value="form.cloud.model"
+          :disabled="disabled"
           :options="modelOptions"
           :get-show="() => true"
           clearable
@@ -200,7 +203,7 @@ const modelOptions = computed(() => {
         />
       </n-form-item>
       <n-form-item :label="t(loopback ? 'settings.localApiKeyOptional' : 'settings.apiKey')">
-        <n-input v-model:value="form.cloud.apiKey" type="password" show-password-on="click" placeholder="sk-..." />
+        <n-input v-model:value="form.cloud.apiKey" :disabled="disabled" type="password" show-password-on="click" placeholder="sk-..." />
       </n-form-item>
       <!-- 云端提示 + 连接测试为表单的收尾区块：用 pb-6 垫出与 n-form-item 反馈区（24px）
            等高的底部留白，保证无论以哪种状态收尾（有无测试按钮/错误文案），表单底边与

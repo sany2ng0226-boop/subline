@@ -131,7 +131,7 @@ it('surfaces a failed stop and blocks archive until a later successful recording
 it('waits for an automatic error-triggered stop before allowing archive', async () => {
   const { setBridge, bridge } = await import('../bridge');
   let finish!: () => void;
-  setBridge({ ...bridge(), stopPipeline: () => new Promise<void>((resolve) => { finish = resolve; }) });
+  setBridge({ ...bridge(), stopPipeline: () => new Promise<{ ok: boolean }>((resolve) => { finish = () => resolve({ ok: true }); }) });
   await state.startRecording();
   callbacks.onStatus({ state: 'error', error: 'audio interrupted' });
   let stopped = false;
@@ -158,4 +158,38 @@ it('converts session-relative seconds into wall-clock time and preserves it in a
     callbacks.onSegment({ id: 91, text: 'Later', start: 22250, duration: 2, lang: 'en' });
     expect(state.lines[1].time).toBe('01:49:00');
   } finally { now.mockRestore(); }
+});
+
+it('links independent resumed recordings without inserting wall-clock pause into seek offsets', async () => {
+  const { setBridge, bridge } = await import('../bridge');
+  const ids = ['first-capture', 'resumed-capture'];
+  setBridge({ ...bridge(), startPipeline: async () => ({ ok: true, recordingId: ids.shift() }) });
+  await state.startRecording();
+  callbacks.onSegment({ id: 101, text: 'before pause', start: 2.25, duration: 1.5, recordingId: 'first-capture' });
+  await state.stopRecording();
+  await state.startRecording();
+  callbacks.onSegment({ id: 102, text: 'after pause', start: 0.5, duration: 2, recordingId: 'resumed-capture' });
+  await state.stopRecording();
+  expect(state.recordingIds).toEqual(['first-capture', 'resumed-capture']);
+  expect(state.archiveSnapshot().map(line => line.audio)).toEqual([
+    { recordingId: 'first-capture', start: 2.25, duration: 1.5 },
+    { recordingId: 'resumed-capture', start: 0.5, duration: 2 },
+  ]);
+  state.deleteTranscript();
+  expect(state.recordingIds).toEqual([]);
+  state.undoDelete();
+  expect(state.recordingIds).toEqual(['first-capture', 'resumed-capture']);
+});
+
+it('retries failed finalization for archive without requiring a new capture', async () => {
+  const { setBridge, bridge } = await import('../bridge');
+  const stop = vi.fn().mockRejectedValueOnce(new Error('disk unavailable')).mockResolvedValue({ ok: true });
+  setBridge({ ...bridge(), stopPipeline: stop });
+  await state.startRecording();
+  state.restoreRecordings(['partial-audio']);
+  await expect(state.stopRecording()).rejects.toThrow('disk unavailable');
+  await expect(state.ensureStopped()).resolves.toBeUndefined();
+  expect(stop).toHaveBeenCalledTimes(2);
+  expect(state.recordingIds).toEqual(['partial-audio']);
+  expect(state.recording.value).toBe(false);
 });

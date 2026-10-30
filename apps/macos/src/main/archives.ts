@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
 import { listSummaries, makeArchiveId } from '@rt/core';
-import type { ArchiveLine, ArchiveRecord, ArchiveSummary } from '../shared/types';
+import type { AudioAttachment, ArchiveLine, ArchiveRecord, ArchiveSummary } from '../shared/types';
 
 let cached: ArchiveRecord[] | null = null;
 
@@ -83,16 +83,21 @@ function mutate(update: (records: ArchiveRecord[]) => ArchiveRecord[]): Promise<
   return pending;
 }
 
-export function saveArchive(name: string, lines: ArchiveLine[], createdAt: number, folderId?: string | null): Promise<ArchiveSummary[]> {
+export function saveArchive(name: string, lines: ArchiveLine[], createdAt: number, folderId?: string | null, audio?: AudioAttachment[]): Promise<ArchiveSummary[]> {
   return mutate((records) => [...records, {
     id: makeArchiveId(createdAt),
     name: name.trim() || new Date(createdAt).toISOString(),
     createdAt,
     lines,
+    ...(audio?.length ? { audio } : {}),
     ...(folderId !== undefined ? { folderId } : {}),
   }]);
 }
 
 export function deleteArchive(id: string): Promise<ArchiveSummary[]> {
   return mutate((records) => records.filter((r) => r.id !== id));
+}
+
+export function archivedRecordingIds(): Set<string> {
+  return new Set(load().flatMap(record => record.audio?.map(audio => audio.id) ?? []));
 }

@@ -10,6 +10,7 @@ import { LANG_LABELS } from '../components/settings/form';
 import { settings, saveSettings, stepFontSize, fontAtMin, fontAtMax, cycleTheme, themePref } from '../composables/useSettings';
 import {
   lines,
+  recordingIds,
   partial,
   stablePartial,
   draftLine,
@@ -75,7 +76,7 @@ async function selectPrimaryLanguage(language: AsrLang): Promise<void> {
 }
 
 // 仅已定稿记录才算"有内容可清"：实时 partial 是瞬时的，清它没意义（归档也只存 lines）
-const hasContent = computed(() => lines.length > 0);
+const hasContent = computed(() => lines.length > 0 || recordingIds.length > 0);
 
 // 删除是破坏性操作：危险色、放在菜单最后并与其它项隔开
 const DANGER = 'var(--rt-live)';
@@ -246,9 +247,10 @@ const loadingSummary = computed(() =>
   loadingItems.value.length > 1 ? t('status.preparing') : (loadingItems.value[0] ?? ''),
 );
 
-// 录音进行中（含启停在途）：会打断会话的操作（音源、识别语言、清空、归档、进设置 / 归档页）全部禁用；
+// 录音进行中（含启停在途）：音源、识别语言、清空、归档和归档页禁用；设置页按字段锁定。
 // 只改显示的字号与主题不打断会话，录音中仍可用。
 const headerLocked = computed(() => recording.value || recordBusy.value || languageSaving.value || archiveSaving.value);
+const settingsLocked = computed(() => recordBusy.value || languageSaving.value || archiveSaving.value || awaitingRecord.value || preparing.value);
 // 被锁按钮的提示里说明原因
 function lockedTip(label: string): string {
   return headerLocked.value && recording.value ? `${label} · ${t('main.lockedWhileRecording')}` : label;
@@ -289,7 +291,7 @@ const mobileMenuOptions = computed<DropdownMixedOption[]>(() => [
   { key: 'archive', label: t('main.archive'), icon: () => h(Archive, { size: 16 }), disabled: !hasContent.value || headerLocked.value },
   { type: 'divider', key: 'd3' },
   { key: 'view-archive', label: t('main.viewArchives'), icon: () => h(Library, { size: 16 }), disabled: headerLocked.value },
-  { key: 'settings', label: t('main.settings'), icon: () => h(Settings, { size: 16 }), disabled: headerLocked.value },
+  { key: 'settings', label: t('main.settings'), icon: () => h(Settings, { size: 16 }), disabled: settingsLocked.value },
   ...(canForceUpdate
     ? ([
         { type: 'divider', key: 'd4' },
@@ -324,6 +326,7 @@ function onMobileMenuSelect(key: string): void {
       emit('open-archive');
       break;
     case 'settings':
+      if (settingsLocked.value) return;
       emit('open-settings');
       break;
     case 'force-update':
@@ -637,11 +640,11 @@ function openMicSettings(): void {
           </n-tooltip>
           <n-tooltip>
             <template #trigger>
-              <n-button quaternary circle size="small" :disabled="headerLocked" :aria-label="t('main.settings')" @click="$emit('open-settings')">
+              <n-button quaternary circle size="small" :disabled="settingsLocked" :aria-label="t('main.settings')" @click="$emit('open-settings')">
                 <template #icon><Settings :size="17" /></template>
               </n-button>
             </template>
-            {{ lockedTip(t('main.settings')) }}
+            {{ t('main.settings') }}
           </n-tooltip>
           <!-- 音源开关：仅桥接支持系统音频时显示，图标即当前音源，点击切换 -->
           <n-tooltip v-if="supportsSystemAudio">

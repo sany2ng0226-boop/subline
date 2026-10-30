@@ -1,5 +1,5 @@
 import { computed, reactive, ref } from 'vue';
-import type { PipelineErrorCode, TranslationStatusPayload } from '@rt/core';
+import type { ArchiveLine, PipelineErrorCode, TranslationStatusPayload } from '@rt/core';
 import { fmtClock } from '../utils/datetime';
 import { pipelineErrorCode } from '../utils/micPermission';
 import { bridge } from '../bridge';
@@ -8,6 +8,7 @@ export interface TranscriptLine {
   /** Stable view identity survives provisional text becoming a finalized segment. */
   displayId: number;
   lang?: string;
+  audio?: ArchiveLine['audio'];
   id: number;
   time: string;
   text: string;
@@ -29,6 +30,18 @@ function makeDraft(text: string): TranscriptLine {
   return { displayId: ++nextDisplayId, id: -1, time: fmtClock(Date.now()), text, translation: '', translating: false, failed: false };
 }
 export const recording = ref(false);
+export const recordingIds = reactive<string[]>([]);
+
+export function restoreRecordings(ids: string[]): void {
+  for (const id of ids) if (!recordingIds.includes(id)) recordingIds.push(id);
+}
+
+function discardAudio(ids: string[]): void {
+  if (!ids.length) return;
+  void bridge().discardRecordings?.(ids).catch((error) => {
+    errorText.value = error instanceof Error ? error.message : String(error);
+  });
+}
 
 // 软件未就绪：加载 ASR 模型中（录音管线就绪前）
 export const modelLoading = ref(false);
@@ -68,6 +81,7 @@ export function registerTranscriptionListeners(): void {
     const line = draftLine.value ?? makeDraft(seg.text);
     Object.assign(line, {
       id: seg.id, time: fmtTime(seg.start), text: seg.text, lang: seg.lang,
+      ...(seg.recordingId ? { audio: { recordingId: seg.recordingId, start: seg.start, duration: seg.duration } } : {}),
       translation: '', translating: false, failed: false,
     });
     lines.push(line);
@@ -173,6 +187,7 @@ export async function startRecording(): Promise<void> {
   // 计时基线在管线确认启动后才取：segment.start 的 0 点是管线启动之后，
   // 首次录音需加载模型耗时数秒，若在 await 前取值会让所有行的时钟偏早整个加载时长。
   recordStartEpoch = Date.now();
+  if (result.recordingId) restoreRecordings([result.recordingId]);
   lastStopFailure = null;
   recording.value = true;
 }
@@ -182,7 +197,12 @@ let lastStopFailure: Error | null = null;
 export async function stopRecording(): Promise<void> {
   recording.value = false;
   try {
-    await bridge().stopPipeline();
+    const stopped = await bridge().stopPipeline();
+    if (!stopped.ok) throw new Error('Stopping the recording failed');
+    for (const id of stopped.emptyRecordingIds ?? []) {
+      const index = recordingIds.indexOf(id);
+      if (index >= 0) recordingIds.splice(index, 1);
+    }
     lastStopFailure = null;
   } catch (error) {
     lastStopFailure = error instanceof Error ? error : new Error(String(error));
@@ -212,7 +232,7 @@ export function toggleRecording(): void {
 /** 等在途的启停结束；仍在录音则停止并等到收尾完成（关闭前归档用） */
 export async function ensureStopped(): Promise<void> {
   await toggling;
-  if (lastStopFailure) throw lastStopFailure;
+  if (lastStopFailure) await stopRecording();
   if (!recording.value) return;
   toggleRecording();
   await toggling;
@@ -220,17 +240,19 @@ export async function ensureStopped(): Promise<void> {
 }
 
 // 未归档：正在录音，或主页仍有定稿行（归档成功会清空主页，所以剩下的行都是上次归档后新增的）。
-export const hasUnsavedContent = computed(() => recording.value || recordBusy.value || lines.length > 0);
+export const hasUnsavedContent = computed(() => recording.value || recordBusy.value || lines.length > 0 || recordingIds.length > 0);
 
 /** 清空转写历史（归档成功后调用；不可撤销） */
 export function clearTranscript(): void {
   dismissUndo();
   lines.splice(0, lines.length);
+  recordingIds.splice(0);
   resetDraft();
 }
 
 // 主页「删除」可撤销：被删的行暂存在内存里，直到撤销、开始新录音或再次清空。
 let clearedLines: TranscriptLine[] = [];
+let clearedRecordingIds: string[] = [];
 export const canUndoDelete = ref(false);
 
 // 最近一次归档成功的时刻：主页清空后顶栏显示「已归档 · HH:mm」；删除内容后不再沿用旧时刻。
@@ -240,18 +262,23 @@ export const lastArchivedAt = ref<number | null>(null);
 export function deleteTranscript(): void {
   lastArchivedAt.value = null;
   clearedLines = lines.splice(0, lines.length);
+  clearedRecordingIds = recordingIds.splice(0);
   resetDraft();
-  canUndoDelete.value = clearedLines.length > 0;
+  canUndoDelete.value = clearedLines.length > 0 || clearedRecordingIds.length > 0;
 }
 
 /** 撤销最近一次删除 */
 export function undoDelete(): void {
-  if (!canUndoDelete.value || lines.length) return;
+  if (!canUndoDelete.value || lines.length || recordingIds.length) return;
   lines.push(...clearedLines);
+  restoreRecordings(clearedRecordingIds);
+  clearedRecordingIds = [];
   dismissUndo();
 }
 
 export function dismissUndo(): void {
+  discardAudio(clearedRecordingIds);
+  clearedRecordingIds = [];
   clearedLines = [];
   canUndoDelete.value = false;
 }
@@ -265,17 +292,19 @@ function resetDraft(): void {
 /** A provisional stream must never be persisted as a completed translation. */
 export function archiveSnapshot() {
   return lines.map(line => ({ time: line.time, text: line.text,
-    translation: line.translationPartial ? '' : line.translation }));
+    translation: line.translationPartial ? '' : line.translation,
+    ...(line.lang ? { lang: line.lang } : {}), ...(line.audio ? { audio: { ...line.audio } } : {}) }));
 }
 
 /** 崩溃暂存用的快照：在归档快照基础上保留每行语言 */
 export function recoverySnapshot(): RecoveredLine[] {
   return lines.map((line) => ({ time: line.time, text: line.text,
     translation: line.translationPartial ? '' : line.translation,
+    ...(line.audio ? { audio: { ...line.audio } } : {}),
     ...(line.lang ? { lang: line.lang } : {}) }));
 }
 
-export interface RecoveredLine { time: string; text: string; translation: string; lang?: string }
+export interface RecoveredLine { time: string; text: string; translation: string; lang?: string; audio?: ArchiveLine['audio'] }
 
 // 恢复行用负 id：新会话的 segment id 从头计数，不能让迟到的译文串到旧行上
 let nextRecoveredId = -2;
@@ -286,6 +315,7 @@ export function restoreLines(saved: RecoveredLine[]): void {
   lines.unshift(...saved.map((line): TranscriptLine => ({
     displayId: ++nextDisplayId, id: nextRecoveredId--, time: line.time, text: line.text,
     translation: line.translation, translating: false, failed: false,
+    ...(line.audio ? { audio: { ...line.audio } } : {}),
     ...(line.lang ? { lang: line.lang } : {}),
   })));
 }

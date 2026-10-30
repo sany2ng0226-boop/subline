@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue';
+import { computed, onUnmounted, reactive, watch } from 'vue';
 import { NButton, NFormItem, NSelect, NSwitch, NTooltip } from 'naive-ui';
 import { ArrowLeft } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { UI_LANGS, asrModelsFor, getTranslationModel, DEFAULT_ASR_MODEL_ID, DEFAULT_TRANSLATION_MODEL_ID } from '@rt/core';
 import { settings, saveSettings, alwaysOnTopSupported, setAlwaysOnTop } from '../composables/useSettings';
 import { bridge } from '../bridge';
+import { recording, recordBusy, modelLoading, toggleRecording } from '../composables/useTranscription';
+import { onShortcutAction } from '../composables/useShortcuts';
+import { recordingSettingsPatch } from '../components/settings/recording-settings';
 import { LANG_LABELS, type SettingsFormData } from '../components/settings/form';
 import GeneralSection from '../components/settings/GeneralSection.vue';
 import TranslationSection from '../components/settings/TranslationSection.vue';
@@ -17,6 +20,11 @@ const emit = defineEmits<{ close: [] }>();
 const appVersion = bridge().appVersion;
 // 置顶开关：宿主不支持（Web / iOS）时不显示
 const canPin = alwaysOnTopSupported();
+const pipelineLocked = computed(() => recording.value || recordBusy.value || modelLoading.value);
+function stopCurrentRecording(): void {
+  if (recording.value && !recordBusy.value) toggleRecording();
+}
+onUnmounted(onShortcutAction('toggleRecording', stopCurrentRecording));
 
 const current = settings.value!;
 const currentEngine = current.translation.engine;
@@ -75,7 +83,9 @@ function persist(): Promise<unknown> {
     }
   }
   if (cloud) translation.cloud = cloud;
-  return saveSettings({ ...patch, ...(Object.keys(translation).length ? { translation } : {}) })
+  const safePatch = recordingSettingsPatch({ ...patch, ...(Object.keys(translation).length ? { translation } : {}) }, pipelineLocked.value);
+  if (!Object.keys(safePatch).length) return Promise.resolve();
+  return saveSettings(safePatch)
     .catch((err) => console.error('[settings:save]', err));
 }
 
@@ -103,11 +113,29 @@ watch(
   () => form.cloud,
   () => {
     clearTimeout(cloudTimer);
-    cloudTimer = setTimeout(() => void persist(), 500);
+    if (!pipelineLocked.value) cloudTimer = setTimeout(() => { cloudTimer = undefined; void persist(); }, 500);
   },
   { deep: true },
 );
 
+watch(pipelineLocked, (locked) => {
+  clearTimeout(cloudTimer);
+  cloudTimer = undefined;
+  if (!locked || !settings.value) return;
+  const latest = settings.value;
+  form.nativeLang = latest.nativeLang;
+  form.targetLang = latest.translation.targetLang ?? latest.nativeLang;
+  form.asr = { ...latest.asr };
+  form.translationMode = !latest.translation.enabled ? 'none' : latest.translation.engine === 'cloud' ? 'cloud' : 'local';
+  if (latest.translation.engine !== 'cloud') form.translationModel = latest.translation.engine;
+  form.cloud = { ...latest.translation.cloud };
+});
+onUnmounted(() => {
+  const pendingCloud = cloudTimer !== undefined;
+  clearTimeout(cloudTimer);
+  cloudTimer = undefined;
+  if (pendingCloud && !pipelineLocked.value) void persist();
+});
 </script>
 
 <template>
@@ -124,32 +152,37 @@ watch(
         {{ t('settings.back') }}
       </n-tooltip>
       <span class="text-[15px] font-semibold">{{ t('settings.title') }}</span>
+      <div v-if="recording" class="ml-auto flex items-center gap-3">
+        <span role="status" class="text-xs text-[var(--rt-live)]">{{ t('settings.recordingStatus') }}</span>
+        <n-button size="small" :disabled="recordBusy" @click="stopCurrentRecording">{{ t('main.stop') }}</n-button>
+      </div>
     </header>
 
     <div class="min-h-0 flex-1 overflow-y-auto">
       <div class="mx-auto w-full max-w-[720px] px-5 py-6 sm:px-8">
+        <p v-if="pipelineLocked" role="status" class="mb-5 text-sm text-[var(--rt-ink-3)]">{{ t('settings.recordingLockHint') }}</p>
         <div class="grid gap-x-6 sm:grid-cols-2">
           <n-form-item :label="t('settings.asrLanguage')">
-            <n-select v-model:value="form.asr.language" :options="asrLanguageOptions" />
+            <n-select v-model:value="form.asr.language" :disabled="pipelineLocked" :options="asrLanguageOptions" />
           </n-form-item>
           <n-form-item :label="t('settings.targetLang')">
-            <n-select v-model:value="form.targetLang" :options="languageOptions" />
+            <n-select v-model:value="form.targetLang" :disabled="pipelineLocked" :options="languageOptions" />
           </n-form-item>
         </div>
 
         <section class="mb-6 border-b border-neutral-200 pb-5 dark:border-[#3a3b44]">
           <n-form-item :label="t('settings.asrModel')" :show-feedback="false">
-            <model-picker v-model:value="form.asr.model" kind="asr" :options="asrModelOptions" />
+            <model-picker v-model:value="form.asr.model" kind="asr" :disabled="pipelineLocked" :options="asrModelOptions" />
           </n-form-item>
         </section>
         <section class="mb-6 border-b border-neutral-200 pb-5 dark:border-[#3a3b44]">
-          <translation-section :form="form" />
+          <translation-section :form="form" :disabled="pipelineLocked" />
         </section>
 
         <details class="mb-5">
           <summary class="cursor-pointer py-2 text-sm font-medium">{{ t('settings.appearance') }}</summary>
           <div class="pt-4">
-            <general-section :form="form" />
+            <general-section :form="form" :language-disabled="pipelineLocked" />
             <n-form-item :label="t('settings.announceCaptions')" :show-feedback="false">
               <n-switch v-model:value="form.announceCaptions" />
             </n-form-item>

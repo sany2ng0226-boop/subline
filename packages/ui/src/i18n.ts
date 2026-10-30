@@ -4,6 +4,18 @@ import { createI18n } from 'vue-i18n';
 const messages = {
   en: {
     archive: {
+      audioSeek: 'Seek to {time}',
+      audioIncomplete: 'Recording or saving was interrupted; this audio may be incomplete.',
+      audioLoadFailed: 'Could not load the original audio.',
+      audioLoading: 'Loading audio…',
+      audioNotSaved: 'No original audio was saved for this archive.',
+      audioRetry: 'Retry',
+      audioSegment: 'Recording {n}',
+      audioTitle: 'Original audio',
+      audioUnavailable: 'Original audio is unavailable on this device.',
+      audioPlayBlocked: 'Playback couldn’t start from here. Use the play button on the player.',
+      audioSourceMic: 'Microphone',
+      audioSourceSystem: 'System audio',
       all: 'All records',
       autoTitle: 'Title generated from content; you can edit it.',
       confirmDelete: 'Delete “{name}”?',
@@ -50,6 +62,7 @@ const messages = {
       total: 'Total',
     },
     errors: {
+      'recording-write-failed': 'Recording could not be saved completely. Saved audio and captions are retained; check free disk space and retry saving.',
       'asr-crashed': 'Speech recognition stopped unexpectedly',
       'asr-init-failed': 'Failed to load the speech recognizer',
       'audio-capture-failed': 'Audio capture unavailable',
@@ -160,6 +173,8 @@ const messages = {
       translateTo: 'Translate into {lang}',
     },
     settings: {
+      recordingStatus: 'Recording continues',
+      recordingLockHint: 'You can adjust display options. Languages, models, audio source and translation settings are locked while recording or preparing.',
       alwaysOnTop: 'Keep window on top',
       announceCaptions: 'Read captions aloud',
       announceCaptionsHint: 'With a screen reader on, new finalized captions and translations are announced.',
@@ -219,6 +234,18 @@ const messages = {
   },
   ja: {
     archive: {
+      audioSeek: '{time} から再生',
+      audioIncomplete: '録音または保存が中断されたため、この音声は一部欠けている可能性があります。',
+      audioLoadFailed: '元の音声を読み込めませんでした。',
+      audioLoading: '音声を読み込み中…',
+      audioNotSaved: 'この記録には元の音声が保存されていません。',
+      audioRetry: '再試行',
+      audioSegment: '録音 {n}',
+      audioTitle: '元の音声',
+      audioUnavailable: 'この端末では元の音声を利用できません。',
+      audioPlayBlocked: 'ここから再生を開始できませんでした。プレーヤーの再生ボタンを使ってください。',
+      audioSourceMic: 'マイク',
+      audioSourceSystem: 'システム音声',
       all: 'すべての記録',
       autoTitle: '内容からタイトルを作成しました。編集できます。',
       confirmDelete: '「{name}」を削除しますか？',
@@ -265,6 +292,7 @@ const messages = {
       total: '合計',
     },
     errors: {
+      'recording-write-failed': '録音を完全に保存できませんでした。保存済みの音声と字幕は保持されています。空き容量を確認して保存を再試行してください。',
       'asr-crashed': '音声認識が予期せず停止しました',
       'asr-init-failed': '音声認識エンジンの読み込みに失敗しました',
       'audio-capture-failed': '音声入力を利用できません',
@@ -374,6 +402,8 @@ const messages = {
       translateTo: '{lang}に翻訳',
     },
     settings: {
+      recordingStatus: '録音中',
+      recordingLockHint: '表示設定は変更できます。録音中や準備中は、言語・モデル・音源・翻訳設定を変更できません。',
       alwaysOnTop: 'ウィンドウを常に手前に表示',
       announceCaptions: '字幕を読み上げる',
       announceCaptionsHint: 'スクリーンリーダー使用時、確定した字幕と翻訳を読み上げます。',
@@ -433,6 +463,18 @@ const messages = {
   },
   ko: {
     archive: {
+      audioSeek: '{time}부터 재생',
+      audioIncomplete: '녹음 또는 저장이 중단되어 이 음성의 일부가 누락되었을 수 있습니다.',
+      audioLoadFailed: '원본 음성을 불러오지 못했습니다.',
+      audioLoading: '음성을 불러오는 중…',
+      audioNotSaved: '이 기록에는 원본 음성이 저장되지 않았습니다.',
+      audioRetry: '다시 시도',
+      audioSegment: '녹음 {n}',
+      audioTitle: '원본 음성',
+      audioUnavailable: '이 기기에서는 원본 음성을 사용할 수 없습니다.',
+      audioPlayBlocked: '여기서 재생을 시작할 수 없습니다. 플레이어의 재생 버튼을 사용하세요.',
+      audioSourceMic: '마이크',
+      audioSourceSystem: '시스템 오디오',
       all: '모든 기록',
       autoTitle: '내용으로 생성한 제목입니다. 수정할 수 있습니다.',
       confirmDelete: '“{name}”을 삭제할까요?',
@@ -479,6 +521,7 @@ const messages = {
       total: '합계',
     },
     errors: {
+      'recording-write-failed': '녹음을 완전히 저장하지 못했습니다. 저장된 오디오와 자막은 유지됩니다. 여유 공간을 확인한 후 저장을 다시 시도하세요.',
       'asr-crashed': '음성 인식이 예기치 않게 중지되었습니다',
       'asr-init-failed': '음성 인식 엔진 로딩에 실패했습니다',
       'audio-capture-failed': '오디오 입력을 사용할 수 없습니다',
@@ -588,6 +631,8 @@ const messages = {
       translateTo: '{lang}(으)로 번역',
     },
     settings: {
+      recordingStatus: '녹음 중',
+      recordingLockHint: '표시 설정은 변경할 수 있습니다. 녹음 중이거나 준비 중에는 언어, 모델, 오디오 소스, 번역 설정이 잠깁니다.',
       alwaysOnTop: '창을 항상 위에 표시',
       announceCaptions: '자막 읽어 주기',
       announceCaptionsHint: '화면 낭독기를 켜면 확정된 자막과 번역을 읽어 줍니다.',
@@ -645,6 +690,18 @@ const messages = {
   },
   zh: {
     archive: {
+      audioSeek: '从 {time} 回听',
+      audioIncomplete: '录音或保存曾中断，此段原音可能不完整。',
+      audioLoadFailed: '原音加载失败。',
+      audioLoading: '正在加载原音…',
+      audioNotSaved: '此归档未保存原音。',
+      audioRetry: '重试',
+      audioSegment: '录音 {n}',
+      audioTitle: '原音',
+      audioUnavailable: '此设备无法读取原音。',
+      audioPlayBlocked: '无法从这里开始播放，请使用播放器上的播放按钮。',
+      audioSourceMic: '麦克风',
+      audioSourceSystem: '系统音频',
       all: '全部记录',
       autoTitle: '已根据内容生成标题，可以修改。',
       confirmDelete: '确定删除“{name}”吗？',
@@ -690,6 +747,7 @@ const messages = {
       total: '合计',
     },
     errors: {
+      'recording-write-failed': '录音未能完整保存。已写入的音频与字幕仍保留，请检查磁盘空间后重试保存。',
       'asr-crashed': '识别引擎异常退出',
       'asr-init-failed': '识别引擎加载失败',
       'audio-capture-failed': '无法建立音频采集（设备不可用或被占用）',
@@ -799,6 +857,8 @@ const messages = {
       translateTo: '翻译成{lang}',
     },
     settings: {
+      recordingStatus: '录音中',
+      recordingLockHint: '可调整显示设置。录音或准备期间，语言、模型、音源和翻译配置暂时锁定。',
       alwaysOnTop: '窗口置顶',
       announceCaptions: '朗读字幕',
       announceCaptionsHint: '开启读屏软件时，播报新定稿的字幕和译文。',

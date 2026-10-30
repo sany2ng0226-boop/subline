@@ -8,7 +8,7 @@ import type { GeneralFormData } from './form';
 
 const { t } = useI18n();
 // 父组件持有 reactive 表单对象，子组件直接修改其字段
-defineProps<{ form: GeneralFormData }>();
+defineProps<{ form: GeneralFormData; languageDisabled?: boolean }>();
 
 const langOptions = UI_LANGS.map((l) => ({ label: LANG_LABELS[l], value: l }));
 const fontOptions = computed<Array<{ label: string; value: SettingsFontSize }>>(() => [
@@ -28,7 +28,7 @@ const themeOptions = computed(() => [
 <template>
   <div>
     <n-form-item :label="t('settings.interfaceLang')">
-      <n-select v-model:value="form.nativeLang" :options="langOptions" />
+      <n-select v-model:value="form.nativeLang" :disabled="languageDisabled" :options="langOptions" />
     </n-form-item>
 
     <n-form-item :label="t('settings.fontSize')">

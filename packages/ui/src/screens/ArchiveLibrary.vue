@@ -4,7 +4,7 @@ import { NButton, NInput, NModal, NSelect } from 'naive-ui';
 import { ArrowLeft, Folder, FolderPlus, Pencil, FolderInput, Trash2 } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import type { ArchiveLibrary, ArchiveRecord, ArchiveSummary } from '@rt/core';
-import ConversationLine from '../components/ConversationLine.vue';
+import ArchivePlayback from '../components/ArchivePlayback.vue';
 import ScrollArea from '../components/ScrollArea.vue';
 import UndoBar from '../components/UndoBar.vue';
 import { useArchiveDelete } from '../composables/useArchiveDelete';
@@ -97,7 +97,7 @@ onMounted(async () => {
     <ScrollArea v-if="selected" class="min-h-0 flex-1">
       <div class="mx-auto w-full max-w-[760px] px-5 py-5">
         <p class="mb-6 text-xs text-[var(--rt-ink-3)]">{{ folderName(selected.folderId) }} · {{ fmtDateTime(selected.createdAt) }}</p>
-        <ConversationLine v-for="(line, i) in selected.lines" :key="i" :time="line.time" :text="line.text" :translation="line.translation" />
+        <ArchivePlayback :key="selected.id" :record="selected" />
       </div>
     </ScrollArea>
     <div v-else class="flex min-h-0 flex-1">
