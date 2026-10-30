@@ -1,73 +1,59 @@
 import Foundation
 
-struct LensChinesePage: Equatable {
-    let first: String
-    let second: String
-}
-
 struct LensCaptionFrame {
     let text: String
     let japaneseWindowed: Bool
+    let chineseTruncated: Bool
 }
 
 enum LensCaptionRenderer {
     static let maximumUTF8Bytes = 384
-    static let lineCharacters = 16
+    static let lineCharacters = 20
     private static let lineBytes = 95
 
-    static func chinesePages(_ text: String) -> [LensChinesePage] {
-        let normalized = normalizeWhitespace(text)
-        let characters = Array(normalized.isEmpty ? "等待译文" : normalized)
-        var estimate = 1
+    static func render(japanese: String, chinese: String) -> LensCaptionFrame {
+        let normalizedJapanese = normalizeWhitespace(japanese)
+        let original = Array(normalizedJapanese.isEmpty ? "等待日语" : normalizedJapanese)
+        var start = max(0, original.count - (lineCharacters * 2 - 2))
+        var japaneseLines: (first: String, second: String, consumed: Int)
         while true {
-            let suffix = " \(estimate)/\(estimate)"
-            var offset = 0
-            var pages: [LensChinesePage] = []
-            while offset < characters.count {
-                // Reserve warning space so backlog notices do not reflow existing pages.
-                let first = take(characters, offset: &offset, count: 13, bytes: 88)
-                let second = take(characters, offset: &offset,
-                                  count: max(1, lineCharacters - suffix.count),
-                                  bytes: max(3, lineBytes - suffix.utf8.count))
-                pages.append(LensChinesePage(first: first, second: second))
-            }
-            if String(pages.count).count <= String(estimate).count { return pages }
-            estimate = pages.count
-        }
-    }
-
-    static func render(japanese: String, page: LensChinesePage, pageIndex: Int,
-                       pageCount: Int, backlog: Bool) -> LensCaptionFrame {
-        let normalized = normalizeWhitespace(japanese)
-        let characters = Array(normalized.isEmpty ? "等待日语" : normalized)
-        var start = max(0, characters.count - 30)
-        var first = "", second = ""
-        while true {
-            let content = (start > 0 ? "…" : "") + String(characters.dropFirst(start))
-            first = "日 " + String(content.prefix(14))
-            second = String(content.dropFirst(14))
-            if first.utf8.count <= lineBytes && second.utf8.count <= lineBytes && second.count <= 16 { break }
-            guard start < characters.count else { first = "日 …"; second = ""; break }
+            let visible = Array((start > 0 ? "…" : "") + String(original.dropFirst(start)))
+            japaneseLines = lines(visible, prefix: "日 ")
+            if japaneseLines.consumed == visible.count { break }
             start += 1
         }
-        let prefix = backlog ? "中! " : "中 "
-        let suffix = " \(pageIndex)/\(pageCount)"
-        return LensCaptionFrame(text: [first, second, prefix + page.first, page.second + suffix].joined(separator: "\n"),
-                                japaneseWindowed: start > 0)
+
+        let normalizedChinese = normalizeWhitespace(chinese)
+        let translated = Array(normalizedChinese.isEmpty ? "等待译文" : normalizedChinese)
+        var chineseLines = lines(translated, prefix: "中 ")
+        let truncated = chineseLines.consumed < translated.count
+        if truncated {
+            while chineseLines.second.count + 1 > lineCharacters || chineseLines.second.utf8.count + "…".utf8.count > lineBytes {
+                chineseLines.second.removeLast()
+            }
+            chineseLines.second += "…"
+        }
+        let text = [japaneseLines.first, japaneseLines.second, chineseLines.first, chineseLines.second].joined(separator: "\n")
+        return LensCaptionFrame(text: text, japaneseWindowed: start > 0, chineseTruncated: truncated)
     }
 
     static func normalizeWhitespace(_ text: String) -> String {
         text.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
     }
 
+    private static func lines(_ characters: [Character], prefix: String) -> (first: String, second: String, consumed: Int) {
+        var offset = 0
+        let first = prefix + take(characters, offset: &offset, count: lineCharacters - prefix.count,
+                                  bytes: lineBytes - prefix.utf8.count)
+        let second = take(characters, offset: &offset, count: lineCharacters, bytes: lineBytes)
+        return (first, second, offset)
+    }
+
     private static func take(_ characters: [Character], offset: inout Int, count: Int, bytes: Int) -> String {
         var result = ""
         while offset < characters.count && result.count < count {
             let next = String(characters[offset])
-            if result.utf8.count + next.utf8.count > bytes {
-                if result.isEmpty { offset += 1; return "…" }
-                break
-            }
+            guard result.utf8.count + next.utf8.count <= bytes else { break }
             result += next; offset += 1
         }
         return result

@@ -26,10 +26,6 @@ struct GlassesCaptionApp: App {
                         .disabled(model.stopping)
                         .accessibilityIdentifier("glasses-primary-action")
                         Text(model.status).font(.footnote).accessibilityIdentifier("glasses-status")
-                        if model.overflowCount > 0 {
-                            Text("字幕积压，\(model.overflowCount) 条新译文未进入镜片，可在下方查看。")
-                                .font(.caption).foregroundStyle(.orange)
-                        }
                     }
                     Section("日语原文 · 实时更新") {
                         Text(model.source.isEmpty ? "等待日语" : model.source)
@@ -40,19 +36,12 @@ struct GlassesCaptionApp: App {
                             .accessibilityIdentifier("glasses-translation")
                         Text("译文可能对应前一句，原文与译文不保证逐句对齐。")
                             .font(.caption).foregroundStyle(.secondary)
+                        if model.chineseTruncated {
+                            Text("镜片省略了较长内容，手机保留这条完整译文。")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                     Section {
-                        if !model.overflowTranslations.isEmpty || model.unretainedOverflowCount > 0 {
-                            DisclosureGroup("未进入镜片的译文") {
-                                ForEach(Array(model.overflowTranslations.enumerated()), id: \.offset) { _, text in
-                                    Text(text)
-                                }
-                                if model.unretainedOverflowCount > 0 {
-                                    Text("\(model.unretainedOverflowCount) 条更早或过长译文未完整保留。")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
                         DisclosureGroup("连接与调试") {
                             Button("重连已绑定眼镜") { model.reconnect() }.disabled(model.hasActiveSession)
                             Button("发现新设备") { model.discover() }.disabled(model.hasActiveSession)
@@ -94,9 +83,7 @@ final class GlassesCaptionModel: ObservableObject {
     @Published private(set) var recording = false
     @Published private(set) var starting = false
     @Published private(set) var stopping = false
-    @Published private(set) var overflowTranslations: [String] = []
-    @Published private(set) var overflowCount = 0
-    @Published private(set) var unretainedOverflowCount = 0
+    @Published private(set) var chineseTruncated = false
     @Published private(set) var status = "点击开始；只会重连已绑定的眼镜。"
     @Published private(set) var source = ""
     @Published private(set) var translation = ""
@@ -123,8 +110,6 @@ final class GlassesCaptionModel: ObservableObject {
     private var lensTask: Task<Void, Never>?
     private var sourceUpdates = 0
     private var frameUpdateRequests = 0
-    private var pager = LensChinesePager()
-    private var pagerTask: Task<Void, Never>?
 
     var hasActiveSession: Bool { starting || recording || stopping || sessionID != nil }
     var primaryActionTitle: String {
@@ -155,10 +140,7 @@ final class GlassesCaptionModel: ObservableObject {
         pipeline.onTranslation = { [weak self] text in
             guard let self, self.recording || self.stopping else { return }
             self.translation = text
-            if self.recording && !self.stopping {
-                if !self.pager.enqueue(text, now: ProcessInfo.processInfo.systemUptime) { self.retainOverflow(text) }
-                self.queueFrame(); self.armPagerUpdate()
-            }
+            if self.recording && !self.stopping { self.queueFrame() }
             self.diagnostic("translation")
         }
         pipeline.onError = { [weak self] in self?.fail($0) }
@@ -218,12 +200,12 @@ final class GlassesCaptionModel: ObservableObject {
         cancelLensUpdates()
         source = ""; translation = ""
         sourceUpdates = 0; frameUpdateRequests = 0
-        overflowTranslations = []; overflowCount = 0; unretainedOverflowCount = 0
+        chineseTruncated = false
         lens.begin(sessionID: sid)
         sessionID = sid; sessionDevice = device; displayReady = false; testIndex = 0
         do {
             try send(19, type: 7, json: ["sid": sid, "force": false, "scope": "temporary", "config": [
-                "font_size": 2, "content_width": 100, "max_lines": 5, "position": "center",
+                "font_size": 1, "content_width": 100, "max_lines": 5, "position": "center",
                 "is_display": true, "straight_view": "original"
             ]])
             status = "字幕窗口请求已发出，等待眼镜确认。"
@@ -238,30 +220,27 @@ final class GlassesCaptionModel: ObservableObject {
 
     func sendTest() {
         let messages = [("今日は日本語と中国語の字幕を確認します。", "今天确认日语和中文字幕。"),
-                        ("次の文章に切り替わりました。", "已经切换到下一句话。")]
+                        ("長い文章でも表示が勝手に切り替わらないことを確認します。この字幕はそのまま残ります。", "这是一段较长的中文字幕，用来确认小号文字只保留最新译文的开头，并以省略号标出放不下的部分，不会再自动翻页。")]
         guard testIndex < messages.count else { status = "两条字幕已发送，请核对镜片覆盖更新后退出。"; return }
         let text = messages[testIndex]; testIndex += 1
         source = text.0; translation = text.1
-        if !pager.enqueue(text.1, now: ProcessInfo.processInfo.systemUptime) { retainOverflow(text.1) }
-        queueFrame(); armPagerUpdate()
+        queueFrame()
     }
 
     func remindToCheckChat() {
         guard displayReady, let sid = sessionID, lens.sessionID == sid, lens.ready,
               !recording, !starting, !stopping else { return }
-        pagerTask?.cancel(); pagerTask = nil; pager.reset()
         source = "チャットをご確認ください。"
         translation = "请查看聊天，有一项需要确认。"
-        _ = pager.enqueue(translation, now: ProcessInfo.processInfo.systemUptime)
         status = "正在提醒你查看聊天…"
-        queueFrame(); armPagerUpdate()
+        queueFrame()
         diagnostic("chat_reminder_queued")
     }
 
     private func queueFrame() {
         guard displayReady, let sid = sessionID, lens.sessionID == sid, !stopping else { return }
-        let frame = LensCaptionRenderer.render(japanese: source, page: pager.page,
-            pageIndex: pager.pageIndex, pageCount: pager.pageCount, backlog: overflowCount > 0)
+        let frame = LensCaptionRenderer.render(japanese: source, chinese: translation)
+        chineseTruncated = frame.chineseTruncated
         frameUpdateRequests += 1
         if let text = lens.update(frame.text, now: ProcessInfo.processInfo.systemUptime) { submitFrame(text) }
         armLensUpdate()
@@ -282,34 +261,6 @@ final class GlassesCaptionModel: ObservableObject {
 
     private func cancelLensUpdates() {
         lensTask?.cancel(); lensTask = nil; lens.cancel()
-        pagerTask?.cancel(); pagerTask = nil; pager.reset()
-    }
-
-    private func armPagerUpdate() {
-        guard pagerTask == nil, !stopping, let sid = sessionID,
-              let delay = pager.delay(now: ProcessInfo.processInfo.systemUptime) else { return }
-        pagerTask = Task { [weak self] in
-            do { try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
-            catch { return }
-            guard let self, self.sessionID == sid, !self.stopping else { return }
-            self.pagerTask = nil
-            if self.pager.advance(now: ProcessInfo.processInfo.systemUptime) { self.queueFrame() }
-            self.armPagerUpdate()
-        }
-    }
-
-    private func retainOverflow(_ text: String) {
-        overflowCount += 1
-        var body = text
-        let suffix = "…（全文未保留）"
-        if body.utf8.count > 4096 {
-            while body.utf8.count + suffix.utf8.count > 4096 { body.removeLast() }
-            body += suffix; unretainedOverflowCount += 1
-        }
-        overflowTranslations.append(body)
-        while overflowTranslations.count > 16 || overflowTranslations.reduce(0, { $0 + $1.utf8.count }) > 65_536 {
-            overflowTranslations.removeFirst(); unretainedOverflowCount += 1
-        }
     }
 
     private func submitFrame(_ text: String) {
@@ -318,7 +269,8 @@ final class GlassesCaptionModel: ObservableObject {
             try send(19, type: 5, json: ["sid": sid, "mode": 3, "status": 0,
                                       "content": ["source_transcript": text]])
             sentCount += 1
-            status = recording ? "正在显示日语与最近完成的中文。" : "双语字幕已提交，请核对镜片实际显示。"
+            status = chineseTruncated ? "镜片省略了较长内容，手机保留完整译文。"
+                : recording ? "正在显示日语与最近完成的中文。" : "双语字幕已提交，请核对镜片实际显示。"
             diagnostic("display_text")
         } catch { fail("字幕发送失败：\(error.localizedDescription)") }
     }
@@ -472,10 +424,8 @@ final class GlassesCaptionModel: ObservableObject {
             "microphonePCMFrames": inputMode == .phone ? phoneMicrophone.pcmFrames : microphone.pcmFrames,
             "recognitionFinals": pipeline.finalCount, "translations": pipeline.translationCount,
             "pendingTranslations": pipeline.pendingTranslations, "sourceUpdates": sourceUpdates,
-            "frameUpdateRequests": frameUpdateRequests, "displayMode": "compact-bilingual",
-            "chinesePage": pager.pageIndex,
-            "chinesePages": pager.pageCount, "queuedTranslations": pager.pendingCount,
-            "overflowTranslations": overflowCount, "unretainedOverflowTranslations": unretainedOverflowCount]
+            "frameUpdateRequests": frameUpdateRequests, "displayMode": "small-bilingual-static",
+            "fontSize": 1, "chineseTruncated": chineseTruncated]
         guard let data = try? JSONSerialization.data(withJSONObject: row) else { return }
         let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("glasses-caption-diagnostic.jsonl")
