@@ -111,7 +111,7 @@ onMounted(async () => {
               </span>
             </div>
             <div class="mt-0.5 truncate text-xs text-[var(--rt-ink-3)]">
-              {{ it.lastLine }}
+              {{ it.preview }}
             </div>
           </button>
           <n-tooltip>

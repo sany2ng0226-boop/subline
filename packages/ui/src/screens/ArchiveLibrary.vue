@@ -123,7 +123,7 @@ onMounted(async () => {
               <button class="block w-full min-w-0 cursor-pointer text-left" :disabled="busy" @click="open(item.id)">
                 <div class="truncate text-[15px] font-medium">{{ item.name }}</div>
                 <div class="mt-1 text-xs text-[var(--rt-ink-3)]">{{ fmtDateTime(item.createdAt) }} · {{ folderName(item.folderId) }}</div>
-                <div class="mt-1 truncate text-xs text-[var(--rt-ink-3)]">{{ item.lastLine }}</div>
+                <div class="mt-1 truncate text-xs text-[var(--rt-ink-3)]">{{ item.preview }}</div>
               </button>
               <div class="mt-1 flex justify-end gap-1">
                 <n-button quaternary size="tiny" :disabled="busy" @click="edit('rename', item)">{{ t('archive.rename') }}</n-button>

@@ -9,7 +9,7 @@ export function toSummary(r: ArchiveRecord): ArchiveSummary {
     name: r.name,
     ...(r.folderId !== undefined ? { folderId: r.folderId } : {}),
     createdAt: r.createdAt,
-    lastLine: r.lines.length > 0 ? r.lines[r.lines.length - 1].text : '',
+    preview: previewLine(r.lines),
     ...(r.audio?.length ? { audioCount: r.audio.length } : {}),
   };
 }
@@ -24,12 +24,22 @@ export function listSummaries(records: ArchiveRecord[]): ArchiveSummary[] {
   return [...records].sort((a, b) => b.createdAt - a.createdAt).map(toSummary);
 }
 
+const LEADING_FILLER = /^(?:嗯+|啊+|那个|就是说|那么|えーと|あのう?|えっと)[，,、\s]*/u;
+const GREETING = /^(?:谢谢|感谢|大家好|こんにちは|Thank you|Hello)[，,、\s]*$/iu;
+const isSubstantive = (text: string): boolean => [...text].length >= 8 && !GREETING.test(text);
+
+/** 列表预览：课堂结尾多是「うん。」这类收尾话，取第一条有内容的原文；都太短时退回第一条非空原文。 */
+function previewLine(lines: ArchiveLine[]): string {
+  const texts = lines.map((line) => line.text.trim()).filter(Boolean);
+  return texts.find((text) => isSubstantive(text.replace(LEADING_FILLER, ''))) ?? texts[0] ?? '';
+}
+
 /** Extract a bounded title locally; incomplete translations and short greetings are ignored. */
 export function suggestArchiveTitle(lines: ArchiveLine[], fallback: string): string {
   const sentences = lines.flatMap((line) => (line.translation.trim() || line.text.trim())
     .split(/[。！？!?\n]+/u))
-    .map((text) => text.trim().replace(/^(?:嗯+|啊+|那个|就是说|那么|えーと|あのう?|えっと)[，,、\s]*/u, ''))
-    .filter((text) => [...text].length >= 8 && !/^(?:谢谢|感谢|大家好|こんにちは|Thank you|Hello)[，,、\s]*$/iu.test(text));
+    .map((text) => text.trim().replace(LEADING_FILLER, ''))
+    .filter(isSubstantive);
   if (!sentences.length) return fallback;
   // Prefer substantive clauses over greetings, without running another inference beside live ASR.
   const title = sentences.slice(0, 120).reduce((best, text) => {
