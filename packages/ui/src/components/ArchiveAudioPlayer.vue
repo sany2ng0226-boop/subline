@@ -100,8 +100,10 @@ function startedAt(epoch: number): string {
 }
 function duration(ms: number): string {
   const seconds = Math.max(0, Math.floor(Number.isFinite(ms) ? ms / 1000 : 0));
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor(seconds / 60) % 60;
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds % 60)}` : `${minutes}:${pad(seconds % 60)}`;
 }
 function sourceLabel(source: AudioAttachment['source']): string {
   return t(source === 'mic' ? 'archive.audioSourceMic' : 'archive.audioSourceSystem');
@@ -118,7 +120,7 @@ function sourceLabel(source: AudioAttachment['source']): string {
           {{ t('archive.audioSegment', { n: index + 1 }) }} · {{ sourceLabel(track.attachment.source) }} · {{ startedAt(track.attachment.startedAt) }} · {{ duration(track.attachment.durationMs) }}
         </p>
         <p v-if="track.attachment.incomplete" role="status" class="mb-2 text-xs text-[var(--rt-live)]">{{ t('archive.audioIncomplete') }}</p>
-        <audio v-if="track.state === 'ready'" :ref="(el) => bind(track.attachment.id, el)" :src="track.url" controls preload="none"
+        <audio v-if="track.state === 'ready'" :ref="(el) => bind(track.attachment.id, el)" :src="track.url" controls preload="metadata"
           class="w-full" :aria-label="t('archive.audioSegment', { n: index + 1 })" @error="track.state = 'failed'"
           @play="onPlay(track.attachment.id, $event.target as HTMLAudioElement)"
           @pause="report(track.attachment.id, $event.target as HTMLAudioElement)"

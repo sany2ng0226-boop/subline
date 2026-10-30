@@ -228,8 +228,8 @@ export interface ArchiveSummary {
   name: string;
   createdAt: number;
   folderId?: string | null;
-  /** 最后一条对话的原文，列表里弱色小字显示 */
-  lastLine: string;
+  /** 第一条有内容的原文（跳过寒暄和语气词），列表里弱色小字显示 */
+  preview: string;
   audioCount?: number;
 }
 

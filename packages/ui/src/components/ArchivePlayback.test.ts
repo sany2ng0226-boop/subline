@@ -48,4 +48,15 @@ describe('archive playback details', () => {
     expect(html).not.toContain('preload="auto"');
     expect(getArchiveAudioUrl).toHaveBeenCalledWith('archive', 'a');
   });
+
+  it('shows recordings an hour or longer as h:mm:ss', async () => {
+    const attachment = { source: 'system' as const, format: 'wav' as const, sampleRate: 16000, channels: 1, startedAt: 0, bytes: 0 };
+    const html = await render({ ...base, audio: [
+      { ...attachment, id: 'long', durationMs: (4 * 3600 + 31 * 60 + 26) * 1000 },
+      { ...attachment, id: 'short', durationMs: (9 * 60 + 5) * 1000 },
+    ] });
+    expect(html).toContain('4:31:26');
+    expect(html).not.toContain('271:26');
+    expect(html).toContain('9:05');
+  });
 });
