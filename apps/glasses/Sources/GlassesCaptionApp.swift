@@ -150,6 +150,8 @@ struct DiagnosticsSheet: View {
                         .disabled(!model.connected || model.hasActiveSession)
                     Button("发送下一条测试字幕") { model.sendTest() }
                         .disabled(!model.displayReady || model.recording || model.starting || model.stopping)
+                    Button("五行显示测试") { model.sendCapacityTest() }
+                        .disabled(!model.displayReady || model.recording || model.starting || model.stopping)
                     Button("提醒查看聊天") { model.remindToCheckChat() }
                         .disabled(!model.displayReady || model.recording || model.starting || model.stopping)
                         .accessibilityIdentifier("glasses-remind-chat")
@@ -360,6 +362,15 @@ final class GlassesCaptionModel: ObservableObject {
         queueFrame()
     }
 
+    func sendCapacityTest() {
+        guard displayReady, !recording, !starting, !stopping else { return }
+        source = ""
+        translation = zip(["一", "二", "三", "四", "五"], ["①", "②", "③", "④", "⑤"])
+            .map { String(repeating: $0.0, count: 19) + $0.1 }.joined()
+        queueFrame()
+        status = "请确认镜片五行均可见，最末一行为⑤；这只检查排版，不代表实时识别。"
+    }
+
     func remindToCheckChat() {
         guard displayReady, let sid = sessionID, lens.sessionID == sid, lens.ready,
               !recording, !starting, !stopping else { return }
@@ -560,8 +571,10 @@ final class GlassesCaptionModel: ObservableObject {
             "microphonePCMFrames": inputMode == .phone ? phoneMicrophone.pcmFrames : microphone.pcmFrames,
             "recognitionFinals": pipeline.finalCount, "translations": pipeline.translationCount,
             "pendingTranslations": pipeline.pendingTranslations, "sourceUpdates": sourceUpdates,
-            "frameUpdateRequests": frameUpdateRequests, "displayMode": "small-bilingual-static",
-            "fontSize": 1, "chineseTruncated": chineseTruncated]
+            "frameUpdateRequests": frameUpdateRequests, "displayMode": "small-bilingual-adaptive",
+            "fontSize": 1, "maximumLines": LensCaptionRenderer.maximumLines,
+            "fixtureInput": ProcessInfo.processInfo.arguments.contains("--subline-glasses-fixture"),
+            "chineseTruncated": chineseTruncated]
         guard let data = try? JSONSerialization.data(withJSONObject: row) else { return }
         let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("glasses-caption-diagnostic.jsonl")

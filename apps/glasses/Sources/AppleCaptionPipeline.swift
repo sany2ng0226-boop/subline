@@ -3,6 +3,7 @@ import Combine
 import Foundation
 import Speech
 import Translation
+import UIKit
 
 @available(iOS 26.0, *)
 @MainActor
@@ -23,6 +24,8 @@ final class AppleCaptionPipeline: ObservableObject {
     private var analyzer: SpeechAnalyzer?
     private var translator: TranslationSession?
     private var continuation: AsyncStream<AnalyzerInput>.Continuation?
+    private let fixtureEnabled = ProcessInfo.processInfo.arguments.contains("--subline-glasses-fixture")
+    private var fixtureTask: Task<Void, Never>?
     private var resultsTask: Task<Void, Never>?
     private var translationTask: Task<Void, Never>?
     private var targetFormat: AVAudioFormat?
@@ -39,6 +42,7 @@ final class AppleCaptionPipeline: ObservableObject {
     func start() async throws {
         guard !starting, !running, !stopping else { throw Failure("识别正在启动或运行") }
         guard !poisoned else { throw Failure("系统处理超时，请重新打开应用后重试") }
+        let fixture = fixtureEnabled ? try loadFixture() : nil
         starting = true
         defer { starting = false }
         let source = Locale.Language(identifier: "ja")
@@ -91,6 +95,7 @@ final class AppleCaptionPipeline: ObservableObject {
                     self.onSource?(text)
                     if result.isFinal {
                         self.finalCount += 1
+                        self.fixtureDiagnostic("final")
                         self.enqueueTranslation(text, token: token)
                     }
                 }
@@ -101,9 +106,15 @@ final class AppleCaptionPipeline: ObservableObject {
         }
         do { try await analyzer.start(inputSequence: stream) }
         catch { abort("Apple 识别启动失败：\(error.localizedDescription)"); throw error }
+        if let fixture, generation == token, running { startFixture(fixture, token: token) }
     }
 
     func appendPCM16(_ data: Data, sampleRate: Double = 16_000) {
+        guard !fixtureEnabled else { return }
+        consumePCM16(data, sampleRate: sampleRate)
+    }
+
+    private func consumePCM16(_ data: Data, sampleRate: Double = 16_000) {
         guard acceptingPCM, let targetFormat, let continuation else { return }
         guard !data.isEmpty else { return }
         guard data.count % 2 == 0, data.count <= 128_000, sampleRate.isFinite,
@@ -158,6 +169,8 @@ final class AppleCaptionPipeline: ObservableObject {
     func stop() async {
         guard running, !stopping else { return }
         stopping = true
+        fixtureTask?.cancel()
+        fixtureTask = nil
         acceptingPCM = false
         continuation?.finish()
         let token = generation
@@ -200,6 +213,7 @@ final class AppleCaptionPipeline: ObservableObject {
                     self.recentSource = Array((self.recentSource + [String(text.suffix(400))]).suffix(2))
                     self.translationCount += 1
                     self.lastTranslationAt = Date()
+                    self.fixtureDiagnostic("translation")
                     self.onTranslation?(text, translated)
                 } catch {
                     guard self.generation == token, !Task.isCancelled else { return }
@@ -245,6 +259,8 @@ final class AppleCaptionPipeline: ObservableObject {
 
     private func cleanUp() {
         generation += 1
+        fixtureTask?.cancel()
+        fixtureTask = nil
         acceptingPCM = false
         running = false
         continuation?.finish()
@@ -261,6 +277,57 @@ final class AppleCaptionPipeline: ObservableObject {
         targetFormat = nil
         translationQueue = []
         pendingTranslations = 0
+    }
+
+    private func loadFixture() throws -> Data {
+        let url = URL.documentsDirectory.appendingPathComponent("subline-glasses-fixture.wav")
+        let file = try AVAudioFile(forReading: url, commonFormat: .pcmFormatInt16, interleaved: false)
+        guard file.fileFormat.streamDescription.pointee.mFormatID == kAudioFormatLinearPCM,
+              file.fileFormat.sampleRate == 16_000, file.fileFormat.channelCount == 1,
+              file.fileFormat.settings[AVLinearPCMBitDepthKey] as? Int == 16,
+              file.length > 0, file.length <= 16_000 * 600,
+              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat,
+                                            frameCapacity: AVAudioFrameCount(file.length)) else {
+            throw Failure("测试音频须为不超过十分钟的 16 kHz 单声道 PCM16 WAV")
+        }
+        try file.read(into: buffer)
+        guard let samples = buffer.int16ChannelData?[0], buffer.frameLength > 0 else {
+            throw Failure("无法读取测试音频")
+        }
+        return Data(bytes: samples, count: Int(buffer.frameLength) * 2)
+    }
+
+    private func startFixture(_ data: Data, token: Int) {
+        fixtureTask?.cancel()
+        fixtureTask = Task { [weak self] in
+            let clock = ContinuousClock()
+            do { try await clock.sleep(for: .seconds(5)) } catch { return }
+            let start = clock.now
+            var offset = 0
+            var tick = 0
+            while !Task.isCancelled {
+                guard let self, self.generation == token, self.acceptingPCM else { return }
+                var chunk = Data()
+                while chunk.count < 3_200 {
+                    let length = min(3_200 - chunk.count, data.count - offset)
+                    chunk.append(data[offset..<(offset + length)])
+                    offset = (offset + length) % data.count
+                }
+                self.consumePCM16(chunk)
+                tick += 1
+                // Stay paced after delayed scheduling instead of flooding the analyzer with catch-up input.
+                let deadline = max(start.advanced(by: .milliseconds(tick * 100)), clock.now.advanced(by: .milliseconds(100)))
+                do { try await clock.sleep(until: deadline) } catch { return }
+            }
+        }
+    }
+
+    private func fixtureDiagnostic(_ event: String) {
+        guard fixtureEnabled else { return }
+        NSLog("[GlassesFixture] %@ time=%.3f protected=%@ foreground=%@", event,
+              Date().timeIntervalSince1970,
+              UIApplication.shared.isProtectedDataAvailable.description,
+              (UIApplication.shared.applicationState == .active).description)
     }
 
     private func deadline<T>(seconds: Double, operation: @escaping @MainActor () async throws -> T) async throws -> T {
