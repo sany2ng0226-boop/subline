@@ -12,19 +12,41 @@ import type {
   SetupProgress,
 } from '@rt/core';
 
+export interface NativeSegmentPayload extends SegmentPayload {
+  sequence: number;
+  sessionId: string;
+  startedAt: number;
+}
+
+export interface NativeRecordingStatus extends StatusPayload {
+  sessionId: string;
+  /** Native capture-session start, epoch milliseconds. */
+  startedAt: number;
+}
+
 /** 插件向 JS 发的事件名 → 事件载荷类型 */
 export interface RealtimeAsrEventMap {
+  appActive: { active: boolean };
   /** 实时部分识别结果（说话过程中持续更新；text 为空表示清除） */
   partial: PartialPayload;
   /** 一段最终确定的识别结果 */
-  segment: SegmentPayload;
+  segment: NativeSegmentPayload;
   /** 引擎/管线状态：loading / running / error / stopped */
-  status: StatusPayload;
+  status: NativeRecordingStatus;
   /** ASR 模型下载进度（仅在 downloadModels 期间触发） */
   setupProgress: SetupProgress;
 }
 
 export interface RealtimeAsrPlugin {
+  /** Durable native finals remain here while WKWebView is suspended. */
+  drainPendingSegments(): Promise<{
+    segments: NativeSegmentPayload[];
+    status: NativeRecordingStatus;
+    journalError?: string;
+  }>;
+  /** Call only after segments through this sequence are durably saved by JS. */
+  ackPendingSegments(options: { through: number }): Promise<{ ok: boolean; error?: string }>;
+
   /**
    * 启动端上 ASR 管线：按 modelId 加载对应识别模型（若已就绪）、打开麦克风
    * （AVAudioEngine，16kHz 单声道）、开始识别。后续通过 'partial' / 'segment' / 'status'

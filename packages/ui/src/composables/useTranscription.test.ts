@@ -193,3 +193,25 @@ it('retries failed finalization for archive without requiring a new capture', as
   expect(state.recordingIds).toEqual(['partial-audio']);
   expect(state.recording.value).toBe(false);
 });
+
+it('restores iOS native running state and the original clock before replaying background finals', async () => {
+  const { setBridge, bridge } = await import('../bridge');
+  setBridge({ ...bridge(), platform: 'ios' });
+  const epoch = new Date(2026, 9, 30, 11, 20, 0).getTime();
+  callbacks.onStatus({ state: 'running', sessionId: 'native-session', startedAt: epoch, resumed: true });
+  expect(state.recording.value).toBe(true);
+  expect(state.recordingStartedAt()).toBe(epoch);
+  callbacks.onSegment({ id: 200, text: 'Background final', start: 90, duration: 2, startedAt: epoch });
+  expect(state.lines[0].time).toBe('11:21:30');
+  callbacks.onStatus({ state: 'stopped', sessionId: 'native-session', startedAt: epoch, resumed: true });
+  expect(state.recording.value).toBe(false);
+});
+
+it('uses each iOS replayed segment clock even when a prior session is already stopped', async () => {
+  const { setBridge, bridge } = await import('../bridge');
+  setBridge({ ...bridge(), platform: 'ios' });
+  const epoch = new Date(2026, 9, 30, 8, 0, 0).getTime();
+  callbacks.onSegment({ id: 201, text: 'Earlier session', start: 5, duration: 1, startedAt: epoch });
+  expect(state.lines[0].time).toBe('08:00:05');
+  expect(state.recording.value).toBe(false);
+});

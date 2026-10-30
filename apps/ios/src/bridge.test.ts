@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   storage: new Map<string, string>(),
   listeners: new Map<string, (value: any) => void>(),
   start: vi.fn(), stop: vi.fn(), translate: vi.fn(), setup: vi.fn(), download: vi.fn(),
+  journal: undefined as any, ack: vi.fn(), prewarm: vi.fn(),
 }));
 vi.mock('@capacitor/preferences', () => ({ Preferences: {
   get: vi.fn(async ({ key }: { key: string }) => ({ value: mocks.storage.get(key) ?? null })),
@@ -12,6 +13,7 @@ vi.mock('@capacitor/preferences', () => ({ Preferences: {
 } }));
 vi.mock('../native-plugin', () => ({
   RealtimeAsr: {
+    get drainPendingSegments() { return mocks.journal; }, ackPendingSegments: mocks.ack, prewarm: mocks.prewarm,
     start: mocks.start, stop: mocks.stop, getSetupStatus: mocks.setup, downloadModels: mocks.download,
     addListener: vi.fn((event: string, callback: (value: any) => void) => {
       mocks.listeners.set(event, callback);
@@ -50,6 +52,7 @@ async function setup(engine: AppSettings['translation']['engine'] = 'm2m100') {
 beforeEach(() => {
   vi.useFakeTimers();
   mocks.storage.clear(); mocks.listeners.clear();
+  mocks.journal = undefined; mocks.ack.mockReset().mockResolvedValue({ ok: true }); mocks.prewarm.mockReset().mockResolvedValue(undefined);
   mocks.start.mockReset().mockResolvedValue({ ok: true });
   mocks.stop.mockReset().mockResolvedValue({ ok: true });
   mocks.setup.mockReset().mockResolvedValue({ asrReady: true });
@@ -176,3 +179,168 @@ describe('iOS shared sentence and translation pipeline', () => {
     expect((await bridge.getSettings()).asr).toEqual({ model: 'sense-voice', language: 'auto' });
   });
  });
+
+async function settleJournal(): Promise<void> { for (let i = 0; i < 80; i++) await Promise.resolve(); }
+const sessionStart = 1793330000000;
+function journalSegment(sequence: number, text: string, sessionId = 'session-a', start = sequence * 2) {
+  return { ...fragment(text, start, 1.2), sequence, sessionId, startedAt: sessionStart };
+}
+async function journalSetup() {
+  const snapshot = { segments: [] as ReturnType<typeof journalSegment>[],
+    status: { state: 'stopped' as 'stopped' | 'running', sessionId: '', startedAt: 0 } };
+  mocks.journal = vi.fn(async () => ({ segments: [...snapshot.segments], status: { ...snapshot.status } }));
+  mocks.start.mockImplementation(async () => {
+    snapshot.status = { state: 'running', sessionId: 'session-a', startedAt: sessionStart };
+    emit('status', { ...snapshot.status });
+    return { ok: true };
+  });
+  mocks.stop.mockImplementation(async () => {
+    snapshot.status.state = 'stopped';
+    emit('status', { ...snapshot.status });
+    return { ok: true };
+  });
+  const result = await setup();
+  await settleJournal();
+  return { ...result, snapshot };
+}
+
+describe('iOS durable native background replay', () => {
+  it('deduplicates live and replayed finals and acknowledges only after the UI recovery write succeeds', async () => {
+    const { bridge, segments, snapshot } = await journalSetup();
+    const segment = journalSegment(1, '保存する文です。');
+    snapshot.segments.push(segment);
+    emit('segment', segment);
+    await settleJournal();
+    expect(segments).toHaveLength(1);
+    expect(mocks.ack).not.toHaveBeenCalled();
+    emit('appActive', { active: true });
+    await settleJournal();
+    expect(segments).toHaveLength(1);
+    const { Preferences } = await import('@capacitor/preferences');
+    vi.mocked(Preferences.set).mockRejectedValueOnce(new Error('disk full'));
+    await expect(bridge.saveRecovery!('{"version":1,"lines":[{"text":"保存する文です。"}]}')).rejects.toThrow('disk full');
+    expect(mocks.ack).not.toHaveBeenCalled();
+    await bridge.saveRecovery!('{"version":1,"lines":[{"text":"保存する文です。"}]}');
+    expect(mocks.ack).toHaveBeenLastCalledWith({ through: 1 });
+  });
+
+  it('does not translate while hidden and replays missing native finals once when foreground returns', async () => {
+    const document = new EventTarget() as EventTarget & { visibilityState: string };
+    document.visibilityState = 'visible';
+    vi.stubGlobal('document', document);
+    const { segments, snapshot } = await journalSetup();
+    document.visibilityState = 'hidden';
+    document.dispatchEvent(new Event('visibilitychange'));
+    const first = journalSegment(1, '背景で確定した文です。');
+    snapshot.segments.push(first);
+    emit('segment', first);
+    await settleJournal();
+    expect(segments).toHaveLength(1);
+    expect(mocks.translate).not.toHaveBeenCalled();
+    snapshot.segments.push(journalSegment(2, '戻ってから読む文です。'));
+    document.visibilityState = 'visible';
+    document.dispatchEvent(new Event('visibilitychange'));
+    await settleJournal();
+    expect(segments.map((s) => s.text)).toEqual(['背景で確定した文です。', '戻ってから読む文です。']);
+    expect(mocks.translate).toHaveBeenCalledTimes(2);
+    emit('appActive', { active: true }); await settleJournal();
+    expect(segments).toHaveLength(2);
+    expect(mocks.translate).toHaveBeenCalledTimes(2);
+  });
+
+  it('drains a missing native stop-tail before stopped and does not acknowledge an unrendered assembler fragment', async () => {
+    const { bridge, segments, snapshot } = await journalSetup();
+    const order: string[] = [];
+    bridge.onSegment((s) => order.push(s.text));
+    bridge.onStatus((s) => { if (s.state === 'stopped') order.push('stopped'); });
+    emit('segment', journalSegment(1, 'まだ途中'));
+    await settleJournal();
+    await bridge.saveRecovery!('{"version":1,"lines":[]}');
+    expect(mocks.ack).not.toHaveBeenCalled();
+    mocks.stop.mockImplementationOnce(async () => {
+      snapshot.segments.push(journalSegment(1, 'まだ途中'), journalSegment(2, '続きの尾段', 'session-a', 4));
+      snapshot.status.state = 'stopped';
+      emit('status', { ...snapshot.status });
+      return { ok: true };
+    });
+    await bridge.stopPipeline();
+    await settleJournal();
+    expect(segments.map((s) => s.text)).toEqual(['まだ途中続きの尾段']);
+    expect(order[0]).toBe('まだ途中続きの尾段');
+    expect(order.indexOf('stopped')).toBeGreaterThan(0);
+    await bridge.saveRecovery!('{"version":1,"lines":[{"text":"まだ途中続きの尾段"}]}');
+    expect(mocks.ack).toHaveBeenLastCalledWith({ through: 2 });
+  });
+
+  it('loads a durable cursor before startup replay and restores a running session instead of starting the microphone again', async () => {
+    mocks.storage.set('realtime-translator.recovery', JSON.stringify({ through: 4,
+      json: '{"version":1,"lines":[{"text":"持久化済みです。"}]}' }));
+    const snapshot = { segments: [journalSegment(4, '持久化済みです。'), journalSegment(5, '新しく届く文です。')],
+      status: { state: 'running', sessionId: 'session-a', startedAt: sessionStart } };
+    mocks.journal = vi.fn(async () => snapshot);
+    const bridge = createIosBridge();
+    const segments: SegmentPayload[] = [], statuses: any[] = [];
+    bridge.onSegment((s) => segments.push(s)); bridge.onStatus((s) => statuses.push(s));
+    expect(await bridge.loadRecovery!()).toContain('持久化済みです。');
+    await settleJournal();
+    expect(segments.map((s) => s.text)).toEqual(['新しく届く文です。']);
+    expect(statuses).toContainEqual(expect.objectContaining({ state: 'running', resumed: true, startedAt: sessionStart }));
+    await bridge.startPipeline();
+    expect(mocks.start).not.toHaveBeenCalled();
+  });
+});
+
+describe('iOS replay ordering and persistence boundaries', () => {
+  it('drains older suspended finals before a newer live event can advance the dedupe cursor', async () => {
+    const { segments, snapshot } = await journalSetup();
+    snapshot.segments.push(journalSegment(1, '先に届くべき文です。'), journalSegment(2, '後から届く文です。'));
+    emit('segment', snapshot.segments[1]);
+    await settleJournal();
+    expect(segments.map((s) => s.text)).toEqual(['先に届くべき文です。', '後から届く文です。']);
+  });
+
+  it('persists only the rendered prefix when the next source fragment remains open, without replaying that prefix after reload', async () => {
+    const { bridge, segments, snapshot } = await journalSetup();
+    snapshot.segments.push(journalSegment(1, '途中の原文', 'session-a', 0), journalSegment(2, '次の途中', 'session-a', 10));
+    emit('segment', snapshot.segments[0]); emit('segment', snapshot.segments[1]);
+    await settleJournal();
+    expect(segments.map((s) => s.text)).toEqual(['途中の原文']);
+    await bridge.saveRecovery!(JSON.stringify({ version: 1, savedAt: 1,
+      lines: [{ time: '11:00:00', text: '途中の原文', translation: '' }] }));
+    expect(mocks.ack).toHaveBeenLastCalledWith({ through: 1 });
+    const restored = createIosBridge();
+    const replayed: SegmentPayload[] = [];
+    restored.onSegment((s) => replayed.push(s));
+    await restored.loadRecovery!(); await settleJournal();
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(replayed.map((s) => s.text)).toEqual(['次の途中']);
+  });
+});
+
+describe('iOS native foreground translation gating', () => {
+  it('uses native background state even before the document visibility event arrives', async () => {
+    const { snapshot } = await journalSetup();
+    emit('appActive', { active: false });
+    const segment = journalSegment(1, '背景で受け取った文です。');
+    snapshot.segments.push(segment); emit('segment', segment);
+    await settleJournal();
+    expect(mocks.translate).not.toHaveBeenCalled();
+    emit('appActive', { active: true }); await settleJournal();
+    expect(mocks.translate).toHaveBeenCalledTimes(1);
+  });
+
+  it('pauses an already queued native translation until foreground returns', async () => {
+    const first = deferred<{ text: string }>();
+    mocks.translate.mockImplementationOnce(() => first.promise);
+    const { snapshot } = await journalSetup();
+    const a = journalSegment(1, '前景の最初の文です。'), b = journalSegment(2, '待機している次の文です。');
+    snapshot.segments.push(a, b); emit('segment', a); emit('segment', b);
+    await settleJournal();
+    expect(mocks.translate).toHaveBeenCalledTimes(1);
+    emit('appActive', { active: false });
+    first.resolve({ text: '第一句' }); await settleJournal();
+    expect(mocks.translate).toHaveBeenCalledTimes(1);
+    emit('appActive', { active: true }); await settleJournal();
+    expect(mocks.translate).toHaveBeenCalledTimes(2);
+  });
+});

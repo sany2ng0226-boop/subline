@@ -58,6 +58,7 @@ export const translationNotice = ref('');
 
 // 录音开始时的本地时刻（epoch ms），用于把片段的相对偏移换算成本地时钟时间
 let recordStartEpoch = 0;
+let nativeStartKnown = false;
 
 // 录音开关在途状态：start/stop 尚未 await 完成时为真——既作并发守卫（忽略新的切换请求，
 // 消除 stop 进行中被并发 start 拆掉音频通路的窗口期），也供 UI 禁用录音按钮并显示加载态
@@ -78,6 +79,11 @@ export function registerTranscriptionListeners(): void {
   registered = true;
 
   bridge().onSegment((seg) => {
+    const native = seg as typeof seg & { startedAt?: number };
+    if (bridge().platform === 'ios' && Number.isFinite(native.startedAt) && native.startedAt! > 0) {
+      recordStartEpoch = native.startedAt!;
+      nativeStartKnown = true;
+    }
     const line = draftLine.value ?? makeDraft(seg.text);
     Object.assign(line, {
       id: seg.id, time: fmtTime(seg.start), text: seg.text, lang: seg.lang,
@@ -126,6 +132,12 @@ export function registerTranscriptionListeners(): void {
     }
   });
   bridge().onStatus((s) => {
+    const native = s as typeof s & { sessionId?: string; startedAt?: number; resumed?: boolean };
+    if (bridge().platform === 'ios' && native.sessionId && Number.isFinite(native.startedAt) && native.startedAt! > 0) {
+      recordStartEpoch = native.startedAt!;
+      nativeStartKnown = true;
+      if (native.resumed) recording.value = s.state === 'running';
+    }
     if (s.state === 'loading') {
       modelLoading.value = true;
     } else if (s.state === 'running') {
@@ -186,7 +198,7 @@ export async function startRecording(): Promise<void> {
   }
   // 计时基线在管线确认启动后才取：segment.start 的 0 点是管线启动之后，
   // 首次录音需加载模型耗时数秒，若在 await 前取值会让所有行的时钟偏早整个加载时长。
-  recordStartEpoch = Date.now();
+  if (bridge().platform !== 'ios' || !nativeStartKnown) recordStartEpoch = Date.now();
   if (result.recordingId) restoreRecordings([result.recordingId]);
   lastStopFailure = null;
   recording.value = true;

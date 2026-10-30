@@ -57,9 +57,11 @@ import type {
   TranslationStatusPayload,
 } from '@rt/core';
 import { RealtimeAsr, RealtimeTranslate } from '../native-plugin';
+import type { NativeSegmentPayload, NativeRecordingStatus } from '../native-plugin/definitions';
 
 const SETTINGS_KEY = 'realtime-translator.settings';
 const ARCHIVES_KEY = 'realtime-translator.archives';
+const RECOVERY_KEY = 'realtime-translator.recovery';
 
 // iOS 平台收敛：不支持系统音频（音源恒为麦克风）；asr.model 若不在 iOS 支持列表内则回落默认模型
 // （registry 里 platforms 不含 'ios' 的模型在本端不可用）。所有产出 settings 的路径（读/写）统一
@@ -155,13 +157,32 @@ export function createIosBridge(): AppBridge {
   let translationEpoch = 0;
   let translationQueue: Promise<unknown> = Promise.resolve();
   const pendingTranslations = new Set<number>();
+  const deferredTranslations: { segment: SegmentPayload; epoch: number }[] = [];
+  const foregroundWaiters = new Set<() => void>();
+  let nativeAppActive = true;
+  const isForeground = (): boolean => nativeAppActive && (typeof document === 'undefined' || document.visibilityState !== 'hidden');
+
+  function translateWhenVisible(segment: SegmentPayload): void {
+    if (!isForeground()) { deferredTranslations.push({ segment, epoch: translationEpoch }); return; }
+    void translateSegment(segment);
+  }
+
+  function translateDeferred(): void {
+    if (!isForeground()) return;
+    for (const item of deferredTranslations.splice(0)) {
+      if (item.epoch === translationEpoch) void translateSegment(item.segment);
+    }
+  }
 
   function invalidateTranslation(): void {
     for (const id of pendingTranslations) {
       translationCb.emit({ id, text: '', failed: true, error: 'Translation configuration or recording session changed' });
     }
     pendingTranslations.clear();
+    deferredTranslations.splice(0);
     translationEpoch++;
+    for (const wake of foregroundWaiters) wake();
+    foregroundWaiters.clear();
     translationContext.reset();
   }
 
@@ -189,6 +210,11 @@ export function createIosBridge(): AppBridge {
           // Capture settings and source-only context before queueing; the native session is serial.
           const operation = translationQueue.then(async () => {
             if (epoch !== translationEpoch) throw new Error('Translation request invalidated');
+            // A queued request may reach the native SwiftUI session after the app was hidden.
+            while (!isForeground()) {
+              await new Promise<void>((wake) => foregroundWaiters.add(wake));
+              if (epoch !== translationEpoch) throw new Error('Translation request invalidated');
+            }
             return RealtimeTranslate.translate({
               text: req.text,
               source: req.source,
@@ -236,9 +262,11 @@ export function createIosBridge(): AppBridge {
   };
   const sentences = new SentenceAssembler((segment) => {
     const line: SegmentPayload = { ...segment, id: nextLineId++ };
+    markNativeRendered(segment);
     segmentCb.emit(line);
-    void translateSegment(line);
+    translateWhenVisible(line);
     publishPartial();
+    queueMicrotask(markRenderable);
   });
   function finishPendingSpeech(): void {
     sentences.flush();
@@ -246,27 +274,187 @@ export function createIosBridge(): AppBridge {
     publishPartial();
     acceptingNative = false;
   }
+  const hasJournal = typeof RealtimeAsr.drainPendingSegments === 'function';
+  let processedSequence = 0;
+  let renderableSequence = 0;
+  let durableSequence = 0;
+  const unrenderedNative = new Map<number, NativeSegmentPayload>();
+  const renderedNative = new Set<number>();
+  let nativeSessionId: string | null = null;
+  let nativeStatus: NativeRecordingStatus | null = null;
+  let recoveryLoaded: Promise<string | null> | null = null;
+  let recoveryWrites: Promise<unknown> = Promise.resolve();
+  let nativeEvents: Promise<unknown> = Promise.resolve();
+  let draining: Promise<void> | null = null;
+
+  function markRenderable(): void {
+    while (renderedNative.has(renderableSequence + 1)) {
+      renderedNative.delete(++renderableSequence);
+    }
+  }
+
+  function markNativeRendered(segment: SegmentPayload): void {
+    const first = segment as NativeSegmentPayload;
+    if (!Number.isSafeInteger(first.sequence)) return;
+    let text = '';
+    const covered: number[] = [];
+    for (const [sequence, source] of unrenderedNative) {
+      if (sequence < first.sequence) continue;
+      if (source.sessionId !== first.sessionId) break;
+      const separator = /[A-Za-z0-9]$/.test(text) && /^[A-Za-z0-9]/.test(source.text) ? ' ' : '';
+      text += separator + source.text;
+      covered.push(sequence);
+      if (text === segment.text) {
+        for (const sequence of covered) { renderedNative.add(sequence); unrenderedNative.delete(sequence); }
+        markRenderable();
+        return;
+      }
+      if (!segment.text.startsWith(text)) return;
+    }
+  }
+
+  function readDurableRecovery(): Promise<string | null> {
+    if (!recoveryLoaded) recoveryLoaded = Preferences.get({ key: RECOVERY_KEY }).then(({ value }) => {
+      if (!value) return null;
+      try {
+        const record = JSON.parse(value);
+        if (typeof record.through === 'number' && Number.isSafeInteger(record.through) && record.through >= 0) {
+          durableSequence = record.through;
+          processedSequence = Math.max(processedSequence, durableSequence);
+          renderableSequence = Math.max(renderableSequence, durableSequence);
+        }
+        return typeof record.json === 'string' ? record.json : null;
+      } catch { return null; }
+    });
+    return recoveryLoaded;
+  }
+
+  async function acknowledgeDurable(): Promise<void> {
+    if (!hasJournal || !durableSequence) return;
+    try { await RealtimeAsr.ackPendingSegments({ through: durableSequence }); }
+    catch { /* The durable cursor suppresses replay even when this acknowledgement must be retried. */ }
+  }
+
+  function persistRecovery(json: string | null): Promise<void> {
+    const through = renderableSequence;
+    const write = recoveryWrites.then(async () => {
+      await readDurableRecovery();
+      const savedThrough = Math.max(durableSequence, through);
+      await Preferences.set({ key: RECOVERY_KEY, value: JSON.stringify({ json, through: savedThrough }) });
+      durableSequence = savedThrough;
+      recoveryLoaded = Promise.resolve(json);
+      await acknowledgeDurable();
+    });
+    recoveryWrites = write.catch(() => undefined);
+    return write;
+  }
+
+  function adoptNativeSession(sessionId: string, startedAt?: number): void {
+    if (nativeSessionId !== sessionId) {
+      sentences.flush();
+      livePartial = { text: '' };
+      invalidateTranslation();
+      resetReverseTranslationContext(reverseCtx);
+      nativeSessionId = sessionId;
+    }
+    if (nativeStatus?.state === 'running' && Number.isFinite(startedAt) && startedAt! > 0) {
+      statusCb.emit({ state: 'running', sessionId, startedAt, resumed: true } as StatusPayload);
+    }
+  }
+
+  function consumeJournalSegment(segment: NativeSegmentPayload): void {
+    if (!Number.isSafeInteger(segment.sequence) || segment.sequence <= processedSequence) return;
+    adoptNativeSession(segment.sessionId, segment.startedAt);
+    processedSequence = segment.sequence;
+    unrenderedNative.set(segment.sequence, segment);
+    livePartial = { text: '' };
+    sentences.push(segment);
+    markRenderable();
+    publishPartial();
+  }
+
+  function enqueueNative(operation: () => void | Promise<void>): Promise<void> {
+    const next = nativeEvents.then(async () => { await readDurableRecovery(); await operation(); });
+    nativeEvents = next.catch(() => undefined);
+    return next;
+  }
+
+  function reportNativeStatus(status: NativeRecordingStatus | StatusPayload): void {
+    if ('sessionId' in status) nativeStatus = status;
+    if (status.state === 'stopped' || status.state === 'error') {
+      finishPendingSpeech();
+      markRenderable();
+    } else if (status.state === 'running') acceptingNative = true;
+    statusCb.emit('sessionId' in status ? { ...status, resumed: true } as StatusPayload : status);
+  }
+
+  async function consumeSnapshot(snapshot: Awaited<ReturnType<typeof RealtimeAsr.drainPendingSegments>>): Promise<void> {
+    nativeStatus = snapshot.status;
+    if (snapshot.status.sessionId) adoptNativeSession(snapshot.status.sessionId, snapshot.status.startedAt);
+    for (const segment of [...snapshot.segments].sort((a, b) => a.sequence - b.sequence)) consumeJournalSegment(segment);
+    if (snapshot.status.sessionId) adoptNativeSession(snapshot.status.sessionId, snapshot.status.startedAt);
+    reportNativeStatus(snapshot.journalError
+      ? { ...snapshot.status, state: 'error', error: snapshot.journalError, code: 'asr-crashed' }
+      : snapshot.status);
+    await acknowledgeDurable();
+    translateDeferred();
+  }
+
+  function drainNative(): Promise<void> {
+    if (!hasJournal) return Promise.resolve();
+    if (draining) return draining;
+    const operation = enqueueNative(async () => { await consumeSnapshot(await RealtimeAsr.drainPendingSegments()); });
+    draining = operation.finally(() => { draining = null; });
+    return draining;
+  }
+
+  function resumeNative(): void {
+    if (!isForeground()) return;
+    for (const wake of foregroundWaiters) wake();
+    foregroundWaiters.clear();
+    void drainNative().catch(() => undefined);
+  }
+
   function subscribeNative(): void {
     void RealtimeAsr.addListener('partial', (p) => {
-      if (!acceptingNative) return;
-      livePartial = p;
-      if (p.text) sentences.touch();
-      publishPartial();
+      const consume = () => {
+        if (!acceptingNative) return;
+        livePartial = p;
+        if (p.text) sentences.touch();
+        publishPartial();
+      };
+      if (hasJournal) void enqueueNative(consume).catch(() => undefined);
+      else consume();
     }).catch(() => undefined);
-    void RealtimeAsr.addListener('segment', (seg) => {
-      if (!acceptingNative) return;
-      livePartial = { text: '' };
-      sentences.push(seg);
-      publishPartial();
+    void RealtimeAsr.addListener('segment', (segment) => {
+      if (hasJournal && Number.isSafeInteger(segment.sequence)) {
+        void enqueueNative(async () => {
+          // A new live event can overtake finals that were journaled while JS was suspended.
+          if (segment.sequence > processedSequence + 1) await consumeSnapshot(await RealtimeAsr.drainPendingSegments());
+          consumeJournalSegment(segment);
+        }).catch(() => undefined);
+      } else {
+        if (!acceptingNative) return;
+        livePartial = { text: '' };
+        sentences.push(segment);
+        publishPartial();
+      }
     }).catch(() => undefined);
-    void RealtimeAsr.addListener('status', (s) => {
-      if (s.state === 'stopped' || s.state === 'error') finishPendingSpeech();
-      else if (s.state === 'running') acceptingNative = true;
-      statusCb.emit(s);
+    void RealtimeAsr.addListener('status', (status) => {
+      if (hasJournal && (status.state === 'stopped' || status.state === 'error')) {
+        void drainNative().catch(() => reportNativeStatus(status));
+      } else if (hasJournal) void enqueueNative(() => reportNativeStatus(status)).catch(() => undefined);
+      else reportNativeStatus(status);
     }).catch(() => undefined);
-    void RealtimeAsr.addListener('setupProgress', (p) => setupProgressCb.emit(p)).catch(
-      () => undefined,
-    );
+    void RealtimeAsr.addListener('setupProgress', (p) => setupProgressCb.emit(p)).catch(() => undefined);
+    if (hasJournal) {
+      void RealtimeAsr.addListener('appActive', ({ active }) => {
+        nativeAppActive = active;
+        if (active) resumeNative();
+      }).catch(() => undefined);
+      if (typeof document !== 'undefined') document.addEventListener('visibilitychange', resumeNative);
+      if (typeof window !== 'undefined') window.addEventListener('pageshow', resumeNative);
+    }
   }
   subscribeNative();
 
@@ -296,16 +484,20 @@ export function createIosBridge(): AppBridge {
     // ===== ASR 管线（原生）=====
     async startPipeline(): Promise<StartResult> {
       if (startInFlight) return startInFlight;
+      await drainNative();
+      if (startInFlight) return startInFlight;
       if (acceptingNative) return { ok: true };
       // A repeated start must not erase an open utterance; a new session begins only after stop.
       sentences.flush();
       livePartial = { text: '' };
       invalidateTranslation();
       resetReverseTranslationContext(reverseCtx);
+      nativeSessionId = null;
       acceptingNative = true;
       const operation = (async (): Promise<StartResult> => {
         try {
           await settingsSaveQueue;
+          await nativeEvents;
           const r = await RealtimeAsr.start(await currentAsrOptions());
           if (!r.ok) finishPendingSpeech();
           return { ok: r.ok, error: r.error };
@@ -322,14 +514,17 @@ export function createIosBridge(): AppBridge {
       // 进主界面即后台装载当前 ASR 模型（不采麦、不申请权限）：fire-and-forget。
       // UI 在调用前先行禁用录音按钮、等终态 status 解禁；原生侧保证一切路径以终态收尾，
       // 调用本身 reject（纯浏览器预览无原生壳）时由这里补发 stopped，避免按钮永久禁用。
-      void currentAsrOptions()
-        .then((opts) => RealtimeAsr.prewarm(opts))
+      void drainNative().then(async () => {
+        if (!acceptingNative) await RealtimeAsr.prewarm(await currentAsrOptions());
+      })
         .catch(() => statusCb.emit({ state: 'stopped' }));
     },
     async stopPipeline(): Promise<{ ok: boolean }> {
       try {
         const result = await RealtimeAsr.stop();
-        if (result.ok) finishPendingSpeech();
+        await nativeEvents;
+        await drainNative();
+        if (result.ok) { finishPendingSpeech(); markRenderable(); }
         return result;
       } catch {
         return { ok: false };
@@ -347,6 +542,15 @@ export function createIosBridge(): AppBridge {
     openMicSettings(): void {
       void RealtimeAsr.openMicSettings().catch(() => undefined);
     },
+
+    async saveRecovery(json: string): Promise<void> { await persistRecovery(json); },
+    async loadRecovery(): Promise<string | null> {
+      await recoveryWrites;
+      const json = await readDurableRecovery();
+      queueMicrotask(resumeNative);
+      return json;
+    },
+    async clearRecovery(): Promise<void> { await persistRecovery(null); },
 
     // ===== 设置（Preferences）=====
     getSettings(): Promise<AppSettings> {
@@ -456,7 +660,9 @@ export function createIosBridge(): AppBridge {
       return setupProgressCb.on(cb);
     },
     onSegment(cb: (segment: SegmentPayload) => void): (() => void) {
-      return segmentCb.on(cb);
+      const off = segmentCb.on(cb);
+      if (hasJournal) queueMicrotask(resumeNative);
+      return off;
     },
     onPartial(cb: (partial: PartialPayload) => void): (() => void) {
       return partialCb.on(cb);
