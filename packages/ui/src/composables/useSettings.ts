@@ -62,7 +62,8 @@ export function pendingSettingsSave(): Promise<unknown> {
 /** Queue explicit patches; never infer intent by comparing a stale full snapshot. */
 export function saveSettings(next: SettingsPatch): Promise<AppSettings> {
   const patch: SettingsPatch = JSON.parse(JSON.stringify(next));
-  const optimistic = mergeSettings(settings.value!, patch);
+  const before = settings.value!;
+  const optimistic = mergeSettings(before, patch);
   settings.value = optimistic;
   const applied = settings.value;
   applyLocale(optimistic.nativeLang);
@@ -77,6 +78,14 @@ export function saveSettings(next: SettingsPatch): Promise<AppSettings> {
       applyTheme(saved.theme);
     }
     return settings.value!;
+  }).catch((error) => {
+    if (settings.value === applied) {
+      settings.value = before;
+      applyLocale(before.nativeLang);
+      applyFontSize(before.fontSize);
+      applyTheme(before.theme);
+    }
+    throw error;
   });
   settingsSaves = save.catch(() => {});
   return save;

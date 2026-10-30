@@ -7,6 +7,7 @@ import { createQuitFlow, setupSingleInstance } from './quit-flow';
 import { createRecoveryStore } from './recovery-store';
 import { createRendererRecovery } from './renderer-recovery';
 import { createAsrStopController } from './asr-stop';
+import { assertAppleSpeechSupported, queryAppleSpeechSetup } from './apple-speech-client';
 import { resolveLeaveSession } from './leave-session';
 import { createAlwaysOnTopController } from './always-on-top';
 import { createDisplaySleepBlocker } from './display-sleep';
@@ -64,6 +65,12 @@ import { listSummaries, suggestArchiveTitle } from '@rt/core';
 import { systemAudioSupported } from '../shared/audio-source';
 import asrWorkerPath from './asr-process?modulePath';
 import translateWorkerPath from './translation/translate-process?modulePath';
+
+function appleSpeechHelperPath(): string {
+  return app.isPackaged ? path.join(process.resourcesPath, 'apple-speech')
+    : path.join(app.getAppPath(), 'build', 'apple-speech');
+}
+
 import type {
   StartResult,
   AppSettings,
@@ -573,7 +580,8 @@ function startAsrChild(): Promise<void> {
         reject(new Error(`识别进程退出 (${code})`));
       }
     });
-    child.postMessage({ type: 'init', modelsDir: MODELS_DIR, modelId: asr.model, language: asr.language });
+    child.postMessage({ type: 'init', modelsDir: MODELS_DIR, modelId: asr.model, language: asr.language,
+      ...(asr.model === 'apple-speech' ? { appleHelperPath: appleSpeechHelperPath() } : {}) });
   });
 }
 
@@ -652,8 +660,16 @@ ipcMain.handle('pipeline:start', async (event): Promise<StartResult> => {
 // stopped 覆盖 running）外，任何路径（模型缺失的跳过 / 子进程已就绪 / 冷启动成败）都必须以
 // pipeline:status 的 stopped 终态收尾解禁。与并发的 pipeline:start 共用 ensureAsr 单飞天然合流。
 // 冷启动失败时子进程的 error 状态会照常上报（用户未操作也能看到提示），随后仍以 stopped 收尾。
-ipcMain.on('pipeline:prewarm', () => {
-  if (!asrModelsReady(MODELS_DIR, loadSettings().asr.model)) {
+ipcMain.on('pipeline:prewarm', async () => {
+  const asr = loadSettings().asr;
+  let ready = asrModelsReady(MODELS_DIR, asr.model);
+  if (asr.model === 'apple-speech') {
+    try {
+      assertAppleSpeechSupported();
+      ready = (await queryAppleSpeechSetup(appleSpeechHelperPath(), asr.language)).asrReady;
+    } catch { ready = false; }
+  }
+  if (!ready) {
     sendToRenderer('pipeline:status', { state: 'stopped' });
     return;
   }
@@ -700,13 +716,26 @@ ipcMain.on('system-audio:open-settings', () => {
   }
 });
 
-ipcMain.handle('setup:get-status', (_event, modelId: string): SetupStatus => ({
-  asrReady: asrModelsReady(MODELS_DIR, modelId),
-}));
+ipcMain.handle('setup:get-status', async (_event, modelId: string): Promise<SetupStatus> => {
+  if (modelId === 'apple-speech') {
+    try {
+      assertAppleSpeechSupported();
+      return { asrReady: (await queryAppleSpeechSetup(appleSpeechHelperPath(), loadSettings().asr.language)).asrReady };
+    } catch { return { asrReady: false }; }
+  }
+  return { asrReady: asrModelsReady(MODELS_DIR, modelId) };
+});
 
 ipcMain.handle(
   'setup:download-asr',
   async (_event, modelId: string): Promise<{ ok: boolean; error?: string }> => {
+    if (modelId === 'apple-speech') {
+      try {
+        assertAppleSpeechSupported();
+        const result = await queryAppleSpeechSetup(appleSpeechHelperPath(), loadSettings().asr.language, true);
+        return result.asrReady ? { ok: true } : { ok: false, error: result.error ?? '此设备不支持所选 Apple 识别语言' };
+      } catch (error) { return { ok: false, error: (error as Error).message }; }
+    }
     // 挂 AbortController 支持后台取消（models:cancel-download），按模型键索引以支持并行。
     const key = `asr:${modelId}`;
     const abort = new AbortController();
@@ -733,6 +762,7 @@ ipcMain.handle('models:list', (): ModelInfo[] => {
   const settings = loadSettings();
   const models: ModelInfo[] = [];
   for (const spec of ASR_MODELS) {
+    if (spec.engine === 'appleSpeech') continue;
     if (!spec.platforms.includes(process.platform === 'win32' ? 'windows' : 'macos')) continue;
     // sizeBytes 为该模型自身文件的实际字节和（不含公共依赖 VAD）
     let sizeBytes = 0;
@@ -773,6 +803,7 @@ function deleteModelFiles(kind: ModelKind, id: string): void {
   if (kind === 'asr') {
     const spec = getAsrModel(id);
     if (!spec) throw new Error('未知的识别模型');
+    if (spec.engine === 'appleSpeech') throw new Error('Apple 语音模型由系统管理，无法在应用中删除');
     fs.rmSync(path.join(MODELS_DIR, spec.dir), { recursive: true, force: true });
     if (asrChildConfig?.modelId === id) {
       reconfigureAsr();
@@ -965,6 +996,10 @@ ipcMain.handle('settings:get', (): AppSettings => effectiveSettings());
 ipcMain.handle('settings:save', (_event, next: SettingsPatch): AppSettings => {
   const previous = loadSettings();
   const prev = previous.translation;
+  if (sessionActive && !prev.enabled && next.translation?.enabled === true &&
+      prev.engine !== 'cloud' && !translationModelCached()) {
+    throw new Error('Prepare the selected translation model in Settings first. Recording continues.');
+  }
   const saved = saveSettings(next);
   const cur = saved.translation;
   // 只有翻译引擎/云端配置变了才需要重建翻译器；
@@ -975,7 +1010,7 @@ ipcMain.handle('settings:save', (_event, next: SettingsPatch): AppSettings => {
     prev.cloud.apiKey !== cur.cloud.apiKey ||
     prev.cloud.model !== cur.cloud.model;
 
-  // 主页已无翻译开关，开启改由保存触发：翻译刚从关变开也要预热（引擎未变时也是）。
+  // Enabling translation prepares its worker independently from the running ASR session.
   const enabledTurnedOn = !prev.enabled && cur.enabled;
 
   shortcuts.start();
@@ -1003,7 +1038,13 @@ ipcMain.handle('settings:save', (_event, next: SettingsPatch): AppSettings => {
   if (saved.translation.enabled && (engineChanged || enabledTurnedOn)) {
     const canPreheat = saved.translation.engine === 'cloud' || translationModelCached();
     if (canPreheat) {
-      ensureTranslateChild().proc.send({ type: 'preheat' });
+      try {
+        ensureTranslateChild().proc.send({ type: 'preheat' }, (error) => {
+          if (error) sendToRenderer('translation:status', { state: 'error', error: error.message });
+        });
+      } catch (error) {
+        sendToRenderer('translation:status', { state: 'error', error: (error as Error).message });
+      }
     }
   }
   // 返回收敛后的设置（与 settings:get 一致），保证 UI 拿到本机实际生效的音源。

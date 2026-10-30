@@ -211,7 +211,7 @@ it.each(['en', 'ja', 'zh'] as const)('shows ultra quality and registry size toge
   expect(row).toMatchObject({ selectable: true, current: true, systemManaged: true, status: 'systemManaged' });
   expect(row.sizeBytes).toBeUndefined();
   const html = await renderToString(createSSRApp(ModelPicker, { value: 'apple-speech', kind: 'asr', options: [apple] }).use(i18n));
-  expect(html).toContain('Managed by iOS');
+  expect(html).toContain('System-managed');
   expect(html).not.toContain('0 B');
   expect(html).not.toContain('aria-label="Download: Apple Speech"');
   expect(html).not.toContain('aria-label="Delete: Apple Speech"');

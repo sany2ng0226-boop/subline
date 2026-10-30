@@ -171,16 +171,24 @@ const translationSaving = ref(false);
 const translationDownloadOpen = ref(false);
 const translationDownloadTasks = ref<DownloadTask[]>([]);
 async function toggleTranslation(enabled: boolean): Promise<void> {
-  if (!settings.value || translationSaving.value) return;
+  if (!settings.value || translationSaving.value || recordBusy.value || awaitingRecord.value) return;
   translationSaving.value = true;
   try {
     const base = settings.value;
+    if (enabled && recording.value && bridge().platform === 'macos') {
+      const missing = await missingTranslationDownload(base.translation.engine);
+      if (missing.length) {
+        showLocalError(t('settings.prepareTranslationWhileRecording'), () => emit('open-settings'));
+        return;
+      }
+    }
     await saveSettings({ translation: { enabled } });
     if (enabled) {
       translationDownloadTasks.value = await missingTranslationDownload(base.translation.engine);
       translationDownloadOpen.value = translationDownloadTasks.value.length > 0;
     }
   } catch (error) {
+    showLocalError(String((error as Error).message || error), () => { void toggleTranslation(enabled); });
     console.error('[main:translation]', error);
   } finally {
     translationSaving.value = false;
@@ -575,7 +583,7 @@ function openMicSettings(): void {
 
       <n-switch
         :value="translateOn"
-        :disabled="translationSaving || recording || recordBusy || awaitingRecord || downloadModalOpen"
+        :disabled="translationSaving || (recording && bridge().platform !== 'macos') || recordBusy || awaitingRecord || downloadModalOpen"
         :aria-label="t('settings.translationSection')"
         @update:value="toggleTranslation"
       >

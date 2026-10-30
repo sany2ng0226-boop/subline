@@ -82,7 +82,7 @@ function parseArgs(argv: string[]): CliArgs {
   if (args.models.length === 0) {
     // 默认评测所有本地文件齐全的模型（模型由应用内下载，评测不负责下载）
     args.models = ASR_MODELS.filter((m) =>
-      requiredAsrFiles(m.id).every((f) => fs.existsSync(path.join(modelsDir, f))),
+      m.engine !== 'appleSpeech' && m.platforms.includes('macos') && requiredAsrFiles(m.id).every((f) => fs.existsSync(path.join(modelsDir, f))),
     ).map((m) => m.id);
   }
   return args;
