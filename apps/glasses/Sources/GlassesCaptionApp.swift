@@ -14,7 +14,7 @@ struct GlassesCaptionApp: App {
                 List {
                     Section {
                         Label(model.connected ? "眼镜已连接" : "等待连接眼镜", systemImage: "eyeglasses")
-                        Text("手机收音 · 日语 → 中文")
+                        Text("手机收音 · 日语原文与中文")
                             .font(.subheadline).foregroundStyle(.secondary)
                         Button(model.primaryActionTitle) {
                             Task {
@@ -27,9 +27,15 @@ struct GlassesCaptionApp: App {
                         .accessibilityIdentifier("glasses-primary-action")
                         Text(model.status).font(.footnote).accessibilityIdentifier("glasses-status")
                     }
-                    Section("中文") {
+                    Section("日语原文 · 实时更新") {
+                        Text(model.source.isEmpty ? "等待日语" : model.source)
+                            .accessibilityIdentifier("glasses-source")
+                    }
+                    Section("中文 · 最近完成译文") {
                         Text(model.translation.isEmpty ? "等待译文" : model.translation)
                             .accessibilityIdentifier("glasses-translation")
+                        Text("译文可能对应前一句，原文与译文不保证逐句对齐。")
+                            .font(.caption).foregroundStyle(.secondary)
                         if model.displayTruncated {
                             Text("镜片显示不完整，以上保留完整译文。")
                                 .font(.caption).foregroundStyle(.secondary)
@@ -49,8 +55,6 @@ struct GlassesCaptionApp: App {
                                 .disabled(!model.connected || model.hasActiveSession)
                             Button("发送下一条字幕测试") { model.sendTest() }
                                 .disabled(!model.displayReady || model.recording || model.starting || model.stopping)
-                            Text(model.source.isEmpty ? "等待日语原文" : model.source)
-                                .accessibilityIdentifier("glasses-source")
                             Text("音频包 \(model.audioPackets) · PCM \(model.pcmSamples) · 已发字幕 \(model.sentCount)")
                                 .font(.caption).accessibilityIdentifier("glasses-counters")
                             Text(model.latestEvent).font(.caption).foregroundStyle(.secondary)
@@ -99,6 +103,10 @@ final class GlassesCaptionModel: ObservableObject {
     private var lastDiagnosticAt = 0.0
     private var diagnosticCount = 0
     private var generation = 0
+    private var lens = LensCaptionScheduler()
+    private var lensTask: Task<Void, Never>?
+    private var sourceUpdates = 0
+    private var frameUpdateRequests = 0
 
     var hasActiveSession: Bool { starting || recording || stopping || sessionID != nil }
     var primaryActionTitle: String {
@@ -123,11 +131,13 @@ final class GlassesCaptionModel: ObservableObject {
         pipeline.onSource = { [weak self] text in
             guard let self, self.recording || self.stopping else { return }
             self.source = text
+            self.sourceUpdates += 1
+            if self.recording && !self.stopping { self.queueFrame() }
         }
         pipeline.onTranslation = { [weak self] text in
             guard let self, self.recording || self.stopping else { return }
             self.translation = text
-            if self.recording && !self.stopping { self.sendText(text) }
+            if self.recording && !self.stopping { self.queueFrame() }
             self.diagnostic("translation")
         }
         pipeline.onError = { [weak self] in self?.fail($0) }
@@ -184,6 +194,10 @@ final class GlassesCaptionModel: ObservableObject {
     private func requestDisplay() {
         guard connected, sessionID == nil, !stopping, let device = controller.companionDeviceID else { return }
         let sid = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        cancelLensUpdates()
+        source = ""; translation = ""; displayTruncated = false
+        sourceUpdates = 0; frameUpdateRequests = 0
+        lens.begin(sessionID: sid)
         sessionID = sid; sessionDevice = device; displayReady = false; testIndex = 0
         do {
             try send(19, type: 7, json: ["sid": sid, "force": false, "scope": "temporary", "config": [
@@ -201,28 +215,47 @@ final class GlassesCaptionModel: ObservableObject {
     }
 
     func sendTest() {
-        let messages = ["字幕测试一：我们正在验证中文连续显示。", "字幕测试二：这句话应替换上一句话，不是弹出新通知。"]
+        let messages = [("今日は日本語と中国語の字幕を確認します。", "今天确认日语和中文字幕。"),
+                        ("次の文章に切り替わりました。", "已经切换到下一句话。")]
         guard testIndex < messages.count else { status = "两条字幕已发送，请核对镜片覆盖更新后退出。"; return }
         let text = messages[testIndex]; testIndex += 1
-        translation = text; sendText(text)
+        source = text.0; translation = text.1; queueFrame()
     }
 
-    private func sendText(_ text: String) {
-        guard displayReady, let sid = sessionID, !text.isEmpty, !stopping else { return }
-        // One bounded display frame; the phone retains the complete current translation.
-        var visible = text
-        displayTruncated = visible.utf8.count > 384
-        if displayTruncated {
-            let suffix = "…（未完）"
-            while visible.utf8.count + suffix.utf8.count > 384 { visible.removeLast() }
-            visible += suffix
+    private func queueFrame() {
+        guard displayReady, let sid = sessionID, lens.sessionID == sid, !stopping else { return }
+        let frame = LensCaptionRenderer.render(japanese: source, chinese: translation)
+        displayTruncated = frame.chineseTruncated
+        frameUpdateRequests += 1
+        if let text = lens.update(frame.text, now: ProcessInfo.processInfo.systemUptime) { submitFrame(text) }
+        armLensUpdate()
+    }
+
+    private func armLensUpdate() {
+        guard lensTask == nil, !stopping, let sid = sessionID,
+              let delay = lens.delay(now: ProcessInfo.processInfo.systemUptime) else { return }
+        lensTask = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
+            catch { return }
+            guard let self, self.sessionID == sid, self.lens.sessionID == sid, !self.stopping else { return }
+            self.lensTask = nil
+            if let text = self.lens.flush(now: ProcessInfo.processInfo.systemUptime) { self.submitFrame(text) }
+            self.armLensUpdate()
         }
+    }
+
+    private func cancelLensUpdates() {
+        lensTask?.cancel(); lensTask = nil; lens.cancel()
+    }
+
+    private func submitFrame(_ text: String) {
+        guard displayReady, let sid = sessionID, lens.sessionID == sid, !stopping else { return }
         do {
             try send(19, type: 5, json: ["sid": sid, "mode": 3, "status": 0,
-                                      "content": ["source_transcript": visible]])
+                                      "content": ["source_transcript": text]])
             sentCount += 1
             status = displayTruncated ? "镜片显示不完整，手机保留完整译文。"
-                : recording ? "正在听日语并显示中文。" : "字幕已提交，请核对镜片实际显示。"
+                : recording ? "正在显示日语与最近完成的中文。" : "双语字幕已提交，请核对镜片实际显示。"
             diagnostic("display_text")
         } catch { fail("字幕发送失败：\(error.localizedDescription)") }
     }
@@ -298,6 +331,7 @@ final class GlassesCaptionModel: ObservableObject {
     func stop() async {
         guard !stopping else { return }
         let cancelledBeforeDisplay = starting && sessionID == nil
+        cancelLensUpdates()
         stopping = true; generation += 1; deadline?.cancel(); deadline = nil
         let wasRecording = recording; recording = false
         stopMicrophones()
@@ -335,6 +369,7 @@ final class GlassesCaptionModel: ObservableObject {
                     fail("眼镜拒绝字幕窗口，或返回了未知确认格式。"); return
                 }
                 deadline?.cancel(); deadline = nil; displayReady = true
+                if let sid = sessionID { _ = lens.acknowledge(sessionID: sid) }
                 status = starting ? "字幕窗口已准备，正在准备识别…" : "字幕窗口已准备，可发送测试文字。"
                 diagnostic("display_ready")
             } else if packet.type == 3 {
@@ -373,7 +408,9 @@ final class GlassesCaptionModel: ObservableObject {
             "hardwareSampleRate": inputMode == .phone ? phoneMicrophone.sampleRate : microphone.sampleRate,
             "microphonePCMFrames": inputMode == .phone ? phoneMicrophone.pcmFrames : microphone.pcmFrames,
             "recognitionFinals": pipeline.finalCount, "translations": pipeline.translationCount,
-            "pendingTranslations": pipeline.pendingTranslations]
+            "pendingTranslations": pipeline.pendingTranslations, "sourceUpdates": sourceUpdates,
+            "frameUpdateRequests": frameUpdateRequests, "displayMode": "japanese-and-chinese",
+            "chineseTruncated": displayTruncated]
         guard let data = try? JSONSerialization.data(withJSONObject: row) else { return }
         let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("glasses-caption-diagnostic.jsonl")

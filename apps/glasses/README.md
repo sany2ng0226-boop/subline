@@ -1,6 +1,6 @@
 # Subline Glasses personal device candidate
 
-A separate native iPhone entry point for Japanese speech captured by the phone, on-device recognition and translation, and Chinese-only glasses captions. The glasses are the display; the default input is the iPhone's built-in microphone. Device acceptance requires changing text frames in the original subtitle window, rather than notification cards.
+A separate native iPhone entry point for Japanese speech captured by the phone, on-device recognition and translation, and bilingual glasses captions. The glasses show the latest Japanese recognition result above the latest completed Chinese translation; the default input is the iPhone's built-in microphone. Device acceptance requires changing text frames in the original subtitle window, rather than notification cards.
 
 This candidate does not include the vendor transport frameworks or Turbo IO sources. The preparation script stages a reviewed, separately acquired Turbo IO checkout at `c8815c0b2ff9db3bcdaeeb75abb3ca0e42251efb`, applies narrow host changes, and overlays this app. It does not modify that checkout, change glasses firmware, reset pairing, install an app, or invoke any cloud ASR service. The retained legacy UI is not instantiated.
 
@@ -14,15 +14,15 @@ Build the emitted Xcode project and `RayNeoCompanionDevice` scheme with an avail
 
 ## Use
 
-The main screen shows the connection state, a single start/cancel/stop action, and the complete current Chinese translation. Start only reconnects an existing binding, waits up to fifteen seconds for authenticated connection, requests a new subtitle session, and waits up to ten seconds for its matching ACK before beginning recognition and microphone capture. It never discovers or pairs a new device automatically. Cancel remains available during connection, subtitle confirmation and recognition preparation; a generation token prevents cancelled startup work from reopening capture.
+The main screen shows the connection state, a single start/cancel/stop action, the current Japanese recognition result and the latest completed Chinese translation. Start only reconnects an existing binding, waits up to fifteen seconds for authenticated connection, requests a new subtitle session, and waits up to ten seconds for its matching ACK before beginning recognition and microphone capture. It never discovers or pairs a new device automatically. Cancel remains available during connection, subtitle confirmation and recognition preparation; a generation token prevents cancelled startup work from reopening capture.
 
-Original text, experimental input choices, first-time discovery/connection, display-only A/B tests and counters are in the initially collapsed diagnostics section. Stop preserves native pipeline tail text on the phone while preventing further lens updates and requesting exit from the owned subtitle session.
+Japanese text follows Apple's live recognition results and may be revised as partial results stabilize. Chinese changes only when a translation finishes, so the two sections do not guarantee sentence-level alignment. Experimental input choices, first-time discovery/connection, display-only A/B tests and counters are in the initially collapsed diagnostics section. Stop preserves native pipeline tail text on the phone while cancelling pending lens updates and requesting exit from the owned subtitle session; opening a new subtitle session starts with an empty display cache.
 
-Each lens update is limited to 384 UTF-8 bytes, including an explicit `…（未完）` suffix when the complete translation exceeds that limit. The main screen retains the full translation and shows that lens display is incomplete. This candidate does not page or queue undisplayed remainder; the suffix is an incompleteness warning, not a claim that all text was shown.
+Lens updates use a leading-edge throttle with the latest pending frame sent at the trailing edge, producing at most one changed frame every 0.5 seconds rather than waiting for a pause in speech. Duplicate frames are suppressed. Each frame is limited to 384 UTF-8 bytes: the Japanese section keeps a trailing window within 112 bytes and adds a leading `…` when earlier text is omitted, while Chinese uses the remaining budget and adds `…（未完）` if its ending is omitted. The phone retains the complete current Japanese result and translation. The candidate does not page or queue undisplayed remainder.
 
 ## Device acceptance boundaries
 
-- Subtitle display uses business 19 and waits for the matching session ACK before sending text. SDK submission alone is not proof of lens rendering.
+- Subtitle display uses business 19 and waits for the matching session ACK before sending combined Japanese and Chinese text. SDK submission alone is not proof of lens rendering.
 - The default input is a strictly verified iPhone built-in microphone route. It does not silently choose a Bluetooth headset. RayNeo Bluetooth HFP and business 13 recorder control with 16 kHz mono Opus decoding remain explicitly experimental, separate input options. Only one input runs at a time; an absent stream stops recognition with an explicit error.
 - Coexistence of either experimental glasses microphone option with the subtitle window must be verified on the target firmware; business 19 microphone startup fields are not guessed.
 - The Apple Japanese speech assets and Japanese–Chinese translation packs must already be installed. Translation and speech are processed natively, without relying on a WebView or silent-playback keep-alive.
