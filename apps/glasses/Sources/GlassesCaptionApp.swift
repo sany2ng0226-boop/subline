@@ -20,19 +20,22 @@ struct GlassesCaptionApp: App {
                     }
                     Section("日语 → 中文") {
                         Text(model.status).accessibilityIdentifier("glasses-status")
-                        Picker("眼镜收音方式", selection: $model.inputMode) {
-                            Text("蓝牙耳机麦克风").tag(GlassesInputMode.bluetooth)
+                        Text("手机收音，眼镜显示中文")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                        Picker("收音来源", selection: $model.inputMode) {
+                            Text("iPhone 麦克风").tag(GlassesInputMode.phone)
+                            Text("眼镜蓝牙麦克风（实验）").tag(GlassesInputMode.bluetooth)
                             Text("眼镜协议音频（实验）").tag(GlassesInputMode.protocolAudio)
                         }.disabled(model.recording || model.starting)
                         Button("打开中文字幕窗口") { model.openDisplay() }
                             .disabled(!model.connected || model.sessionID != nil)
                         Button("发送下一条字幕测试") { model.sendTest() }
                             .disabled(!model.displayReady || model.recording || model.starting)
-                        Button("开始眼镜收音与翻译") { Task { await model.startRecognition() } }
+                        Button("开始收音与翻译") { Task { await model.startRecognition() } }
                             .disabled(!model.displayReady || model.recording || model.starting)
                         Button("停止并退出字幕", role: .destructive) { Task { await model.stop() } }
                             .disabled(model.sessionID == nil && !model.recording)
-                        Text("请先结束眼镜的其他录音、智记、提词和对话。手机不采音。")
+                        Text("默认使用 iPhone 内置麦克风；眼镜只显示中文。请先结束眼镜的其他录音、智记、提词和对话。")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Section("中文") {
@@ -58,11 +61,11 @@ struct GlassesCaptionApp: App {
     }
 }
 
-enum GlassesInputMode: String { case bluetooth, protocolAudio }
+enum GlassesInputMode: String { case phone, bluetooth, protocolAudio }
 
 @MainActor
 final class GlassesCaptionModel: ObservableObject {
-    @Published var inputMode = GlassesInputMode.bluetooth
+    @Published var inputMode = GlassesInputMode.phone
     @Published private(set) var connected = false
     @Published private(set) var displayReady = false
     @Published private(set) var recording = false
@@ -80,6 +83,7 @@ final class GlassesCaptionModel: ObservableObject {
     private var nativeDecoder = RNVoiceVADCreate()
     private let pipeline = AppleCaptionPipeline()
     private let microphone = GlassesBluetoothMicrophone()
+    private let phoneMicrophone = PhoneMicrophone()
     private var timer: Timer?
     private var deadline: Task<Void, Never>?
     private var testIndex = 0
@@ -121,6 +125,13 @@ final class GlassesCaptionModel: ObservableObject {
             self.pipeline.appendPCM16(pcm, sampleRate: 16000)
         }
         microphone.onError = { [weak self] in self?.fail($0) }
+        phoneMicrophone.onPCM = { [weak self] pcm in
+            guard let self, self.recording, self.inputMode == .phone else { return }
+            self.audioPackets += 1; self.pcmSamples += pcm.count / 2
+            self.lastAudioAt = ProcessInfo.processInfo.systemUptime
+            self.pipeline.appendPCM16(pcm, sampleRate: 16000)
+        }
+        phoneMicrophone.onError = { [weak self] in self?.fail($0) }
         controller.loadViewIfNeeded()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
@@ -139,7 +150,7 @@ final class GlassesCaptionModel: ObservableObject {
         }
         let now = ProcessInfo.processInfo.systemUptime
         if recording, let began = recognitionStartedAt, now - (lastAudioAt ?? began) > 12 {
-            fail("未持续收到眼镜音频；不会切换到手机麦克风。")
+            fail(inputMode == .phone ? "手机麦克风音频已中断，字幕已停止。" : "未持续收到眼镜音频；不会切换到手机麦克风。")
         }
         if now - lastDiagnosticAt >= 5 { lastDiagnosticAt = now; diagnostic("heartbeat") }
     }
@@ -204,19 +215,20 @@ final class GlassesCaptionModel: ObservableObject {
             RNVoiceVADReset(nativeDecoder)
             audioPackets = 0; pcmSamples = 0; lastAudioAt = nil
             recording = true
-            if inputMode == .bluetooth {
-                try await microphone.start()
+            if inputMode == .phone || inputMode == .bluetooth {
+                if inputMode == .phone { try await phoneMicrophone.start() }
+                else { try await microphone.start() }
                 guard token == generation, displayReady, !stopping else {
-                    microphone.stop(); await pipeline.stop(); return
+                    stopMicrophones(); await pipeline.stop(); return
                 }
             } else {
                 try send(13, type: 2, json: ["rc": 1])
             }
             recognitionStartedAt = ProcessInfo.processInfo.systemUptime
-            status = "已请求眼镜收音，等待音频。"
+            status = inputMode == .phone ? "正在使用手机麦克风，等待日语。" : "已请求眼镜收音，等待音频。"
             diagnostic("microphone_requested")
         } catch {
-            guard token == generation else { microphone.stop(); await pipeline.stop(); return }
+            guard token == generation else { stopMicrophones(); await pipeline.stop(); return }
             fail("无法开始：\(error.localizedDescription)")
         }
     }
@@ -225,13 +237,18 @@ final class GlassesCaptionModel: ObservableObject {
         guard !stopping else { return }
         stopping = true; generation += 1; deadline?.cancel(); deadline = nil
         let wasRecording = recording; recording = false
-        microphone.stop()
+        stopMicrophones()
         if wasRecording, inputMode == .protocolAudio { try? send(13, type: 2, json: ["rc": 2]) }
         await pipeline.stop()
         if let sid = sessionID { try? send(19, type: 3, json: ["sid": sid, "reason_code": 10, "text": ""]) }
         displayReady = false; sessionID = nil; sessionDevice = nil; recognitionStartedAt = nil
         stopping = false; status = "已请求停止并退出；请确认眼镜已回到首页。"
         diagnostic("stopped")
+    }
+
+    private func stopMicrophones() {
+        phoneMicrophone.stop()
+        microphone.stop()
     }
 
     private func fail(_ message: String) {
@@ -287,8 +304,10 @@ final class GlassesCaptionModel: ObservableObject {
             "protectedDataAvailable": UIApplication.shared.isProtectedDataAvailable,
             "audioPackets": audioPackets, "pcmSamples": pcmSamples, "sentCount": sentCount,
             "recording": recording, "displayReady": displayReady, "inputMode": inputMode.rawValue,
-            "inputName": microphone.inputName, "inputPortType": input?.portType.rawValue ?? "",
-            "hardwareSampleRate": microphone.sampleRate, "microphonePCMFrames": microphone.pcmFrames,
+            "inputName": inputMode == .phone ? phoneMicrophone.inputName : microphone.inputName,
+            "inputPortType": input?.portType.rawValue ?? "",
+            "hardwareSampleRate": inputMode == .phone ? phoneMicrophone.sampleRate : microphone.sampleRate,
+            "microphonePCMFrames": inputMode == .phone ? phoneMicrophone.pcmFrames : microphone.pcmFrames,
             "recognitionFinals": pipeline.finalCount, "translations": pipeline.translationCount,
             "pendingTranslations": pipeline.pendingTranslations]
         guard let data = try? JSONSerialization.data(withJSONObject: row) else { return }

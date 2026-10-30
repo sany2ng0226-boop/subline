@@ -80,7 +80,7 @@ def main():
     config = config.replace("CFBundleDisplayName: Turbo IO", f"CFBundleDisplayName: Subline Glasses\n        GlassesCommit: {commit}")
     config = config.replace('MARKETING_VERSION: "0.2.0"', 'MARKETING_VERSION: "0.1.0"')
     config = config.replace('CURRENT_PROJECT_VERSION: "2"', 'CURRENT_PROJECT_VERSION: "1"')
-    config = config.replace("        UILaunchScreen: {}", "        UILaunchScreen: {}\n        NSSpeechRecognitionUsageDescription: 将眼镜传来的日语音频在手机本地识别为文字。\n        NSMicrophoneUsageDescription: 通过已连接的雷鸟蓝牙麦克风收音，不使用手机内置麦克风。")
+    config = config.replace("        UILaunchScreen: {}", "        UILaunchScreen: {}\n        NSSpeechRecognitionUsageDescription: 将你选择的麦克风音频在手机本地识别为日语文字。\n        NSMicrophoneUsageDescription: 默认使用 iPhone 内置麦克风收音、识别并翻译，中文显示在眼镜上。")
     config = config.replace("UIBackgroundModes: [bluetooth-central, external-accessory]", "UIBackgroundModes: [bluetooth-central, external-accessory, audio]")
     spec.write_text(config)
     subprocess.run(["xcodegen", "generate", "--spec", str(spec)], check=True)
