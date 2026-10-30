@@ -53,12 +53,14 @@ describe('asrModelsFor', () => {
     ]);
   });
 
-  it('ios 支持系统识别，其他平台不暴露系统模型', () => {
+  it('Apple 平台支持系统识别，其他平台不暴露系统模型', () => {
     expect(asrModelsFor('zh', 'ios').map((m) => m.id)).toEqual(['apple-speech', 'sense-voice']);
     expect(asrModelsFor('ja', 'ios').map((m) => m.id)).toEqual(['apple-speech', 'sense-voice']);
     expect(asrModelsFor('en', 'ios').map((m) => m.id)).toEqual(['apple-speech', 'sense-voice']);
     expect(asrModelsFor('auto', 'ios').map((m) => m.id)).toEqual(['sense-voice']);
-    for (const platform of ['macos', 'windows', 'web'] as const) {
+    expect(asrModelsFor('ja', 'macos').map((m) => m.id)).toContain('apple-speech');
+    expect(asrModelsFor('auto', 'macos').map((m) => m.id)).toEqual(['sense-voice']);
+    for (const platform of ['windows', 'web'] as const) {
       expect(asrModelsFor('ja', platform).map((m) => m.id)).not.toContain('apple-speech');
     }
   });

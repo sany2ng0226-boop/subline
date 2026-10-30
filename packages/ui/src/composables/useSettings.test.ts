@@ -121,3 +121,11 @@ it('continues saving after a rejected host write', async () => {
   await mod.saveSettings({ theme: 'dark' });
   expect(mod.settings.value).toMatchObject({ fontSize: 'small', theme: 'dark' });
 });
+
+it('rolls back a rejected translation toggle so a failed preparation is not shown as enabled', async () => {
+  const before = makeDefaults([]);
+  (await import('../bridge')).setBridge({ saveSettings: vi.fn().mockRejectedValue(new Error('model missing')) } as unknown as AppBridge);
+  mod.settings.value = before;
+  await expect(mod.saveSettings({ translation: { enabled: true } })).rejects.toThrow('model missing');
+  expect(mod.settings.value?.translation.enabled).toBe(false);
+});

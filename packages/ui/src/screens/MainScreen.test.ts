@@ -1,19 +1,24 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { createRenderer, ssrContextKey } from 'vue';
-import { makeDefaults, type AppBridge, type ShortcutAction } from '@rt/core';
+import { makeDefaults, mergeSettings, type AppBridge, type ShortcutAction } from '@rt/core';
 
 afterEach(() => vi.unstubAllGlobals());
 
 it('keeps settings available during recording without opening disruptive controls or stopping capture', async () => {
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn() }));
   vi.stubGlobal('localStorage', { getItem: () => null });
+  vi.stubGlobal('document', { documentElement: { lang: '', classList: { toggle: vi.fn() }, style: { setProperty: vi.fn() } } });
   const { setBridge } = await import('../bridge');
   let listener: ((action: ShortcutAction) => void) | undefined;
   const off = vi.fn(() => { listener = undefined; });
   const startPipeline = vi.fn(async () => ({ ok: true }));
   const stopPipeline = vi.fn(async () => ({ ok: true }));
+  let persisted = makeDefaults([]);
+  const cache = vi.fn(async () => ({ ready: true }));
+  const save = vi.fn(async (patch) => (persisted = mergeSettings(persisted, patch)));
   setBridge({
     platform: 'macos',
+    saveSettings: save, getTranslationSetupStatus: cache, downloadTranslationModel: vi.fn(),
     onShortcut: (cb: (action: ShortcutAction) => void) => { listener = cb; return off; },
     getSetupStatus: async () => ({ asrReady: true }),
     getMicStatus: async () => 'granted',
@@ -47,6 +52,24 @@ it('keeps settings available during recording without opening disruptive control
     setup.onMobileMenuSelect('settings');
     expect(openSettings).toHaveBeenCalledOnce();
     expect(stopPipeline).not.toHaveBeenCalled();
+    const existingLine = { time: '09:00:00', text: 'Existing transcript', translation: '' };
+    state.lines.push(existingLine);
+    await setup.toggleTranslation(true);
+    expect(settings.value?.translation.enabled).toBe(true);
+    expect(save).toHaveBeenLastCalledWith({ translation: { enabled: true } });
+    expect(state.recording.value).toBe(true);
+    expect(stopPipeline).not.toHaveBeenCalled();
+    expect(state.lines[0].text).toBe('Existing transcript');
+    expect(state.lines[0].translation).toBe('');
+    await setup.toggleTranslation(false);
+    expect(settings.value?.translation.enabled).toBe(false);
+    cache.mockResolvedValueOnce({ ready: false });
+    await setup.toggleTranslation(true);
+    expect(settings.value?.translation.enabled).toBe(false);
+    expect(state.recording.value).toBe(true);
+    expect(stopPipeline).not.toHaveBeenCalled();
+    state.lines.splice(0);
+
     state.recordBusy.value = true;
     setup.onMobileMenuSelect('settings');
     expect(openSettings).toHaveBeenCalledOnce();

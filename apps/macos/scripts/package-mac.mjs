@@ -3,7 +3,8 @@
 // → 在副本里跑 electron-builder → 产物回写到 apps/macos/release。
 // 不签名构建：CSC_IDENTITY_AUTO_DISCOVERY=false pnpm --filter @rt/macos dist
 import { execSync } from 'node:child_process';
-import { readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { buildAppleSpeech } from './build-apple-speech.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -18,6 +19,8 @@ const preview = process.argv.includes('--preview');
 
 const run = (cmd, cwd) => execSync(cmd, { cwd, stdio: 'inherit' });
 
+const appleSpeech = buildAppleSpeech();
+
 console.log('▶ 1/4 构建 (electron-vite)');
 run(preview ? 'RT_INTERNAL_BUILD=1 pnpm run build' : 'pnpm run build', appDir);
 
@@ -29,6 +32,11 @@ rmSync(deployDir, { recursive: true, force: true });
 // --prod=false 以带上 electron / electron-builder（构建期需要）；electron-builder 只把生产依赖打进 .app
 // The deploy lockfile must preserve the dependency versions checked in the workspace.
 run(`pnpm --filter @rt/macos deploy --prod=false "${deployDir}"`, root);
+
+if (appleSpeech) {
+  mkdirSync(path.join(deployDir, 'build'), { recursive: true });
+  copyFileSync(appleSpeech, path.join(deployDir, 'build/apple-speech'));
+}
 
 console.log('▶ 4/4 打包 (electron-builder)');
 const target = dirOnly ? '--dir' : '';

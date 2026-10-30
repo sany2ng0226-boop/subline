@@ -4,8 +4,8 @@
   "description": "Local, real-time speech transcription & translation for macOS",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "dev": "node scripts/build-apple-speech.mjs && electron-vite dev",
+    "build": "node scripts/build-apple-speech.mjs && electron-vite build",
     "start": "electron-vite preview",
     "type-check": "vue-tsc --noEmit -p tsconfig.json",
     "clean": "bash scripts/clean.sh",

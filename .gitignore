@@ -14,6 +14,7 @@ apps/macos/release-preview/
 apps/macos/models/
 apps/macos/dist-test/
 apps/macos/test-audio/
+apps/macos/build/apple-speech
 apps/macos/build/icon.icns
 
 # Local credentials, signing identities and classroom recordings

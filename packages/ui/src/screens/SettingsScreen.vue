@@ -160,7 +160,7 @@ onUnmounted(() => {
 
     <div class="min-h-0 flex-1 overflow-y-auto">
       <div class="mx-auto w-full max-w-[720px] px-5 py-6 sm:px-8">
-        <p v-if="pipelineLocked" role="status" class="mb-5 text-sm text-[var(--rt-ink-3)]">{{ t('settings.recordingLockHint') }}</p>
+        <p v-if="pipelineLocked" role="status" class="mb-5 text-sm text-[var(--rt-ink-3)]">{{ t(bridge().platform === 'macos' ? 'settings.recordingLockHintLiveTranslation' : 'settings.recordingLockHint') }}</p>
         <div class="grid gap-x-6 sm:grid-cols-2">
           <n-form-item :label="t('settings.asrLanguage')">
             <n-select v-model:value="form.asr.language" :disabled="pipelineLocked" :options="asrLanguageOptions" />

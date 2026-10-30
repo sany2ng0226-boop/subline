@@ -144,7 +144,7 @@ const messages = {
       parakeetEn: 'Parakeet (English)',
       reazonspeechJa: 'ReazonSpeech (Japanese)',
       senseVoice: 'SenseVoice (Multilingual)',
-      appleSpeech: 'Apple Speech (iOS 26+)',
+      appleSpeech: 'Apple Speech (macOS / iOS 26+)',
       systemManaged: 'Managed by iOS',
     },
     modelsScreen: {
@@ -177,6 +177,8 @@ const messages = {
     settings: {
       recordingStatus: 'Recording continues',
       recordingLockHint: 'You can adjust display options. Languages, models, audio source and translation settings are locked while recording or preparing.',
+      recordingLockHintLiveTranslation: 'Display options and the main translation switch remain available while recording. Languages, models and audio source stay locked.',
+      prepareTranslationWhileRecording: 'Prepare the selected translation model in Settings first. Recording continues.',
       alwaysOnTop: 'Keep window on top',
       announceCaptions: 'Read captions aloud',
       announceCaptionsHint: 'With a screen reader on, new finalized captions and translations are announced.',
@@ -376,7 +378,7 @@ const messages = {
       parakeetEn: 'Parakeet（英語）',
       reazonspeechJa: 'ReazonSpeech（日本語）',
       senseVoice: 'SenseVoice（多言語）',
-      appleSpeech: 'Apple音声認識（iOS 26以降）',
+      appleSpeech: 'Apple音声認識（macOS / iOS 26以降）',
       systemManaged: 'iOSが管理',
     },
     modelsScreen: {
@@ -408,6 +410,8 @@ const messages = {
     settings: {
       recordingStatus: '録音中',
       recordingLockHint: '表示設定は変更できます。録音中や準備中は、言語・モデル・音源・翻訳設定を変更できません。',
+      recordingLockHintLiveTranslation: '録音中も表示設定とメイン画面の翻訳スイッチは使えます。言語・モデル・音源は変更できません。',
+      prepareTranslationWhileRecording: '先に設定で翻訳モデルを準備してください。録音は続いています。',
       alwaysOnTop: 'ウィンドウを常に手前に表示',
       announceCaptions: '字幕を読み上げる',
       announceCaptionsHint: 'スクリーンリーダー使用時、確定した字幕と翻訳を読み上げます。',
@@ -607,7 +611,7 @@ const messages = {
       parakeetEn: 'Parakeet (영어)',
       reazonspeechJa: 'ReazonSpeech (일본어)',
       senseVoice: 'SenseVoice (다국어)',
-      appleSpeech: 'Apple 음성 인식 (iOS 26 이상)',
+      appleSpeech: 'Apple 음성 인식 (macOS / iOS 26 이상)',
       systemManaged: 'iOS에서 관리',
     },
     modelsScreen: {
@@ -639,6 +643,8 @@ const messages = {
     settings: {
       recordingStatus: '녹음 중',
       recordingLockHint: '표시 설정은 변경할 수 있습니다. 녹음 중이거나 준비 중에는 언어, 모델, 오디오 소스, 번역 설정이 잠깁니다.',
+      recordingLockHintLiveTranslation: '녹음 중에도 표시 설정과 메인 번역 스위치를 사용할 수 있습니다. 언어, 모델, 오디오 소스는 잠깁니다.',
+      prepareTranslationWhileRecording: '먼저 설정에서 번역 모델을 준비하세요. 녹음은 계속됩니다.',
       alwaysOnTop: '창을 항상 위에 표시',
       announceCaptions: '자막 읽어 주기',
       announceCaptionsHint: '화면 낭독기를 켜면 확정된 자막과 번역을 읽어 줍니다.',
@@ -835,7 +841,7 @@ const messages = {
       parakeetEn: 'Parakeet（英文专用）',
       reazonspeechJa: 'ReazonSpeech（日语专用）',
       senseVoice: 'SenseVoice（多语言）',
-      appleSpeech: 'Apple 语音识别（iOS 26+）',
+      appleSpeech: 'Apple 语音识别（macOS / iOS 26+）',
       systemManaged: '由 iOS 管理',
     },
     modelsScreen: {
@@ -867,6 +873,8 @@ const messages = {
     settings: {
       recordingStatus: '录音中',
       recordingLockHint: '可调整显示设置。录音或准备期间，语言、模型、音源和翻译配置暂时锁定。',
+      recordingLockHintLiveTranslation: '录音中可调整显示并在主页开关翻译；语言、模型和音源暂时锁定。',
+      prepareTranslationWhileRecording: '请先在设置中准备所选翻译模型。录音会继续。',
       alwaysOnTop: '窗口置顶',
       announceCaptions: '朗读字幕',
       announceCaptionsHint: '开启读屏软件时，播报新定稿的字幕和译文。',

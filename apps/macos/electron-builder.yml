@@ -20,6 +20,8 @@ asarUnpack:
   - "**/node_modules/**"
 # 原生模块是 N-API 预编译产物（ABI 稳定），无需也不应重新编译
 extraResources:
+  - from: build/apple-speech
+    to: apple-speech
   - from: build/HY-MT2-LICENSE.txt
     to: licenses/HY-MT2-LICENSE.txt
 npmRebuild: false
@@ -30,6 +32,8 @@ mac:
   # APPLE_KEYCHAIN_PROFILE (+ optional APPLE_KEYCHAIN).
   # No credentials: notarization is skipped. Partial sets may fail the build.
   # Manual signing/notarization remains separate; see docs/release/notarize.md.
+  binaries:
+    - Resources/apple-speech
   minimumSystemVersion: "14.2"
   category: public.app-category.productivity
   icon: build/icon.icns

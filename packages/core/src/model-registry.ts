@@ -214,11 +214,11 @@ export const MODELS: readonly ModelEntry[] = [
     languages: ['ja', 'zh', 'en', 'ko'],
     engine: 'appleSpeech',
     commitStrategy: 'chunk',
-    // Speech assets are installed and maintained by iOS, outside the app model directory.
+    // Speech assets are installed and maintained by the operating system, outside the app model directory.
     dir: '',
     files: [],
     approxBytes: 0,
-    availability: { platforms: ['ios'] },
+    availability: { platforms: ['macos', 'ios'] },
   },
   {
     kind: 'asr',
