@@ -29,6 +29,7 @@ import CryptoKit
 import AVFoundation
 import UIKit
 import Capacitor
+import Speech
 
 @objc(RealtimeAsrPlugin)
 public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -104,6 +105,9 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   private var downloadCancelled = false
   private var currentDownloadTask: URLSessionDownloadTask?
 
+  private let startLock = NSLock()
+  private var startEpoch = 0
+  private var appleSession: Any?
   private var isRunning = false
   /// Tracks whether an input tap is currently installed on the engine's bus. installTap on a
   /// bus that already has a tap raises an uncaught NSException, and a tap can outlive the engine
@@ -137,6 +141,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   @objc func start(_ call: CAPPluginCall) {
     let modelId = call.getString("modelId") ?? AsrModels.defaultModelId
     let language = call.getString("language") ?? "auto"
+    let epoch = advanceStartEpoch()
     requestMicPermission { [weak self] granted in
       guard let self = self else { return }
       guard granted else {
@@ -147,6 +152,10 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
       }
       // Build recognizer/VAD + open the mic on the ASR queue (model load can take seconds).
       self.asrQueue.async {
+        guard self.isCurrentStart(epoch) else {
+          call.resolve(["ok": false, "error": "录音启动已取消"])
+          return
+        }
         // Reentrancy guard: start/stop and the running flag are only touched on asrQueue, so
         // the serial queue makes this check cover both an already-running session and one still
         // in the (multi-second) model-load / startCapture phase — no double installTap.
@@ -162,9 +171,32 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
           self.notifyListeners("status", data: ["state": "loading"])
         }
         do {
-          try self.ensureEngineLoaded(modelId, language: language)
-          self.resetPipelineState()
-          try self.startCapture()
+          if modelId == "apple-speech" {
+            guard #available(iOS 26.0, *) else {
+              throw self.asrError("Apple 语音识别需要 iOS 26 或更新版本")
+            }
+            self.recognizer = nil
+            self.vad = nil
+            self.loadedModelId = nil
+            self.loadedLanguage = nil
+            let session = try self.awaitApple {
+              let session = AppleSpeechSession()
+              try await session.start(language: language, event: { [weak plugin = self] name, data in
+                plugin?.notifyListeners(name, data: data)
+              }, failure: { [weak plugin = self] error in plugin?.abortCapture(reason: error) })
+              return session
+            }
+            guard self.isCurrentStart(epoch) else {
+              try self.awaitApple { await session.stop() }
+              call.resolve(["ok": false, "error": "录音启动已取消"])
+              return
+            }
+            self.appleSession = session
+          } else {
+            try self.ensureEngineLoaded(modelId, language: language)
+            self.resetPipelineState()
+            try self.startCapture()
+          }
           self.isRunning = true
           self.notifyListeners("status", data: ["state": "running"])
           call.resolve(["ok": true])
@@ -182,10 +214,11 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   /// first run loads the model for seconds); otherwise a stop racing ahead of start would clear
   /// isRunning while the mic kept capturing.
   @objc func stop(_ call: CAPPluginCall) {
+    _ = advanceStartEpoch()
     asrQueue.async { [weak self] in
       guard let self = self else { call.resolve(["ok": true]); return }
-      self.stopCapture()
-      self.flushTrailingSegment()
+      self.finishRecognition()
+
       self.isRunning = false
       self.notifyListeners("partial", data: ["text": ""])
       self.notifyListeners("status", data: ["state": "stopped"])
@@ -202,6 +235,13 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
     let modelId = call.getString("modelId") ?? AsrModels.defaultModelId
     let language = call.getString("language") ?? "auto"
     call.resolve()
+    if modelId == "apple-speech" {
+      asrQueue.async { [weak self] in
+        guard let self = self, !self.isRunning else { return }
+        self.notifyListeners("status", data: ["state": "stopped"])
+      }
+      return
+    }
     asrQueue.async { [weak self] in
       guard let self = self else { return }
       // Active capture session: leave the "running" state untouched.
@@ -231,8 +271,8 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   private func abortCapture(reason: String?) {
     asrQueue.async { [weak self] in
       guard let self = self, self.isRunning else { return }
-      self.stopCapture()
-      self.flushTrailingSegment()
+      self.finishRecognition()
+
       self.isRunning = false
       self.notifyListeners("partial", data: ["text": ""])
       if let reason = reason {
@@ -271,6 +311,17 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   /// Report whether the requested model's files (+ shared VAD) are present in the writable dir.
   @objc func getSetupStatus(_ call: CAPPluginCall) {
     let modelId = call.getString("modelId") ?? AsrModels.defaultModelId
+    if modelId == "apple-speech" {
+      let language = call.getString("language") ?? "ja"
+      Task {
+        if #available(iOS 26.0, *) {
+          call.resolve(["asrReady": await AppleSpeechSession.isReady(language: language)])
+        } else {
+          call.resolve(["asrReady": false])
+        }
+      }
+      return
+    }
     call.resolve(["asrReady": modelsReady(modelId)])
   }
 
@@ -278,6 +329,19 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   /// Progress is reported via the "setupProgress" event; resolves when complete.
   @objc func downloadModels(_ call: CAPPluginCall) {
     let modelId = call.getString("modelId") ?? AsrModels.defaultModelId
+    if modelId == "apple-speech" {
+      let language = call.getString("language") ?? "ja"
+      Task {
+        do {
+          guard #available(iOS 26.0, *) else {
+            throw self.asrError("Apple 语音识别需要 iOS 26 或更新版本")
+          }
+          try await AppleSpeechSession.prepare(language: language)
+          call.resolve(["ok": true])
+        } catch { call.resolve(["ok": false, "error": error.localizedDescription]) }
+      }
+      return
+    }
     if modelsReady(modelId) {
       call.resolve(["ok": true])
       return
@@ -300,7 +364,7 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
       guard let self = self else { call.resolve(["models": []]); return }
       let root = self.modelsDir()
       var out: [[String: Any]] = []
-      for spec in AsrModels.models {
+      for spec in AsrModels.models where spec.id != "apple-speech" {
         var downloaded = true
         var sizeBytes = 0
         for file in AsrModels.requiredFiles(id: spec.id) {
@@ -326,6 +390,10 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   @objc func deleteModel(_ call: CAPPluginCall) {
     guard let modelId = call.getString("id") else {
       call.resolve(["ok": false, "error": "missing model id"])
+      return
+    }
+    if modelId == "apple-speech" {
+      call.resolve(["ok": false, "error": "Apple 语音模型由系统管理，请在系统设置中管理"])
       return
     }
     asrQueue.async { [weak self] in
@@ -374,6 +442,10 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
   @objc func cancelDownload(_ call: CAPPluginCall) {
     guard let modelId = call.getString("id") else {
       call.resolve(["ok": true])
+      return
+    }
+    if modelId == "apple-speech" {
+      call.resolve(["ok": false, "error": "Apple 语音模型下载由系统管理"])
       return
     }
     downloadLock.lock()
@@ -443,6 +515,42 @@ public class RealtimeAsrPlugin: CAPPlugin, CAPBridgedPlugin {
       case .undetermined: return "not-determined"
       @unknown default: return "unknown"
       }
+    }
+  }
+
+  private func advanceStartEpoch() -> Int {
+    startLock.lock()
+    defer { startLock.unlock() }
+    startEpoch += 1
+    return startEpoch
+  }
+
+  private func isCurrentStart(_ epoch: Int) -> Bool {
+    startLock.lock()
+    defer { startLock.unlock() }
+    return epoch == startEpoch
+  }
+
+  /// Only the ASR queue waits here; the main actor and audio render thread remain free.
+  private func awaitApple<T>(_ operation: @escaping @MainActor () async throws -> T) throws -> T {
+    let semaphore = DispatchSemaphore(value: 0)
+    var result: Result<T, Error>!
+    Task { @MainActor in
+      do { result = .success(try await operation()) }
+      catch { result = .failure(error) }
+      semaphore.signal()
+    }
+    semaphore.wait()
+    return try result.get()
+  }
+
+  private func finishRecognition() {
+    if #available(iOS 26.0, *), let session = appleSession as? AppleSpeechSession {
+      try? awaitApple { await session.stop() }
+      appleSession = nil
+    } else {
+      stopCapture()
+      flushTrailingSegment()
     }
   }
 
@@ -1094,4 +1202,131 @@ private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelega
   // Completion is handled by the downloadTask(with:completionHandler:) closure.
   func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
                   didFinishDownloadingTo location: URL) {}
+}
+
+@available(iOS 26.0, *)
+@MainActor
+private final class AppleSpeechSession {
+  private let audioEngine = AVAudioEngine()
+  private var analyzer: SpeechAnalyzer?
+  private var input: AsyncStream<AnalyzerInput>.Continuation?
+  private var resultsTask: Task<Void, Never>?
+  private var tapInstalled = false
+  private var stopping = false
+
+  private static func locale(language: String) async throws -> Locale {
+    let identifiers = ["ja": "ja-JP", "zh": "zh-CN", "en": "en-US", "ko": "ko-KR"]
+    guard SpeechTranscriber.isAvailable, let identifier = identifiers[language],
+          let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: identifier)) else {
+      throw NSError(domain: "RealtimeAsr", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "此设备不支持所选 Apple 识别语言，请选择日语、中文、英语或韩语"])
+    }
+    return locale
+  }
+
+  static func isReady(language: String) async -> Bool {
+    guard let locale = try? await locale(language: language) else { return false }
+    return await SpeechTranscriber.installedLocales.contains(locale)
+  }
+
+  static func prepare(language: String) async throws {
+    let locale = try await locale(language: language)
+    let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
+    if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+      try await request.downloadAndInstall()
+    }
+  }
+
+  func start(language: String, event: @escaping (String, [String: Any]) -> Void,
+             failure: @escaping (String) -> Void) async throws {
+    let locale = try await Self.locale(language: language)
+    try await Self.prepare(language: language)
+    let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
+    let analyzer = SpeechAnalyzer(modules: [transcriber])
+    self.analyzer = analyzer
+    let session = AVAudioSession.sharedInstance()
+    do {
+      try session.setCategory(.record, mode: .measurement, options: [])
+      try session.setActive(true)
+      let source = audioEngine.inputNode.outputFormat(forBus: 0)
+      guard source.sampleRate > 0, source.channelCount > 0,
+            let target = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber], considering: source),
+            let converter = AVAudioConverter(from: source, to: target) else {
+        throw NSError(domain: "RealtimeAsr", code: -1,
+                      userInfo: [NSLocalizedDescriptionKey: "无法准备 Apple 识别的麦克风音频格式"])
+      }
+      let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
+      input = continuation
+      resultsTask = Task { [weak self] in
+        var id = 0
+        do {
+          for try await result in transcriber.results {
+            let text = String(result.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            if result.isFinal {
+              id += 1
+              event("segment", ["id": id, "text": text, "lang": language,
+                                "start": result.range.start.seconds,
+                                "duration": result.range.duration.seconds])
+              event("partial", ["text": ""])
+            } else {
+              event("partial", ["text": text])
+            }
+          }
+        } catch {
+          if self?.stopping == false { failure(error.localizedDescription) }
+        }
+      }
+      try await analyzer.prepareToAnalyze(in: target)
+      try await analyzer.start(inputSequence: stream)
+      audioEngine.inputNode.installTap(onBus: 0, bufferSize: 2048, format: source) { buffer, _ in
+        let capacity = AVAudioFrameCount(ceil(Double(buffer.frameLength) * target.sampleRate / source.sampleRate)) + 1024
+        guard let converted = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return }
+        var supplied = false
+        var error: NSError?
+        converter.convert(to: converted, error: &error) { _, status in
+          if supplied { status.pointee = .noDataNow; return nil }
+          supplied = true
+          status.pointee = .haveData
+          return buffer
+        }
+        if error == nil && converted.frameLength > 0 {
+          continuation.yield(AnalyzerInput(buffer: converted))
+        }
+      }
+      tapInstalled = true
+      audioEngine.prepare()
+      try audioEngine.start()
+    } catch {
+      await stop()
+      throw error
+    }
+  }
+
+  func stop() async {
+    guard !stopping else { return }
+    stopping = true
+    if tapInstalled {
+      audioEngine.inputNode.removeTap(onBus: 0)
+      tapInstalled = false
+    }
+    audioEngine.stop()
+    input?.finish()
+    input = nil
+    if let analyzer = analyzer {
+      // A failed audio service must not keep stop() and the recording UI pending forever.
+      let deadline = Task {
+        do { try await Task.sleep(nanoseconds: 8_000_000_000) }
+        catch { return }
+        await analyzer.cancelAndFinishNow()
+      }
+      do { try await analyzer.finalizeAndFinishThroughEndOfInput() }
+      catch { await analyzer.cancelAndFinishNow() }
+      await resultsTask?.value
+      deadline.cancel()
+    }
+    resultsTask = nil
+    analyzer = nil
+    try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+  }
 }

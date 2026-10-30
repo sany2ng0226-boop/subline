@@ -53,10 +53,14 @@ describe('asrModelsFor', () => {
     ]);
   });
 
-  it('ios 平台仅 sense-voice', () => {
-    expect(asrModelsFor('zh', 'ios').map((m) => m.id)).toEqual(['sense-voice']);
-    expect(asrModelsFor('ja', 'ios').map((m) => m.id)).toEqual(['sense-voice']);
-    expect(asrModelsFor('en', 'ios').map((m) => m.id)).toEqual(['sense-voice']);
+  it('ios 支持系统识别，其他平台不暴露系统模型', () => {
+    expect(asrModelsFor('zh', 'ios').map((m) => m.id)).toEqual(['apple-speech', 'sense-voice']);
+    expect(asrModelsFor('ja', 'ios').map((m) => m.id)).toEqual(['apple-speech', 'sense-voice']);
+    expect(asrModelsFor('en', 'ios').map((m) => m.id)).toEqual(['apple-speech', 'sense-voice']);
+    expect(asrModelsFor('auto', 'ios').map((m) => m.id)).toEqual(['sense-voice']);
+    for (const platform of ['macos', 'windows', 'web'] as const) {
+      expect(asrModelsFor('ja', platform).map((m) => m.id)).not.toContain('apple-speech');
+    }
   });
 });
 
@@ -88,6 +92,9 @@ describe('ASR upstream sources and pins', () => {
 });
 
 describe('requiredAsrFiles', () => {
+  it('系统模型不依赖下载文件或 Silero VAD', () => {
+    expect(requiredAsrFiles('apple-speech')).toEqual([]);
+  });
   it('含公共依赖 VAD + 该模型全部文件（POSIX 相对路径）', () => {
     const files = requiredAsrFiles('sense-voice');
     expect(files[0]).toBe('silero_vad.onnx');

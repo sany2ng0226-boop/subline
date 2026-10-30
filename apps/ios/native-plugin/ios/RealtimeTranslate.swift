@@ -90,6 +90,7 @@ public class RealtimeTranslatePlugin: CAPPlugin, CAPBridgedPlugin {
     let text = call.getString("text") ?? ""
     let source = call.getString("source") ?? ""
     let target = call.getString("target") ?? ""
+    let context = Array((call.getArray("context", String.self) ?? []).suffix(2)).map { String($0.suffix(400)) }
 
     if text.isEmpty {
       call.resolve(["text": ""])
@@ -112,7 +113,7 @@ public class RealtimeTranslatePlugin: CAPPlugin, CAPBridgedPlugin {
 
     Task { @MainActor in
       let engine = self.mainActorEngine()
-      let result = await engine.translate(text: text, source: srcLang, target: dstLang)
+      let result = await engine.translate(text: text, source: srcLang, target: dstLang, context: context)
       switch result {
       case .success(let translated):
         call.resolve(["text": translated])
@@ -188,6 +189,7 @@ enum TranslateOutcome {
 @available(iOS 18.0, *)
 private struct TranslateWork {
   let text: String
+  let context: [String]
   let completion: (TranslateOutcome) -> Void
 }
 
@@ -247,7 +249,7 @@ final class TranslationEngine {
     }
   }
 
-  func translate(text: String, source: Locale.Language, target: Locale.Language) async -> TranslateOutcome {
+  func translate(text: String, source: Locale.Language, target: Locale.Language, context: [String] = []) async -> TranslateOutcome {
     // Fast pre-check so a clearly unsupported pair never spins up a host.
     let avail = await LanguageAvailability().status(from: source, to: target)
     if avail == .unsupported {
@@ -263,7 +265,7 @@ final class TranslationEngine {
       hosts[key] = host
     }
 
-    return await host.translate(text)
+    return await host.translate(text, context: context)
   }
 
   private static func key(_ s: Locale.Language, _ t: Locale.Language) -> String {
@@ -292,7 +294,7 @@ private final class SessionHost {
     self.target = target
   }
 
-  func translate(_ text: String) async -> TranslateOutcome {
+  func translate(_ text: String, context: [String]) async -> TranslateOutcome {
     ensureHostAttached()
     guard let continuation = continuation else {
       return .unavailable("could not start translation session")
@@ -302,7 +304,7 @@ private final class SessionHost {
       // Resume-once guard: whichever of {session completion, timeout} fires first resumes; the
       // other becomes a no-op, so a late-completing translate can never double-resume.
       let box = ResumeOnceBox(cont)
-      let work = TranslateWork(text: text) { outcome in box.resume(outcome) }
+      let work = TranslateWork(text: text, context: context) { outcome in box.resume(outcome) }
       continuation.yield(work)
       box.setTimeoutTask(Task {
         try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
@@ -379,8 +381,13 @@ private struct TranslationDriverView: View {
         // Consume work for the lifetime of this view; one session, many texts.
         for await item in work {
           do {
-            let response = try await session.translate(item.text)
-            item.completion(.success(response.targetText))
+            let translated: String
+            if #available(iOS 26.4, *), !item.context.isEmpty {
+              translated = try await translateWithContext(item, session: session)
+            } else {
+              translated = try await session.translate(item.text).targetText
+            }
+            item.completion(.success(translated))
           } catch {
             item.completion(.unavailable("translation failed: \(error.localizedDescription)"))
           }
@@ -390,6 +397,28 @@ private struct TranslationDriverView: View {
         // Setting the config (non-nil) is what kicks off the translationTask closure.
         if config == nil { config = configuration }
       }
+  }
+
+  @available(iOS 26.4, *)
+  private func translateWithContext(_ item: TranslateWork, session: TranslationSession) async throws -> String {
+    // Preserve source attribution through Apple's formatted-text API; never guess an output suffix.
+    let marker = URL(string: "https://subline.invalid/translation/current")!
+    var input = AttributedString(item.context.joined(separator: " ") + " ")
+    var current = AttributedString(item.text)
+    current.link = marker
+    input.append(current)
+    do {
+      let response = try await session.translate(input)
+      if let target = response.attributedTargetText {
+        let runs = target.runs.filter { $0.link == marker }
+        let text = runs.map { String(target[$0.range].characters) }.joined()
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty { return text }
+      }
+    } catch {
+      // Formatting is optional: an unsupported attribution path must not lose the current sentence.
+    }
+    return try await session.translate(item.text).targetText
   }
 }
 

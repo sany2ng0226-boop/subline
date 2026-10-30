@@ -24,7 +24,7 @@ export interface AsrModelSpec {
   /** 支持的识别语言（auto 仅多语种模型具备）。 */
   languages: AsrLang[];
   /** 识别引擎类型，供各端选择对应的 sherpa-onnx 识别器构造路径。 */
-  engine: 'senseVoice' | 'paraformer' | 'transducer';
+  engine: 'senseVoice' | 'paraformer' | 'transducer' | 'appleSpeech';
   /** transducer 的具体子类型（NeMo transducer 需标记 'nemo_transducer'）。 */
   modelType?: string;
   /** 行内文本提交策略（转写管线据此选择落定方式；取值语义见 types 的 AsrCommitStrategy）。 */
@@ -78,10 +78,12 @@ export function asrModelsFor(language: AsrLang, platform: Platform): AsrModelSpe
 
 /**
  * "模型是否齐全" 检查所用的相对路径清单（相对 models 目录，POSIX 分隔符）：
- * 公共依赖 Silero VAD + 指定模型的全部文件；未知 id 仅返回 VAD。
+ * 下载型模型返回公共依赖 Silero VAD + 全部文件；系统管理模型无文件依赖；未知 id 仅返回 VAD。
  * 各端据此 `existsSync(join(modelsDir, rel))` 判断。
  */
 export function requiredAsrFiles(modelId: string): string[] {
-  const files: AsrModelFile[] = [SILERO_VAD, ...(getAsrModel(modelId)?.files ?? [])];
+  const model = getAsrModel(modelId);
+  if (model?.engine === 'appleSpeech') return [];
+  const files: AsrModelFile[] = [SILERO_VAD, ...(model?.files ?? [])];
   return files.map((f) => (f.dir ? `${f.dir}/${f.filename}` : f.filename));
 }

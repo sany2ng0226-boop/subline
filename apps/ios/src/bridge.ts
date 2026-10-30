@@ -33,6 +33,8 @@ import {
   createCallbackHub,
   DEFAULT_ASR_MODEL_ID,
   getAsrModel,
+  SentenceAssembler,
+  TranslationContext,
 } from '@rt/core';
 import type {
   AppBridge,
@@ -106,7 +108,10 @@ export function createIosBridge(): AppBridge {
       const current = await readSettingsOnce();
       const saved = applyPlatformConstraints(mergeSettings(current, queuedPatch));
       await Preferences.set({ key: SETTINGS_KEY, value: JSON.stringify(saved) });
-      if (current.translation.targetLang !== saved.translation.targetLang) {
+      if (JSON.stringify([current.asr, current.nativeLang, current.translation]) !==
+          JSON.stringify([saved.asr, saved.nativeLang, saved.translation])) {
+        sentences.flush();
+        invalidateTranslation();
         resetReverseTranslationContext(reverseCtx);
       }
       cachedSettings = saved;
@@ -146,13 +151,30 @@ export function createIosBridge(): AppBridge {
 
   // 反向翻译会话状态：识别语言为 auto 时，听到母语的段翻成上一次识别到的外语；每次开始录音清空（见 startPipeline）。
   const reverseCtx = createReverseTranslationContext();
+  const translationContext = new TranslationContext();
+  let translationEpoch = 0;
+  let translationQueue: Promise<unknown> = Promise.resolve();
+  const pendingTranslations = new Set<number>();
+
+  function invalidateTranslation(): void {
+    for (const id of pendingTranslations) {
+      translationCb.emit({ id, text: '', failed: true, error: 'Translation configuration or recording session changed' });
+    }
+    pendingTranslations.clear();
+    translationEpoch++;
+    translationContext.reset();
+  }
 
   // ---- 翻译：segment 到达时按当前设置翻成母语（识别语言为 auto 时母语段反向翻成上一次的外语）。
   //      编排（是否翻 / pending / 字形归一化 / 错误上报）统一在 @rt/core.translateFinalizedSegment，
   //      三端一致；这里只注入引擎调用：设备端 Apple Translation（iOS 18+）或云端 CloudTranslator。 ----
   async function translateSegment(seg: SegmentPayload): Promise<void> {
-    const s = cachedSettings ?? (await readSettingsOnce());
+    const epoch = translationEpoch;
+    const current = cachedSettings ?? (await readSettingsOnce());
+    if (epoch !== translationEpoch) return;
+    const s: AppSettings = JSON.parse(JSON.stringify(current));
     await translateFinalizedSegment({
+      ...(s.translation.engine !== 'cloud' ? { context: translationContext } : {}),
       spec: M2M100_SPEC,
       segment: seg,
       enabled: s.translation.enabled,
@@ -164,11 +186,18 @@ export function createIosBridge(): AppBridge {
         if (s.translation.engine !== 'cloud') {
           // 设备端翻译：原生框架只认模型短码；不可用/空结果按失败抛出（提示改用云翻译），
           // 繁體等字形归一化由编排层的 toScript 兜底。
-          const r = await RealtimeTranslate.translate({
-            text: req.text,
-            source: req.source,
-            target: req.targetCode,
+          // Capture settings and source-only context before queueing; the native session is serial.
+          const operation = translationQueue.then(async () => {
+            if (epoch !== translationEpoch) throw new Error('Translation request invalidated');
+            return RealtimeTranslate.translate({
+              text: req.text,
+              source: req.source,
+              target: req.targetCode,
+              context: req.context,
+            });
           });
+          translationQueue = operation.catch(() => undefined);
+          const r = await operation;
           if (r.unavailable || !r.text) {
             throw new Error(
               `On-device translation unavailable (${r.reason ?? 'unknown'}); switch to cloud translation in settings.`,
@@ -182,7 +211,12 @@ export function createIosBridge(): AppBridge {
           target: req.targetLang,
         });
       },
-      emitTranslation: (p) => translationCb.emit(p),
+      emitTranslation: (p) => {
+        if (epoch !== translationEpoch) return;
+        if (p.pending) pendingTranslations.add(p.id);
+        else pendingTranslations.delete(p.id);
+        translationCb.emit(p);
+      },
     });
   }
 
@@ -192,14 +226,44 @@ export function createIosBridge(): AppBridge {
   // 而 UI 的行与译文回填都按 id 对应，必须全局唯一，故在此改写后再上抛。翻译编排（translateSegment
   // → translateFinalizedSegment）也用改写后的 id，保证译文/等待动画事件回填到当前会话的正确行。
   let nextLineId = 0;
+  let acceptingNative = false;
+  let startInFlight: Promise<StartResult> | null = null;
+  let livePartial: PartialPayload = { text: '' };
+  const publishPartial = (): void => {
+    const stableText = sentences.text + (livePartial.stableText ?? '');
+    partialCb.emit({ text: sentences.text + livePartial.text,
+      ...(stableText || livePartial.stableText !== undefined ? { stableText } : {}) });
+  };
+  const sentences = new SentenceAssembler((segment) => {
+    const line: SegmentPayload = { ...segment, id: nextLineId++ };
+    segmentCb.emit(line);
+    void translateSegment(line);
+    publishPartial();
+  });
+  function finishPendingSpeech(): void {
+    sentences.flush();
+    livePartial = { text: '' };
+    publishPartial();
+    acceptingNative = false;
+  }
   function subscribeNative(): void {
-    void RealtimeAsr.addListener('partial', (p) => partialCb.emit(p)).catch(() => undefined);
-    void RealtimeAsr.addListener('segment', (seg) => {
-      const line: SegmentPayload = { ...seg, id: nextLineId++ };
-      segmentCb.emit(line);
-      void translateSegment(line);
+    void RealtimeAsr.addListener('partial', (p) => {
+      if (!acceptingNative) return;
+      livePartial = p;
+      if (p.text) sentences.touch();
+      publishPartial();
     }).catch(() => undefined);
-    void RealtimeAsr.addListener('status', (s) => statusCb.emit(s)).catch(() => undefined);
+    void RealtimeAsr.addListener('segment', (seg) => {
+      if (!acceptingNative) return;
+      livePartial = { text: '' };
+      sentences.push(seg);
+      publishPartial();
+    }).catch(() => undefined);
+    void RealtimeAsr.addListener('status', (s) => {
+      if (s.state === 'stopped' || s.state === 'error') finishPendingSpeech();
+      else if (s.state === 'running') acceptingNative = true;
+      statusCb.emit(s);
+    }).catch(() => undefined);
     void RealtimeAsr.addListener('setupProgress', (p) => setupProgressCb.emit(p)).catch(
       () => undefined,
     );
@@ -231,13 +295,28 @@ export function createIosBridge(): AppBridge {
 
     // ===== ASR 管线（原生）=====
     async startPipeline(): Promise<StartResult> {
-      resetReverseTranslationContext(reverseCtx); // 外语历史只在本次会话内有效
-      try {
-        const r = await RealtimeAsr.start(await currentAsrOptions());
-        return { ok: r.ok, error: r.error };
-      } catch (e) {
-        return { ok: false, error: e instanceof Error ? e.message : String(e) };
-      }
+      if (startInFlight) return startInFlight;
+      if (acceptingNative) return { ok: true };
+      // A repeated start must not erase an open utterance; a new session begins only after stop.
+      sentences.flush();
+      livePartial = { text: '' };
+      invalidateTranslation();
+      resetReverseTranslationContext(reverseCtx);
+      acceptingNative = true;
+      const operation = (async (): Promise<StartResult> => {
+        try {
+          await settingsSaveQueue;
+          const r = await RealtimeAsr.start(await currentAsrOptions());
+          if (!r.ok) finishPendingSpeech();
+          return { ok: r.ok, error: r.error };
+        } catch (e) {
+          finishPendingSpeech();
+          return { ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
+      })();
+      startInFlight = operation;
+      try { return await operation; }
+      finally { if (startInFlight === operation) startInFlight = null; }
     },
     prewarmPipeline(): void {
       // 进主界面即后台装载当前 ASR 模型（不采麦、不申请权限）：fire-and-forget。
@@ -249,7 +328,9 @@ export function createIosBridge(): AppBridge {
     },
     async stopPipeline(): Promise<{ ok: boolean }> {
       try {
-        return await RealtimeAsr.stop();
+        const result = await RealtimeAsr.stop();
+        if (result.ok) finishPendingSpeech();
+        return result;
       } catch {
         return { ok: false };
       }
@@ -287,7 +368,8 @@ export function createIosBridge(): AppBridge {
     // ===== 首次安装 / 模型下载（原生）=====
     async getSetupStatus(modelId: string): Promise<SetupStatus> {
       try {
-        return await RealtimeAsr.getSetupStatus({ modelId });
+        const s = await readSettingsOnce();
+        return await RealtimeAsr.getSetupStatus({ modelId, language: s.asr.language });
       } catch {
         // 无原生壳（纯浏览器预览）：当作就绪，避免卡在首启引导。
         return { asrReady: true };
@@ -295,7 +377,8 @@ export function createIosBridge(): AppBridge {
     },
     async downloadAsrModels(modelId: string): Promise<{ ok: boolean; error?: string }> {
       try {
-        return await RealtimeAsr.downloadModels({ modelId });
+        const s = await readSettingsOnce();
+        return await RealtimeAsr.downloadModels({ modelId, language: s.asr.language });
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) };
       }

@@ -82,7 +82,7 @@ export interface AsrModelEntry extends CommonModelFields {
   /** 支持的识别语言（auto 仅多语种模型具备）。 */
   languages: AsrLang[];
   /** 识别引擎类型，供各端选择对应的 sherpa-onnx 识别器构造路径。 */
-  engine: 'senseVoice' | 'paraformer' | 'transducer';
+  engine: 'senseVoice' | 'paraformer' | 'transducer' | 'appleSpeech';
   /** transducer 的具体子类型（NeMo transducer 需标记 'nemo_transducer'）。 */
   modelType?: string;
   /** 行内文本提交策略（见各端转写管线；取值语义见 types 的 AsrCommitStrategy）。 */
@@ -207,6 +207,19 @@ function m2m1002bFile(dir: string, filename: string): ModelFileSpec {
  * 翻译入册硬门槛：非英语直连方向（本项目核心场景 ja↔zh）实测可用。
  */
 export const MODELS: readonly ModelEntry[] = [
+  {
+    kind: 'asr',
+    id: 'apple-speech',
+    nameKey: 'models.appleSpeech',
+    languages: ['ja', 'zh', 'en', 'ko'],
+    engine: 'appleSpeech',
+    commitStrategy: 'chunk',
+    // Speech assets are installed and maintained by iOS, outside the app model directory.
+    dir: '',
+    files: [],
+    approxBytes: 0,
+    availability: { platforms: ['ios'] },
+  },
   {
     kind: 'asr',
     id: 'sense-voice',

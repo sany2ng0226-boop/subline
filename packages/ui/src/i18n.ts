@@ -144,6 +144,8 @@ const messages = {
       parakeetEn: 'Parakeet (English)',
       reazonspeechJa: 'ReazonSpeech (Japanese)',
       senseVoice: 'SenseVoice (Multilingual)',
+      appleSpeech: 'Apple Speech (iOS 26+)',
+      systemManaged: 'Managed by iOS',
     },
     modelsScreen: {
       ultra: 'Ultra quality',
@@ -374,6 +376,8 @@ const messages = {
       parakeetEn: 'Parakeet（英語）',
       reazonspeechJa: 'ReazonSpeech（日本語）',
       senseVoice: 'SenseVoice（多言語）',
+      appleSpeech: 'Apple音声認識（iOS 26以降）',
+      systemManaged: 'iOSが管理',
     },
     modelsScreen: {
       ultra: '超高品質',
@@ -603,6 +607,8 @@ const messages = {
       parakeetEn: 'Parakeet (영어)',
       reazonspeechJa: 'ReazonSpeech (일본어)',
       senseVoice: 'SenseVoice (다국어)',
+      appleSpeech: 'Apple 음성 인식 (iOS 26 이상)',
+      systemManaged: 'iOS에서 관리',
     },
     modelsScreen: {
       ultra: '최고 품질',
@@ -829,6 +835,8 @@ const messages = {
       parakeetEn: 'Parakeet（英文专用）',
       reazonspeechJa: 'ReazonSpeech（日语专用）',
       senseVoice: 'SenseVoice（多语言）',
+      appleSpeech: 'Apple 语音识别（iOS 26+）',
+      systemManaged: '由 iOS 管理',
     },
     modelsScreen: {
       ultra: '超高质量',
