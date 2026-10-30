@@ -12,46 +12,51 @@ struct GlassesCaptionApp: App {
         WindowGroup {
             NavigationStack {
                 List {
-                    Section("眼镜连接") {
+                    Section {
                         Label(model.connected ? "眼镜已连接" : "等待连接眼镜", systemImage: "eyeglasses")
-                        Button("重连已绑定眼镜") { model.reconnect() }
-                        Button("发现眼镜") { model.discover() }
-                        Button("连接发现的眼镜") { model.connect() }
-                    }
-                    Section("日语 → 中文") {
-                        Text(model.status).accessibilityIdentifier("glasses-status")
-                        Text("手机收音，眼镜显示中文")
+                        Text("手机收音 · 日语 → 中文")
                             .font(.subheadline).foregroundStyle(.secondary)
-                        Picker("收音来源", selection: $model.inputMode) {
-                            Text("iPhone 麦克风").tag(GlassesInputMode.phone)
-                            Text("眼镜蓝牙麦克风（实验）").tag(GlassesInputMode.bluetooth)
-                            Text("眼镜协议音频（实验）").tag(GlassesInputMode.protocolAudio)
-                        }.disabled(model.recording || model.starting)
-                        Button("打开中文字幕窗口") { model.openDisplay() }
-                            .disabled(!model.connected || model.sessionID != nil)
-                        Button("发送下一条字幕测试") { model.sendTest() }
-                            .disabled(!model.displayReady || model.recording || model.starting)
-                        Button("开始收音与翻译") { Task { await model.startRecognition() } }
-                            .disabled(!model.displayReady || model.recording || model.starting)
-                        Button("停止并退出字幕", role: .destructive) { Task { await model.stop() } }
-                            .disabled(model.sessionID == nil && !model.recording)
-                        Text("默认使用 iPhone 内置麦克风；眼镜只显示中文。请先结束眼镜的其他录音、智记、提词和对话。")
-                            .font(.caption).foregroundStyle(.secondary)
+                        Button(model.primaryActionTitle) {
+                            Task {
+                                if model.hasActiveSession { await model.stop() }
+                                else { await model.start() }
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(model.stopping)
+                        .accessibilityIdentifier("glasses-primary-action")
+                        Text(model.status).font(.footnote).accessibilityIdentifier("glasses-status")
                     }
                     Section("中文") {
                         Text(model.translation.isEmpty ? "等待译文" : model.translation)
                             .accessibilityIdentifier("glasses-translation")
+                        if model.displayTruncated {
+                            Text("镜片显示不完整，以上保留完整译文。")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
-                    Section("识别原文") {
-                        Text(model.source.isEmpty ? "等待日语" : model.source)
-                            .accessibilityIdentifier("glasses-source")
-                    }
-                    Section("连接检查") {
-                        Text("音频包 \(model.audioPackets) · PCM \(model.pcmSamples) · 已发字幕 \(model.sentCount)")
-                            .font(.caption).accessibilityIdentifier("glasses-counters")
-                        Text(model.latestEvent).font(.caption).foregroundStyle(.secondary)
-                        Text("测试版 · \(Bundle.main.object(forInfoDictionaryKey: "GlassesCommit") as? String ?? "local")")
-                            .font(.caption2).foregroundStyle(.secondary)
+                    Section {
+                        DisclosureGroup("连接与调试") {
+                            Button("重连已绑定眼镜") { model.reconnect() }.disabled(model.hasActiveSession)
+                            Button("发现新设备") { model.discover() }.disabled(model.hasActiveSession)
+                            Button("连接发现的眼镜") { model.connect() }.disabled(model.hasActiveSession)
+                            Picker("收音来源", selection: $model.inputMode) {
+                                Text("iPhone 麦克风").tag(GlassesInputMode.phone)
+                                Text("眼镜蓝牙麦克风（实验）").tag(GlassesInputMode.bluetooth)
+                                Text("眼镜协议音频（实验）").tag(GlassesInputMode.protocolAudio)
+                            }.disabled(model.hasActiveSession)
+                            Button("只测试字幕窗口") { model.openDisplay() }
+                                .disabled(!model.connected || model.hasActiveSession)
+                            Button("发送下一条字幕测试") { model.sendTest() }
+                                .disabled(!model.displayReady || model.recording || model.starting || model.stopping)
+                            Text(model.source.isEmpty ? "等待日语原文" : model.source)
+                                .accessibilityIdentifier("glasses-source")
+                            Text("音频包 \(model.audioPackets) · PCM \(model.pcmSamples) · 已发字幕 \(model.sentCount)")
+                                .font(.caption).accessibilityIdentifier("glasses-counters")
+                            Text(model.latestEvent).font(.caption).foregroundStyle(.secondary)
+                            Text("测试版 · \(Bundle.main.object(forInfoDictionaryKey: "GlassesCommit") as? String ?? "local")")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .navigationTitle("Subline Glasses")
@@ -70,7 +75,9 @@ final class GlassesCaptionModel: ObservableObject {
     @Published private(set) var displayReady = false
     @Published private(set) var recording = false
     @Published private(set) var starting = false
-    @Published private(set) var status = "先连接眼镜，再打开字幕窗口。"
+    @Published private(set) var stopping = false
+    @Published private(set) var displayTruncated = false
+    @Published private(set) var status = "点击开始；只会重连已绑定的眼镜。"
     @Published private(set) var source = ""
     @Published private(set) var translation = ""
     @Published private(set) var latestEvent = "尚未启动"
@@ -90,9 +97,15 @@ final class GlassesCaptionModel: ObservableObject {
     private var lastAudioAt: TimeInterval?
     private var recognitionStartedAt: TimeInterval?
     private var lastDiagnosticAt = 0.0
-    private var stopping = false
     private var diagnosticCount = 0
     private var generation = 0
+
+    var hasActiveSession: Bool { starting || recording || stopping || sessionID != nil }
+    var primaryActionTitle: String {
+        if stopping { return "正在停止…" }
+        if starting { return "取消启动" }
+        return hasActiveSession ? "停止字幕" : "开始字幕"
+    }
 
     deinit { RNVoiceVADDestroy(nativeDecoder) }
 
@@ -164,6 +177,11 @@ final class GlassesCaptionModel: ObservableObject {
     }
 
     func openDisplay() {
+        guard !hasActiveSession else { return }
+        requestDisplay()
+    }
+
+    private func requestDisplay() {
         guard connected, sessionID == nil, !stopping, let device = controller.companionDeviceID else { return }
         let sid = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
         sessionID = sid; sessionDevice = device; displayReady = false; testIndex = 0
@@ -193,48 +211,93 @@ final class GlassesCaptionModel: ObservableObject {
         guard displayReady, let sid = sessionID, !text.isEmpty, !stopping else { return }
         // One bounded display frame; the phone retains the complete current translation.
         var visible = text
-        while visible.utf8.count > 384 { visible.removeLast() }
+        displayTruncated = visible.utf8.count > 384
+        if displayTruncated {
+            let suffix = "…（未完）"
+            while visible.utf8.count + suffix.utf8.count > 384 { visible.removeLast() }
+            visible += suffix
+        }
         do {
             try send(19, type: 5, json: ["sid": sid, "mode": 3, "status": 0,
                                       "content": ["source_transcript": visible]])
             sentCount += 1
-            status = recording ? "正在听日语并显示中文。" : "字幕已提交，请核对镜片实际显示。"
+            status = displayTruncated ? "镜片显示不完整，手机保留完整译文。"
+                : recording ? "正在听日语并显示中文。" : "字幕已提交，请核对镜片实际显示。"
             diagnostic("display_text")
         } catch { fail("字幕发送失败：\(error.localizedDescription)") }
     }
 
-    func startRecognition() async {
-        guard displayReady, !recording, !starting, !stopping else { return }
+    func start() async {
+        guard !hasActiveSession else { return }
+        prepare()
         starting = true; generation += 1
         let token = generation
         defer { starting = false }
         do {
-            status = "正在准备 Apple 日语识别与中文翻译…"
-            try await pipeline.start()
-            guard token == generation, displayReady, !stopping else { await pipeline.stop(); return }
-            RNVoiceVADReset(nativeDecoder)
-            audioPackets = 0; pcmSamples = 0; lastAudioAt = nil
-            recording = true
-            if inputMode == .phone || inputMode == .bluetooth {
-                if inputMode == .phone { try await phoneMicrophone.start() }
-                else { try await microphone.start() }
-                guard token == generation, displayReady, !stopping else {
-                    stopMicrophones(); await pipeline.stop(); return
+            if !controller.companionReady {
+                status = "正在重连已绑定眼镜…"
+                controller.companionReconnectBonded()
+                try await waitForStart(token, seconds: 15,
+                    failure: "未连接到已绑定眼镜；请唤醒眼镜，首次连接可展开连接与调试。") {
+                    self.controller.companionReady
                 }
-            } else {
-                try send(13, type: 2, json: ["rc": 1])
             }
-            recognitionStartedAt = ProcessInfo.processInfo.systemUptime
-            status = inputMode == .phone ? "正在使用手机麦克风，等待日语。" : "已请求眼镜收音，等待音频。"
-            diagnostic("microphone_requested")
+            try checkStart(token)
+            connected = controller.companionReady
+            requestDisplay()
+            try await waitForStart(token, seconds: 10, failure: "眼镜未确认字幕窗口，请结束眼镜其他任务后重试。") {
+                self.displayReady
+            }
+            try checkStart(token)
+            try await startRecognition(token)
         } catch {
             guard token == generation else { stopMicrophones(); await pipeline.stop(); return }
-            fail("无法开始：\(error.localizedDescription)")
+            let message = "无法开始：\(error.localizedDescription)"
+            await stop()
+            status = message
         }
+    }
+
+    private func checkStart(_ token: Int) throws {
+        guard token == generation, !stopping else { throw CancellationError() }
+    }
+
+    private func waitForStart(_ token: Int, seconds: TimeInterval, failure: String,
+                              condition: () -> Bool) async throws {
+        let until = ProcessInfo.processInfo.systemUptime + seconds
+        while true {
+            try checkStart(token)
+            if condition() { return }
+            guard ProcessInfo.processInfo.systemUptime < until else { throw StartFailure(message: failure) }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+    }
+
+    private func startRecognition(_ token: Int) async throws {
+        guard displayReady else { throw StartFailure(message: "字幕窗口尚未准备好。") }
+        status = "正在准备 Apple 日语识别与中文翻译…"
+        try await pipeline.start()
+        try checkStart(token)
+        RNVoiceVADReset(nativeDecoder)
+        audioPackets = 0; pcmSamples = 0; lastAudioAt = nil
+        recording = true
+        if inputMode == .phone { try await phoneMicrophone.start() }
+        else if inputMode == .bluetooth { try await microphone.start() }
+        else { try send(13, type: 2, json: ["rc": 1]) }
+        try checkStart(token)
+        recognitionStartedAt = ProcessInfo.processInfo.systemUptime
+        status = inputMode == .phone ? "正在使用手机麦克风，等待日语。" : "已请求眼镜收音，等待音频。"
+        diagnostic("microphone_requested")
+    }
+
+    private struct StartFailure: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
     }
 
     func stop() async {
         guard !stopping else { return }
+        let cancelledBeforeDisplay = starting && sessionID == nil
         stopping = true; generation += 1; deadline?.cancel(); deadline = nil
         let wasRecording = recording; recording = false
         stopMicrophones()
@@ -242,7 +305,8 @@ final class GlassesCaptionModel: ObservableObject {
         await pipeline.stop()
         if let sid = sessionID { try? send(19, type: 3, json: ["sid": sid, "reason_code": 10, "text": ""]) }
         displayReady = false; sessionID = nil; sessionDevice = nil; recognitionStartedAt = nil
-        stopping = false; status = "已请求停止并退出；请确认眼镜已回到首页。"
+        stopping = false
+        status = cancelledBeforeDisplay ? "已取消启动。" : "已请求停止并退出；请确认眼镜已回到首页。"
         diagnostic("stopped")
     }
 
@@ -271,7 +335,7 @@ final class GlassesCaptionModel: ObservableObject {
                     fail("眼镜拒绝字幕窗口，或返回了未知确认格式。"); return
                 }
                 deadline?.cancel(); deadline = nil; displayReady = true
-                status = "眼镜已确认字幕窗口，可以先发送两条测试文字。"
+                status = starting ? "字幕窗口已准备，正在准备识别…" : "字幕窗口已准备，可发送测试文字。"
                 diagnostic("display_ready")
             } else if packet.type == 3 {
                 fail("眼镜结束了字幕会话，请重新打开。")
