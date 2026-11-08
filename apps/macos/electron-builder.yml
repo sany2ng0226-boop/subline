@@ -33,7 +33,7 @@ mac:
   # No credentials: notarization is skipped. Partial sets may fail the build.
   # Manual signing/notarization remains separate; see docs/release/notarize.md.
   binaries:
-    - Resources/apple-speech
+    - Contents/Resources/apple-speech
   minimumSystemVersion: "14.2"
   category: public.app-category.productivity
   icon: build/icon.icns
