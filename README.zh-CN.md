@@ -52,7 +52,7 @@
 
 ## 验证与发布边界
 
-**[下载 Subline 0.2.0-beta.7](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.7)**，适用于 Apple 芯片 Mac、macOS 14.2 或更新版本。已作为预发布版（prerelease）公开。**Subline.app 与 DMG 均已 Developer ID 签名、分别通过 Apple 公证并附上票据**；两者均通过票据和 Gatekeeper 检查。本机安装的应用与公开包一致，下载完整性可用随附 SHA256SUMS 核对。
+**[下载 Subline 0.2.0-beta.8](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.8)**，适用于 Apple 芯片 Mac、macOS 14.2 或更新版本。已作为预发布版（prerelease）公开。**Subline.app 与 DMG 均已 Developer ID 签名、分别通过 Apple 公证并附上票据**；两者均通过票据和 Gatekeeper 检查。本机安装的应用与公开包一致，下载完整性可用随附 SHA256SUMS 核对。
 
 公开渠道安装的是 **Subline.app**，提供连续字幕与手动归档；文件夹归档和主页语言选择只在独立的 **Subline Internal** 中提供。
 

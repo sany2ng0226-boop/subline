@@ -49,7 +49,7 @@ Recognition and translation can be wrong; check important content against the or
 
 ## macOS build and distribution status
 
-**[Download Subline 0.2.0-beta.7](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.7)** — Apple Silicon Mac, macOS 14.2 or newer. Published as a prerelease. Both **Subline.app and its DMG** are Developer ID signed, separately Apple notarized, and stapled; both passed ticket validation and Gatekeeper checks. The installed app matches the public package. Verify the download using the included SHA256SUMS.
+**[Download Subline 0.2.0-beta.8](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.8)** — Apple Silicon Mac, macOS 14.2 or newer. Published as a prerelease. Both **Subline.app and its DMG** are Developer ID signed, separately Apple notarized, and stapled; both passed ticket validation and Gatekeeper checks. The installed app matches the public package. Verify the download using the included SHA256SUMS.
 
 The public channel contains **Subline.app**, with continuous captions and manual archives. Archive folders and the home-screen language selector belong to the separate **Subline Internal** build.
 
