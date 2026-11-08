@@ -6,6 +6,22 @@
 
 **[简体中文](README.zh-CN.md)** · [Product rules](docs/product/experience.md) · [Code map](docs/project-map.md)
 
+## Quick start
+
+**[Download the latest Mac beta](https://github.com/sany2ng0226-boop/subline/releases)**. Free, no account, no API key.
+
+| Need | Details |
+|---|---|
+| Mac | Apple silicon (M1 or later), macOS 14.2 or later. Intel Macs, Windows and iPhone are not supported yet. |
+| Disk | About 0.25 GB for captions only; add about 4.6 GB for Hy-MT2 local translation, or about 0.7 GB for the lighter M2M100. |
+| Memory | Local translation has only been tested on a 48 GB Mac. On 8 / 16 GB Macs, try the lighter translation model first. |
+
+1. Open the DMG, drag **Subline.app** into Applications and open it normally (signed and notarized by Apple).
+2. Pick the recognition language in Settings. On macOS 26 or later you can choose Apple Speech, which needs no recognition download. Turn on translation and download a model when you need it.
+3. Allow the microphone when asked; use system audio for online classes and meetings. Click Archive in the top bar to save after class: **stopping does not save automatically**.
+
+Recognition and translation can be wrong; check important content against the original text and audio.
+
 ![Subline macOS live English captions and Chinese translations](docs/assets/subline-live-beta7.png)
 
 *Live captions in the installed beta.7+3b1ff86 release build: six English synthetic-speech segments were captured through system audio and translated into Chinese. Output is unedited and includes recognition errors; this is a bounded functional check, not a benchmark. The public beta.7 download contains the same application.*
