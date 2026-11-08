@@ -21,15 +21,26 @@ pnpm check                      # core 测试 + 三端 type-check（与 CI 的 c
 
 ## 2. 版本号
 
-- **单一版本源**：版本号只记在**根 `package.json`** 一处；`apps/*` 与 `packages/*` 的 `version` 恒为 `0.0.0` 占位，不要改。三端设置页展示的 `__APP_VERSION__` 与 macOS dmg/App 版本均在构建期从根版本注入。
-- **新版本**：直接改根 `package.json` 的 `version`（如 `0.1.0-beta.2`），用 `chore: bump version to <ver>` 之类的 Conventional Commit 提交。
+- **版本源**：根 `package.json`；`apps/*` 与 `packages/*` 的 `version` 与根保持一致，统一用脚本同步，不要手改。三端设置页展示的 `__APP_VERSION__` 与 macOS dmg/App 版本均在构建期注入。
+- **新版本**：
+
+  ```bash
+  node scripts/sync-version.mjs --set <ver> --write   # 改根与各包共 6 个 package.json
+  node scripts/sync-version.mjs --check
+  ```
+
+  用 `chore: bump version to <ver>` 提交。同时在 `CHANGELOG.md` 加该版本一节（发布前标「准备中」，发布后改日期），并把中英 README 的下载链接改到新 tag。
 - **beta 同版本重发**：版本号不动。构建之间靠「根版本+commit 短哈希」区分（构建期注入 `__APP_VERSION__`，设置页底部可见）。
 
 ## 3. 打包 macOS
 
 ```bash
-pnpm --filter @rt/macos dist    # 产物在 apps/macos/release/
+# 去掉环境里的公证变量，避免 electron-builder 自动公证；用 Developer ID 签名
+env -u APPLE_ID -u APPLE_APP_SPECIFIC_PASSWORD -u APPLE_API_KEY -u APPLE_KEYCHAIN_PROFILE \
+  CSC_NAME="JIANG ZIYANG (R9LRJU53ZG)" pnpm --filter @rt/macos dist   # 产物在 apps/macos/release/
 ```
+
+打包要几分钟，放后台跑；不要和其他重任务（如视频渲染）同时跑大内存流程。
 
 注意事项：
 
@@ -42,8 +53,34 @@ pnpm --filter @rt/macos dist    # 产物在 apps/macos/release/
   ```
 
   必须包含 `NSMicrophoneUsageDescription` 与 `NSAudioCaptureUsageDescription`（系统音频采集依赖后者，缺失会得到不弹窗、无报错的静音流）。
-- 当前无 Developer ID 证书，产物**未签名**（日志有 skipped code signing 警告属预期），用户首次打开需右键 → 打开。
+- **签名核验**：`codesign --verify --deep --strict` 通过，且 app 与 `Contents/Resources/apple-speech` 的 Authority 都是 `Developer ID Application: JIANG ZIYANG (R9LRJU53ZG)`。`electron-builder.yml` 的 `mac.binaries` 路径必须写 `Contents/Resources/...`（beta.8 曾因少写 `Contents/` 签名失败）。
 - 模型不打进包（运行时按需下载）；打包版模型目录在 `userData` 下，与 dev 的 `apps/macos/models/` 不共享。
+
+## 3.5 公证（每个新包都要重新做，不能沿用旧包结果）
+
+本机 Keychain 已存 notarytool 凭据，profile 名 `subline-notary`。先公证 app，钉票据；再用钉好票据的 app 重做 DMG，签名后单独公证 DMG：
+
+```bash
+cd apps/macos/release && R=<ver> && mkdir -p $R
+ditto -c -k --keepParent mac-arm64/Subline.app $R/Subline-app.zip
+xcrun notarytool submit $R/Subline-app.zip --keychain-profile subline-notary --wait   # 必须 Accepted
+xcrun stapler staple mac-arm64/Subline.app && spctl -a -vvv -t exec mac-arm64/Subline.app
+
+D=$R/Subline-<ver>-arm64-notarized.dmg
+mkdir $R/stage && ditto mac-arm64/Subline.app $R/stage/Subline.app && ln -s /Applications $R/stage/Applications
+hdiutil create -volname "Subline <ver>" -srcfolder $R/stage -ov -format UDZO -fs HFS+ $D
+codesign --sign "Developer ID Application: JIANG ZIYANG (R9LRJU53ZG)" --timestamp $D
+xcrun notarytool submit $D --keychain-profile subline-notary --wait                   # 必须 Accepted
+xcrun stapler staple $D && spctl -a -vvv -t open --context context:primary-signature $D
+rm -rf $R/stage $R/Subline-app.zip
+(cd $R && shasum -a 256 $(basename $D) > SHA256SUMS)
+```
+
+公证都在后台跑，各需几分钟。electron-builder 自己产出的 `Subline-<ver>-arm64.dmg` 里是未钉票据的 app，不要上传它。
+
+## 3.6 本机试装
+
+上传前先备份现有 `/Applications/Subline.app`（如 `release/<旧版本>/Subline-<旧版本>-installed.app`），从公证 DMG 装新版，启动确认无崩溃，再请 Jack 实际试录、开关翻译、归档回放。Jack 试过再发布。
 
 ## 4. 发布
 
@@ -65,12 +102,15 @@ gh release upload v<ver> \
 ```bash
 git push origin main
 git tag v<ver> && git push origin v<ver>
-gh release create v<ver> --prerelease --title "Subline <ver>" --notes "<要点>" \
-  "apps/macos/release/Subline-<ver>-arm64.dmg" \
-  "apps/macos/release/Subline-<ver>-arm64.dmg.blockmap"
+gh release create v<ver> --prerelease --title "Subline <ver> · Apple Silicon 测试版" --notes-file <notes.md> \
+  "apps/macos/release/<ver>/Subline-<ver>-arm64-notarized.dmg" \
+  "apps/macos/release/<ver>/SHA256SUMS"
 ```
 
 - beta 阶段用 `--prerelease`。
+- 先在功能分支上提交文档、版本号和修复，打包公证用的就是分支 HEAD；Jack 同意发布后 `git merge --ff-only` 快进到 main 再推，保证 tag 指向打包时的那个提交。
+- 发布说明按「本次更新 / 安装 / 验证范围」写，验证范围如实写明未验收项（长时间录音、低内存机型等），末尾写构建来源 commit。
+- 只改文档的推送，CI 会跳过 web 部署，这是正常的。
 
 ## 5. 发布后确认
 
