@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Subline 中文下载与安装教程。适用于 Apple 芯片 Mac，无需注册、克隆源码或使用终端。">
+  <title>Subline — 下载与快速开始</title>
+  <link rel="icon" href="../favicon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar wrap">
+    <a class="brand" href="#"><img src="icon.png" width="36" height="36" alt="">Subline</a>
+    <nav aria-label="主导航"><a href="#guide">安装教程</a><a href="#help">常见问题</a></nav>
+  </header>
+  <main>
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <p class="eyebrow">MAC 本地实时字幕 · 公开测试版</p>
+      <h1 id="hero-title">听得懂，<br>也能回头看。</h1>
+      <p class="intro">把课堂、网课和会议里的声音，变成连续的原文与译文。<br class="desktop">先下载，再跟着下面的步骤开始。</p>
+      <div class="actions"><a class="button primary" href="https://github.com/sany2ng0226-boop/subline/releases/download/v0.2.0-beta.8/Subline-0.2.0-beta.8-arm64-notarized.dmg">下载 Mac 版 <span aria-hidden="true">↓</span></a><a class="button secondary" href="#guide">第一次用？看这里 <span aria-hidden="true">↗</span></a></div>
+      <p class="download-note">v0.2.0-beta.8 · 免费 · 不用注册 · 不用 API Key</p>
+      <p class="compatibility"><strong>需要 M1 或更新的 Mac，macOS 14.2+</strong><br>暂不提供 Intel Mac、Windows 或 iPhone 安装包。<a href="#requirements">不知道电脑是否支持？</a></p>
+      <figure class="hero-shot"><img src="live.png" width="1240" height="900" alt="Subline 实际应用截图：英语原文下方显示中文译文" fetchpriority="high"><figcaption>beta.7 实际界面，使用合成语音演示；当前下载为 beta.8，界面可能略有不同。识别与翻译都可能出错。</figcaption></figure>
+    </section>
+    <section id="requirements" class="section wrap" aria-labelledby="requirements-title">
+      <p class="eyebrow">下载前看一眼</p><h2 id="requirements-title">你的 Mac 能用吗？</h2>
+      <div class="requirements"><div><h3>01 / 电脑</h3><p>点左上角  →「关于本机」。芯片显示 Apple M1、M2、M3 或更新型号，系统为 macOS 14.2 或更新，即符合安装条件。</p></div><div><h3>02 / 存储</h3><p>安装应用外，还需给模型留空间：只转写约 0.25 GB；较轻的 M2M100 翻译约 0.7 GB；Hy-MT2 翻译约 4.6 GB。下载和安装还需要额外空余空间。</p></div><div><h3>03 / 内存</h3><p>8 / 16 GB Mac 建议先试只转写，需要翻译时先试 M2M-100（轻量，418M）。本地翻译只在 48 GB Mac 上验证过，较小内存的流畅程度尚未确认。</p></div></div>
+    </section>
+    <section id="guide" class="section wrap" aria-labelledby="guide-title">
+      <p class="eyebrow">从下载到第一行字幕</p><h2 id="guide-title">照着这四步就好。</h2><p class="section-intro">不需要安装 Git，不需要克隆代码，也不用输入命令。</p>
+      <ol class="steps">
+        <li><div class="step-number">1</div><div><h3>下载，拖进「应用程序」</h3><p>点击上面的「下载 Mac 版」。下载完成后，双击以 <strong>.dmg</strong> 结尾的文件，把 <strong>Subline.app</strong> 拖进「应用程序」，然后从「应用程序」打开 Subline。</p><p class="hint">安装包已签名并通过 Apple 公证。首次打开时，按系统提示确认即可。无需注册 GitHub，也不用下载 Source code。</p></div></li>
+        <li><div class="step-number">2</div><div><h3>先选语言，再准备模型</h3><p>首次打开按提示选择界面语言。在设置里把「识别语言」设成实际听到的语言，例如日语。</p><p>macOS 26 及以上可选择 Apple 语音识别；其他支持的系统可使用 SenseVoice，按提示下载识别模型。下载后，确认已选中要使用的模型。</p><p>新安装默认只转写。需要中文译文时，在设置里选择本地翻译模型，并把翻译目标设为中文。8 / 16 GB Mac 建议先试较轻的 <strong>M2M-100（轻量，418M）</strong>。下载完后再选中它。</p><figure class="settings-shot"><img src="settings.png" width="1240" height="900" loading="lazy" alt="beta.7 设置页示例，包含识别语言、翻译目标和模型选择"><figcaption>beta.7 设置页示例；beta.8 增加了 Apple 语音识别选项。</figcaption></figure></div></li>
+        <li><div class="step-number">3</div><div><h3>选声音来源，开始录音</h3><p><strong>听教室或身边的人说话：</strong>选「麦克风」，按提示允许访问麦克风。</p><p><strong>听电脑里的网课、视频或会议：</strong>选「系统音频」，按提示允许录制系统音频。</p><p>点击开始录音。第一次使用需要等待模型加载；先试一小段，确认能看到原文，需要翻译时再确认下方出现译文。</p></div></li>
+        <li><div class="step-number">4</div><div><h3>结束后，记得点「归档」</h3><p>停止录音后，等译文完成，再点击顶栏的归档入口保存。保存后到归档页查看，beta.8 还可以回放原音。</p><p class="save-note"><strong>停止录音 ≠ 保存。</strong>想留住这次内容，一定要点归档。未归档录音会在退出时清理。</p></div></li>
+      </ol>
+      <div class="video-block"><div><p class="eyebrow">一分钟看完</p><h3>下载与首次使用图解</h3><p>60 秒无声教程，带中文字幕。安装部分为步骤图解，应用画面使用已验证的 beta.7 截图。</p></div><video controls playsinline preload="none" poster="live.png" aria-label="Subline 一分钟下载与首次使用图解"><source src="quick-start.mp4" type="video/mp4">你的浏览器不支持播放视频，请阅读上面的四步教程。</video><p><a href="quick-start.mp4" download>保存教程视频</a></p></div>
+    </section>
+    <section id="help" class="section wrap" aria-labelledby="help-title"><p class="eyebrow">遇到问题</p><h2 id="help-title">卡住了，先看这里。</h2>
+      <div class="faq">
+        <details><summary>下载按钮点了没反应，或下载很慢</summary><p>试着在电脑上的 Safari 或 Chrome 中打开本页，再点下载。安装包目前由 GitHub 提供，速度取决于网络；这里尚未提供国内备用下载。也可以打开<a href="https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.8">版本下载页</a>，展开 Assets，选择以 .dmg 结尾的文件。</p></details>
+        <details><summary>有原文，但没有中文译文</summary><p>新安装默认关闭翻译。到设置中选择本地翻译模型，等待下载完成后选中它，再确认翻译目标为中文。首次加载模型需要等待；模型准备失败时，原文转写仍可继续。</p></details>
+        <details><summary>录音开始了，但没有字幕</summary><p>先确认声音来源：麦克风用于现场声音，系统音频用于电脑播放的声音。到「系统设置 → 隐私与安全性」检查对应的麦克风或屏幕与系统音频录制权限，再按系统提示重新打开应用。也检查识别模型是否已下载并选中。</p></details>
+        <details><summary>可以完全离线吗？需要付费账号吗？</summary><p>应用免费，不需要注册或 API Key。首次下载模型需要联网；所需资源准备好后，本地识别和本地翻译可离线使用。手动选择 API 翻译时，文字会发给你配置的服务，需要另行配置。</p></details>
+        <details><summary>提示安装包损坏，或仍然打不开</summary><p>先确认使用的是本页的原始 DMG、电脑型号及系统版本符合要求，再重新下载。仍失败时，记录提示内容和系统版本，通过下面的反馈入口报告。无需关闭系统安全保护。</p></details>
+        <details><summary>Windows / Intel Mac / iPhone 能下载吗？</summary><p>这一页提供的安装包仅适用于 Apple 芯片 Mac。其他平台目前没有可直接推荐给普通用户的公开安装包，不要下载这个 DMG 尝试安装。</p></details>
+      </div>
+      <p class="feedback">还没解决？<a href="mailto:sany2ng0226@gmail.com?subject=Subline%20%E4%BD%BF%E7%94%A8%E5%8F%8D%E9%A6%88">邮件反馈</a>，附上电脑芯片、系统版本与出错截图；分享前请遮住私人内容。也可<a href="https://github.com/sany2ng0226-boop/subline/issues">在 GitHub 反馈</a>。</p>
+    </section>
+  </main>
+  <footer class="wrap"><span>Subline · 本地转写与翻译</span><div><a href="https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.8">版本说明</a><a href="https://github.com/sany2ng0226-boop/subline">开源代码</a><a href="https://github.com/baijunjie/realtime-translator">基于 Realtime Translator</a></div></footer>
+</body>
+</html>

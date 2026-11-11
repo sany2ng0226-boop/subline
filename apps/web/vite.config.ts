@@ -53,6 +53,8 @@ export default defineConfig({
         // 被纳入预缓存（它们不是构建产物）。
         maximumFileSizeToCacheInBytes: 20 * 1024 * 1024,
         navigateFallback: `${base}index.html`,
+        // The standalone download guide must remain reachable for existing PWA users.
+        navigateFallbackDenylist: [/\/start(?:\/|$)/],
       },
       devOptions: {
         // 开发期不启用 SW，避免缓存干扰热更新（getUserMedia 在 localhost 下本就允许）。
