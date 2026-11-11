@@ -49,6 +49,11 @@ export interface ModelAvailability {
    * 这里只声明「模型很吃内存」这一事实，不写死具体端，宿主报告自身是否受限来决定。
    */
   memoryHeavy?: boolean;
+  /**
+   * 低于这个物理内存（GiB）时，下载前提醒用户该模型可能很慢或无法运行。只提醒、不拦截：
+   * 这是保守估计而非实测下限（Hy-MT2 目前只在 48 GB 的 Mac 上验收过）。
+   */
+  minMemoryGb?: number;
 }
 
 /**
@@ -348,6 +353,7 @@ export const MODELS: readonly ModelEntry[] = [
     approxBytes: 4624648896,
     fallbackLang: 'en',
     langs: M2M100_LANGS,
-    availability: { platforms: ['macos', 'windows'], memoryHeavy: true },
+    // 权重 4.6 GB 需整块装入内存，另有识别模型与应用自身占用：8 GB 机型装不下。
+    availability: { platforms: ['macos', 'windows'], memoryHeavy: true, minMemoryGb: 16 },
   },
 ];

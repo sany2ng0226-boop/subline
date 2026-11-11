@@ -2,6 +2,8 @@
 import { computed } from 'vue';
 import { NModal, NButton } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import { belowRecommendedMemory } from '@rt/core';
+import { bridge } from '../bridge';
 import { humanBytes } from '../utils/bytes';
 import type { DownloadTask } from '../composables/useModelDownloads';
 
@@ -13,6 +15,11 @@ const show = defineModel<boolean>('show', { default: false });
 const emit = defineEmits<{ confirm: [tasks: DownloadTask[]]; cancel: [] }>();
 
 const totalBytes = computed(() => props.tasks.reduce((sum, task) => sum + task.sizeBytes, 0));
+
+// 内存低于模型提醒线时只提醒、不拦截：用户仍可继续下载。
+const lowMemoryTask = computed(() => props.tasks.find(
+  (task) => task.kind === 'translation' && belowRecommendedMemory(task.modelId, bridge().totalMemoryBytes)));
+const memoryGb = computed(() => Math.round((bridge().totalMemoryBytes ?? 0) / 1024 ** 3));
 
 function onConfirm(): void {
   const tasks = props.tasks;
@@ -54,6 +61,9 @@ function onCancel(): void {
       <span>{{ t('download.total') }}</span>
       <span class="tabular-nums">{{ humanBytes(totalBytes) }}</span>
     </div>
+    <p v-if="lowMemoryTask" class="mt-3 border-t border-neutral-200 pt-3 text-sm text-[#b45309] dark:border-[#3a3b44] dark:text-[#f0b35a]" role="alert">
+      {{ t('download.lowMemory', { gb: memoryGb, model: t(lowMemoryTask.nameKey) }) }}
+    </p>
     <div class="mt-5 flex justify-end gap-2">
       <n-button @click="onCancel">{{ t('download.cancel') }}</n-button>
       <n-button type="primary" @click="onConfirm">{{ t('download.start') }}</n-button>

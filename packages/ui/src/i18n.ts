@@ -46,6 +46,7 @@ const messages = {
     download: {
       translationDesc: 'Translation needs a model download. Hy-MT2 7B is about 4.5 GB. Download the selected model?',
       cancel: 'Cancel',
+      lowMemory: 'This computer has {gb} GB of memory. {model} may run very slowly or fail to load. M2M-100 (Lightweight) is the safer choice.',
       desc: 'These models need to be downloaded before recording. They work offline afterward.',
       downloading: 'Downloading…',
       failed: 'Download failed. Check your network and retry.',
@@ -280,6 +281,7 @@ const messages = {
     download: {
       translationDesc: '翻訳にはモデルのダウンロードが必要です。Hy-MT2 7B は約4.5 GBです。選択したモデルをダウンロードしますか？',
       cancel: 'キャンセル',
+      lowMemory: 'このコンピュータのメモリは {gb} GB です。{model} は動作が非常に遅くなるか、読み込めない可能性があります。M2M-100（軽量）をおすすめします。',
       desc: '録音を開始する前に、以下のモデルをダウンロードします。完了後はオフラインで利用できます。',
       downloading: 'ダウンロード中…',
       failed: 'ダウンロードに失敗しました。ネットワークを確認して再試行してください。',
@@ -513,6 +515,7 @@ const messages = {
     download: {
       translationDesc: '번역하려면 모델을 다운로드해야 합니다. Hy-MT2 7B는 약 4.5 GB입니다. 선택한 모델을 다운로드할까요?',
       cancel: '취소',
+      lowMemory: '이 컴퓨터의 메모리는 {gb} GB입니다. {model}은(는) 매우 느리거나 불러오지 못할 수 있습니다. M2M-100 (경량)을 권장합니다.',
       desc: '녹음을 시작하기 전에 다음 모델을 다운로드합니다. 완료 후에는 오프라인으로 사용할 수 있습니다.',
       downloading: '다운로드 중…',
       failed: '다운로드 실패. 네트워크를 확인하고 다시 시도하세요.',
@@ -744,6 +747,7 @@ const messages = {
     download: {
       translationDesc: '翻译需要下载模型，Hy-MT2 7B 约 4.5 GB。要下载所选模型吗？',
       cancel: '取消',
+      lowMemory: '这台电脑的内存是 {gb} GB。{model} 可能很慢或无法运行，建议改用 M2M-100（轻量）。',
       desc: '开始录音前需要下载以下模型，下载后即可离线使用。',
       downloading: '下载中…',
       failed: '下载失败，请检查网络后重试。',

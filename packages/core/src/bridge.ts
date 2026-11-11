@@ -53,6 +53,8 @@ export interface AppBridge {
    * UI 仅当其中含 `'system'` 时才渲染「系统音频 / 麦克风」音源开关。
    */
   audioSources?: readonly AudioSource[];
+  /** 宿主物理内存字节数；仅桌面端报告，UI 据此在下载大模型前提醒。缺省表示未知、不提醒。 */
+  totalMemoryBytes?: number;
   /** 开始整个实时会话（含音频采集） */
   startPipeline(): Promise<StartResult>;
   /**

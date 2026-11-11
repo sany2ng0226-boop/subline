@@ -185,6 +185,7 @@ export function createMacBridge(api: ElectronApi): AppBridge {
     onAudioLevel(cb) { levelListeners.add(cb); return () => { levelListeners.delete(cb); }; },
     platform: api.platform,
     audioSources: api.audioSources,
+    totalMemoryBytes: api.totalMemoryBytes,
     // 构建期注入的发布版本串；define 缺失的环境（如单测导入）下不暴露
     appVersion: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : undefined,
     async startPipeline() {

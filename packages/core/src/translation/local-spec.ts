@@ -64,6 +64,8 @@ export interface LocalModelSpec {
   platforms: Platform[];
   /** true=内存占用大：内存受限运行环境（iOS/iPadOS WebKit）会排除之，见 availableTranslationModels。 */
   memoryHeavy?: boolean;
+  /** 低于这个物理内存（GiB）时下载前提醒；见注册表 ModelAvailability.minMemoryGb。 */
+  minMemoryGb?: number;
 }
 
 /** 把注册表纯数据的语言项挂回视图（script 标签 → 具体后处理函数）。 */
@@ -99,7 +101,18 @@ export const LOCAL_TRANSLATION_MODELS: readonly LocalModelSpec[] = MODELS.filter
   fallbackLang: m.fallbackLang,
   platforms: m.availability.platforms,
   memoryHeavy: m.availability.memoryHeavy,
+  minMemoryGb: m.availability.minMemoryGb,
 }));
+
+/**
+ * 宿主物理内存是否低于模型登记的提醒线。宿主未报告内存（Web/iOS）或模型未登记提醒线时
+ * 一律返回 false：没有依据就不提醒。
+ */
+export function belowRecommendedMemory(modelId: string, totalMemoryBytes: number | undefined): boolean {
+  const min = LOCAL_TRANSLATION_MODELS.find((m) => m.id === modelId)?.minMemoryGb;
+  if (min === undefined || totalMemoryBytes === undefined || !(totalMemoryBytes > 0)) return false;
+  return totalMemoryBytes < min * 1024 ** 3;
+}
 
 /** 按 id 取本地翻译模型规格（缺失即注册表配置错误，早失败）。 */
 function requireModel(id: LocalEngine): LocalModelSpec {

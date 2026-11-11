@@ -1,4 +1,6 @@
+import { pathToFileURL } from 'node:url';
 import { AudioRecordingStore } from './audio-recordings';
+import { isAppNavigation, isExternalWebUrl } from './navigation-guard';
 import { archiveAudioResponse } from './archive-audio-response';
 import { randomUUID } from 'node:crypto';
 import type { SettingsPatch } from '@rt/core';
@@ -380,6 +382,17 @@ function createWindow(): void {
     if (app.isPackaged) event.preventDefault();
   });
   // 开发用 vite dev server，生产加载打包后的 HTML
+  const appUrl = process.env['ELECTRON_RENDERER_URL']
+    ?? pathToFileURL(path.join(__dirname, '../renderer/index.html')).href;
+  win.webContents.on('will-navigate', (event, url) => {
+    if (isAppNavigation(url, appUrl)) return;
+    event.preventDefault();
+    if (isExternalWebUrl(url)) void shell.openExternal(url);
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isExternalWebUrl(url)) void shell.openExternal(url);
+    return { action: 'deny' };
+  });
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL']);
   } else {
