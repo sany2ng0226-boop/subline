@@ -13,7 +13,7 @@
     "type-check": "pnpm --filter @rt/macos type-check",
     "dist": "pnpm --filter @rt/macos dist",
     "dist:dir": "pnpm --filter @rt/macos dist:dir",
-    "check": "pnpm --filter @rt/core test && pnpm --filter @rt/macos test-eval-corpus && pnpm --filter @rt/macos type-check && pnpm --filter @rt/web type-check && pnpm --filter @rt/ios type-check",
+    "check": "pnpm --filter @rt/core test && pnpm exec vitest run --config packages/ui/vitest.config.ts packages/ui/src apps/macos/renderer-build.test.ts && pnpm exec vitest run packages/ui/src/composables/useTranscription.test.ts apps/macos/src/main/translation/request-queue.test.ts apps/macos/test/stage-metrics.test.ts apps/macos/src/main/translation/hy-translator.test.ts && pnpm --filter @rt/macos test-model-integrity && pnpm --filter @rt/macos test-eval-corpus && pnpm --filter @rt/macos type-check && pnpm --filter @rt/web type-check && pnpm --filter @rt/ios type-check && pnpm --filter @rt/ios gen:models --check",
     "dist:windows": "pnpm --filter @rt/macos dist:windows"
   },
   "keywords": [],

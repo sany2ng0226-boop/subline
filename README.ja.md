@@ -1,3 +1,5 @@
+> **Subline をお探しの方へ：** このリポジトリは Subline（上流 Realtime Translator の派生版）です。Mac 版のダウンロードと使い方は [トップページ](README.md) をご覧ください。以下は上流のドキュメントで、**ダウンロードリンクと Web 版は上流のものであり、Subline ではありません。**
+
 <p align="center">
   <img src="assets/icon.png" alt="Realtime Translator" width="128" height="128" />
 </p>

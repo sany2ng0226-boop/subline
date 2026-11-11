@@ -45,14 +45,14 @@ ASR（语音识别）在本机执行；本次检查的应用录音／识别流�
 
 | 平台 | 代码中的位置与内容 |
 | --- | --- |
-| macOS 桌面打包版 | Electron `userData` 下的 `settings.json`（设置）、`archives.json`（手动保存的文字归档）、`archive-library.json`（文件夹及归档元数据）。Subline 使用 `~/Library/Application Support/Classroom Translator`；Internal 使用 `~/Library/Application Support/Classroom Translator Internal`。 |
+| macOS 桌面打包版 | Electron `userData` 下的 `settings.json`（设置）、`archives.json`（手动保存的文字归档）、`archive-library.json`（文件夹及归档元数据）。0.2.0-beta.8 起另有 `recordings/` 目录保存录音（16 kHz 单声道 WAV，文件权限仅限当前用户）。Subline 使用 `~/Library/Application Support/Classroom Translator`；Internal 使用 `~/Library/Application Support/Classroom Translator Internal`。 |
 | Windows 候选版 | `app.getPath('appData')/Subline Windows Candidate` 下的独立 `userData`，使用相同设置／归档文件结构；不假定每台机器的绝对用户目录。 |
 | 桌面模型 | 打包版 `userData/models`，翻译模型在其 `transformers` 子目录。开发版从 `app.getAppPath()/models` 读取；`RT_PREVIEW_PROFILE` 可指定开发预览数据目录。 |
 | Web | 当前站点 origin 的 IndexedDB：库 `realtime-translator`，`kv` store 的 `settings` 保存设置，`archives` store 保存文字归档。Cache Storage 的 `realtime-translator-asr-models-v1` 和 `transformers-cache` 保存模型；PWA 另有应用资源缓存。 |
 | iOS | Capacitor Preferences（UserDefaults）键 `realtime-translator.settings` 与 `realtime-translator.archives` 保存设置／文字归档；ASR 模型在应用沙盒 `Application Support/models`。 |
 | 共享 UI | `localStorage` 记录系统音频权限说明是否展示；当前会话字幕和清空撤销快照保存在 UI 内存中。未归档内容不能视为已持久保存。 |
 
-归档记录包含名称、创建时间、行数据（原文、译文、时间戳等），及可选文件夹标识；归档写入路径保存文字数据，没有录音文件字段。桌面损坏归档可能保留为 `archives.json.corrupt-<时间戳>`。代码未对这些归档 JSON 做额外加密。
+归档记录包含名称、创建时间、行数据（原文、译文、时间戳等），及可选文件夹标识；桌面端自 0.2.0-beta.8 起，归档记录还带有录音附件的标识，对应的 WAV 文件保存在本机 `recordings/` 目录，约 115 MB／小时；未归档的录音在用户清空会话、放弃恢复，或退出时选择不保存后删除，删除归档时一并删除其录音。录音文件不上传，代码未对其做额外加密。Web 与 iOS 的归档只保存文字数据。桌面损坏归档可能保留为 `archives.json.corrupt-<时间戳>`。代码未对这些归档 JSON 做额外加密。
 
 桌面 API Key 在 Electron `safeStorage.isEncryptionAvailable()` 为真时加密为 `apiKeyEnc`；**加密不可用时会回退到明文设置文件**，旧明文配置也能读取。Web 和 iOS 的设置分别直接序列化到 IndexedDB／Preferences，本次检查未发现额外 Key 加密，不能承诺 Key 始终加密或仅存内存。
 
@@ -66,4 +66,4 @@ ASR（语音识别）在本机执行；本次检查的应用录音／识别流�
 
 ## English summary
 
-**DRAFT — not legal advice.** ASR runs locally; the reviewed application audio pipeline does not upload audio. Enabling the API/cloud translation engine sends recognized text, translation instructions, target language and, on desktop, up to two preceding source-text segments (last 400 UTF-16 code units each) to the user-configured OpenAI-compatible `baseURL`, using the configured model and API key. Connection tests send `hello`. Models download from GitHub / Hugging Face; no optional mirror is currently enabled, and redirects may reach other hosts. Settings and text archives are stored locally in desktop files, browser IndexedDB or iOS Preferences. Desktop key encryption has a plaintext fallback; Web/iOS settings have no additional encryption in the reviewed code. No application analytics upload implementation was found; third-party retention and runtime network behavior have not been independently verified.
+**DRAFT — not legal advice.** ASR runs locally; the reviewed application audio pipeline does not upload audio. Enabling the API/cloud translation engine sends recognized text, translation instructions, target language and, on desktop, up to two preceding source-text segments (last 400 UTF-16 code units each) to the user-configured OpenAI-compatible `baseURL`, using the configured model and API key. Connection tests send `hello`. Models download from GitHub / Hugging Face; no optional mirror is currently enabled, and redirects may reach other hosts. Settings and text archives are stored locally in desktop files, browser IndexedDB or iOS Preferences. Since 0.2.0-beta.8 the desktop app also keeps session recordings (16 kHz mono WAV, about 115 MB per hour) in a local `recordings/` folder: archived sessions keep their recording until the archive is deleted, and unarchived recordings are removed when the session is cleared, a recovery offer is declined, or the user quits without saving. Recordings are not uploaded and are not additionally encrypted. Desktop key encryption has a plaintext fallback; Web/iOS settings have no additional encryption in the reviewed code. No application analytics upload implementation was found; third-party retention and runtime network behavior have not been independently verified.
