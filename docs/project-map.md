@@ -13,6 +13,7 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 | `apps/web/public/start` | 独立中文下载与上手静态页面：`index.html` 提供 Mac 安装包直链、兼容条件、安装与首次使用教程、常见问题及反馈入口，`style.css` 沿用 Subline 的配色与字体。`quick-start.mp4` 为一分钟无声图解，由 `scripts/make-quick-start-video.mjs` 使用已标明版本的截图生成。素材与页面一起由 Web 构建复制到 `dist/start/`；不挂载 PWA 或申请音频权限，保留原站点根入口的网页版应用。构建产物存在不代表已部署。 |
 | `apps/ios` (`@rt/ios`) | Capacitor 宿主和 WebView 侧桥接，设置/归档使用 Preferences；应用入口是 `apps/ios/src/main.ts`，平台契约实现是 `apps/ios/src/bridge.ts`。 |
 | `apps/ios/native-plugin` | iOS 原生能力：`AVAudioEngine` 音频采集、sherpa-onnx ASR、模型下载/管理和 iOS 18+ Apple Translation；TypeScript 契约从 `definitions.ts` 导出，Swift 主入口是 `ios/RealtimeAsrPlugin.swift`。 |
+| [`apps/glasses`](../apps/glasses/README.md) | 独立的原生 iPhone 个人研究候选：手机内置麦克风与 Apple 原生日语识别/翻译驱动眼镜原厂字幕窗口；厂商 framework 和固定版本的 Turbo IO 在仓库外取得并由准备脚本暂存，不属于正式 `apps/ios` 产品宿主。 |
 | `assets` | 三端图标的共享源资产，满版母版为 `assets/icon.svg`；`apps/macos/scripts/gen-icon.mjs`、`apps/web/scripts/gen-icons.mjs` 和 `apps/ios/scripts/gen-icons.mjs` 由此生成各端尺寸和格式，macOS 取景另加投影与描边。 |
 | 根工作区配置 | `package.json` 和 `pnpm-workspace.yaml` 定义工作区、共享依赖版本与跨模块质量门禁；`.github/workflows/ci.yml` 运行检查；仅仓库变量 `ENABLE_PAGES=true` 时启用 GitHub Pages 的变更探测与部署。 |
 
