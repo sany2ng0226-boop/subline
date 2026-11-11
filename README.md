@@ -1,35 +1,90 @@
-<p align="center"><img src="docs/assets/subline-icon.png" width="128" alt="Subline"></p>
+<p align="center"><img src="docs/assets/subline-icon.png" width="112" alt="Subline"></p>
 
-# Subline
+<h1 align="center">Subline</h1>
 
-**Subline** is a local, real-time transcription and translation app, developed as a classroom-focused derivative of [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator), maintained by [Jack](https://github.com/sany2ng0226-boop). Upstream Git history is preserved. This repository contains our custom source; upstream release links below refer to upstream builds, not this version.
+<p align="center">Live bilingual captions for classes, online lectures and meetings.<br>Recognition and translation run on your own Mac.</p>
 
-**[简体中文](README.zh-CN.md)** · [Product rules](docs/product/experience.md) · [Code map](docs/project-map.md)
+<p align="center"><a href="https://github.com/sany2ng0226-boop/subline/releases/download/v0.2.0-beta.8/Subline-0.2.0-beta.8-arm64-notarized.dmg"><img src="docs/assets/download-mac.svg" width="320" alt="Download for Mac"></a></p>
 
-## Quick start
+<p align="center"><sub>v0.2.0-beta.8 · about 281 MB · free · no account · no API key</sub></p>
 
-**[Download the Mac beta (.dmg)](https://github.com/sany2ng0226-boop/subline/releases/download/v0.2.0-beta.8/Subline-0.2.0-beta.8-arm64-notarized.dmg)** · **[中文新手教程](docs/quick-start.zh-CN.md)**. Free, no account, no API key. No Git, source checkout or terminal required to install.
+<p align="center"><b>Requires an Apple silicon Mac (M1 or later) with macOS 14.2 or later</b><br><sub>No Intel Mac, Windows or iPhone installer yet</sub></p>
 
-**[中文下载页与一分钟视频教程](https://sany2ng0226-boop.github.io/subline/start/)** — a standalone Chinese download and first-use guide.
+<p align="center"><a href="https://sany2ng0226-boop.github.io/subline/start/"><b>第一次用？看一分钟中文图文教程</b></a> · <a href="README.zh-CN.md">简体中文</a></p>
+
+## Get started in three steps
+
+1. **Download**: click the blue button above. Open the `.dmg`, drag **Subline** into Applications, then open it.
+2. **Pick a language**: in Settings, choose the language you will be listening to, such as Japanese. Turn on translation if you want it.
+3. **Start recording**: choose Microphone for people around you, or System audio for a class playing on your Mac. Click Archive in the top bar to save when you finish.
+
+> Stopping a recording does not save it. Click Archive to keep it.
+
+You do not need the green **Code** button or the Source code downloads.
+
+![Subline live English captions with Chinese translations](docs/assets/subline-live-beta7.png)
+
+<sub>Real beta.7 interface with synthetic English speech; the current download is beta.8 and looks slightly different. Recognition and translation can be wrong, so check important content against the original.</sub>
+
+## Troubleshooting
+
+<details>
+<summary>Will my Mac run it? How much space do I need?</summary>
+
+Open the Apple menu  → About This Mac to see your chip and macOS version.
 
 | Need | Details |
 |---|---|
-| Mac | Apple silicon (M1 or later), macOS 14.2 or later. Intel Macs, Windows and iPhone are not supported yet. |
-| Disk | About 0.25 GB for captions only; add about 4.6 GB for Hy-MT2 local translation, or about 0.7 GB for the lighter M2M100. |
-| Memory | Local translation has only been tested on a 48 GB Mac. On 8 / 16 GB Macs, try the lighter translation model first. |
+| Mac | Apple M1, M2, M3 or later chip; macOS 14.2 or later |
+| Disk | About 0.25 GB for captions only; translation adds about 0.7 GB (light M2M-100) or about 4.6 GB (Hy-MT2) |
+| Memory | On 8 / 16 GB Macs start with captions only, then try the light M2M-100. Hy-MT2 has only been tested on a 48 GB Mac |
 
-1. Open the DMG, drag **Subline.app** into Applications and open it normally (signed and notarized by Apple).
-2. Pick the recognition language in Settings. On macOS 26 or later you can choose Apple Speech, which needs no recognition download. Turn on translation and download a model when you need it.
-3. Allow the microphone when asked; use system audio for online classes and meetings. Click Archive in the top bar to save after class: **stopping does not save automatically**.
-
-Recognition and translation can be wrong; check important content against the original text and audio.
-
-![Subline macOS live English captions and Chinese translations](docs/assets/subline-live-beta7.png)
-
-*Live captions in the installed beta.7+3b1ff86 release build: six English synthetic-speech segments were captured through system audio and translated into Chinese. Output is unedited and includes recognition errors; this is a bounded functional check, not a benchmark. The public beta.7 download contains the same application.*
+</details>
 
 <details>
-<summary>Settings: model selection, downloads and independent languages</summary>
+<summary>The download is slow or nothing happens</summary>
+
+Try again in Safari or Chrome on your Mac. You can also open the [release page](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.8) and pick the file ending in `.dmg` under Assets. The installer is hosted on GitHub only.
+
+</details>
+
+<details>
+<summary>I see the original text but no translation</summary>
+
+New installs caption only. In Settings, choose a translation model, wait for the download, select it, and set the translation target.
+
+</details>
+
+<details>
+<summary>Recording started but no captions appear</summary>
+
+Check the audio source first. Then open System Settings → Privacy & Security, make sure Subline is allowed to use the microphone or system audio, and reopen the app.
+
+</details>
+
+<details>
+<summary>macOS says the app is damaged or will not open it</summary>
+
+Check the requirements above and download again. The installer is signed and notarized by Apple; you do not need to turn off any system protection.
+
+</details>
+
+Still stuck? Open an [issue](https://github.com/sany2ng0226-boop/subline/issues) with your chip, macOS version and a screenshot of the error.
+
+## Privacy
+
+Audio is recognized on your Mac and is not uploaded by default. Text is sent out only if you choose API translation, and only to the service you enter. See the [privacy notes](PRIVACY.md).
+
+---
+
+## For developers and release details
+
+Version details, verification scope and build instructions follow; you do not need them to use the app. [Changelog](CHANGELOG.md) · [Product rules](docs/product/experience.md) · [Code map](docs/project-map.md)
+
+**Subline** is a classroom-focused derivative of [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator), maintained by [Jack](https://github.com/sany2ng0226-boop). Upstream Git history is preserved. This repository contains our custom source; the upstream release links in the last section refer to upstream builds, not this version.
+
+<details>
+<summary><b>More screenshots: settings and model selection</b></summary>
 
 ![Subline beta.7 recognition model picker with selection, download and delete controls](docs/assets/subline-settings-beta7.png)
 
@@ -39,7 +94,8 @@ Recognition and translation can be wrong; check important content against the or
 
 </details>
 
-## Features
+<details>
+<summary><b>Features</b></summary>
 
 - Continuous caption rows: provisional text is extended, corrected and confirmed in place; translations return to the same row.
 - Stable-prefix / tentative-tail styling, language-specific native Japanese and Simplified Chinese fonts, and a narrower bilingual reading layout.
@@ -49,7 +105,10 @@ Recognition and translation can be wrong; check important content against the or
 - Separate stable and Internal macOS channels with isolated settings, archives and model caches.
 - Internal archive folders, content-derived editable titles, rename and move, with persistence across restarts. Saving is manual; stopping recording does not automatically archive the session.
 
-## macOS build and distribution status
+</details>
+
+<details>
+<summary><b>macOS build and distribution status</b></summary>
 
 **[Download Subline 0.2.0-beta.8](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.8)** — Apple Silicon Mac, macOS 14.2 or newer. Published as a prerelease. Both **Subline.app and its DMG** are Developer ID signed, separately Apple notarized, and stapled; both passed ticket validation and Gatekeeper checks. The installed app matches the public package. Verify the download using the included SHA256SUMS.
 
@@ -69,7 +128,10 @@ The older **Classroom Translator 0.2.0-beta.1** and **Subline Internal 0.2.0-bet
 
 The optional API translation backend remains available for an existing local server or a user-configured remote service. Local Hy-MT2 translates only the current segment in a fresh session; rule-based sentence assembly and translation backpressure remain in place. Changing the inference runtime does not guarantee byte-for-byte identical translations.
 
-## Windows candidate status
+</details>
+
+<details>
+<summary><b>Windows candidate status (not publicly released)</b></summary>
 
 Windows work targets **Windows 10/11 x64**, with microphone **or** default system-playback audio selected before recording, local SenseVoice recognition, Hy-MT2 7B translation and manual text archives. The candidate version is **0.2.0-beta.3-windows.1**; it is not yet a published or real-device-qualified Windows release. The macOS release is listed above; this does not qualify the Windows candidate.
 
@@ -79,7 +141,10 @@ The candidate uses `%APPDATA%\Subline Windows Candidate` for settings, archives 
 
 The Windows-only build command is `pnpm --filter @rt/macos dist:win`; the directory and package name are retained for the shared Electron desktop host. It prepares NSIS and ZIP candidates without publishing. [The Windows workflow](https://github.com/sany2ng0226-boop/subline/actions/runs/39389617116) has passed source checks, the unpacked app build, packaged CPU/native binding checks and synthetic GUI/settings/archive reload and disk readback on Windows Server 2022. NSIS and ZIP candidates, SHA-256 checksums and workflow artifacts have been generated and uploaded; installation itself remains unverified. Real microphone/system capture, actual model inference including CUDA, full application restart, Windows 10 and friend hardware remain unverified. See the [approved scope and friend acceptance checklist](docs/product/windows-candidate.md).
 
-## Development and checks
+</details>
+
+<details>
+<summary><b>Development and checks</b></summary>
 
 The public macOS build uses the Subline branding and continuous-caption UI. The historical Classroom Translator binary remains separate. The home-screen recognition-language selector and archive folders are enabled only by an Internal build.
 
@@ -104,17 +169,21 @@ Check source with `pnpm check`. Caption identity and macOS queue regressions can
 
 GitHub Actions runs checks on `main`; Pages deployment is disabled unless the repository variable `ENABLE_PAGES` is explicitly set to `true`.
 
-Private classroom recordings, transcripts, user settings, credentials and downloaded model weights are not included. Archives contain finalized text and completed translations, not original recordings; pending translations are not added to an already-saved snapshot. There is no cross-device sync. Upstream's small web VAD asset and runtime files remain part of its original source tree. Build and test outputs are reproducible local artifacts.
+Private classroom recordings, transcripts, user settings, credentials and downloaded model weights are not included. Archives contain finalized text and completed translations; since 0.2.0-beta.8 they also keep the session recording locally (16 kHz mono WAV, about 115 MB per hour), and unarchived recordings are removed on exit. Pending translations are not added to an already-saved snapshot. There is no cross-device sync. Upstream's small web VAD asset and runtime files remain part of its original source tree. Build and test outputs are reproducible local artifacts.
 
-## Attribution and distribution status
+</details>
+
+<details>
+<summary><b>Attribution and distribution status</b></summary>
 
 This is derived work, not an independently authored replacement for upstream. The upstream package metadata declares `ISC`; the checked source tree does not include a standalone license text. That metadata and all upstream history are preserved. This repository preserves that declaration and does not introduce a replacement license for upstream code. Check upstream licensing before further redistribution. Model weights and dependencies have their own terms.
 
 Current behavior and implementation navigation: [product rules](docs/product/experience.md) and [project map](docs/project-map.md).
 
----
+</details>
 
-## Upstream documentation
+<details>
+<summary><b>Upstream documentation (Realtime Translator; its downloads are not Subline)</b></summary>
 
 The documentation below is retained for upstream platform and build context. **The custom-build status above and the product rules take precedence.** All upstream release and demo links below belong to upstream, not this derivative.
 
@@ -257,3 +326,5 @@ npm run test-pipeline -- test.wav   # transcription, needs 16kHz mono
 # convert: afconvert -f WAVE -d LEI16@16000 -c 1 in.wav out.wav
 npm run test-translate              # multi-direction translation (downloads model on first run)
 ```
+
+</details>
