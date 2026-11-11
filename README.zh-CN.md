@@ -1,37 +1,90 @@
-<p align="center"><img src="docs/assets/subline-icon.png" width="128" alt="Subline"></p>
+<p align="center"><img src="docs/assets/subline-icon.png" width="112" alt="Subline"></p>
 
-# Subline
+<h1 align="center">Subline</h1>
 
-本地实时转写与翻译，把原文和译文放在连续的双语字幕流中。
+<p align="center">把课堂、网课和会议里的声音，变成实时双语字幕。<br>识别和翻译都在你自己的 Mac 上完成。</p>
 
-**[English / 构建与验证说明](README.md)** · [产品规则](docs/product/experience.md) · [代码地图](docs/project-map.md)
+<p align="center"><a href="https://github.com/sany2ng0226-boop/subline/releases/download/v0.2.0-beta.8/Subline-0.2.0-beta.8-arm64-notarized.dmg"><img src="docs/assets/download-mac.svg" width="320" alt="下载 Mac 版"></a></p>
 
-基于 [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator)，由 [Jack](https://github.com/sany2ng0226-boop) 维护，保留上游作者署名、元数据及 Git 历史。当前定制集中在日中双语阅读、本地翻译与记录整理。
+<p align="center"><sub>v0.2.0-beta.8 · 约 281 MB · 免费 · 不用注册 · 不用 API Key</sub></p>
 
-## 快速开始
+<p align="center"><b>需要 Apple 芯片（M1 或更新）的 Mac，macOS 14.2 或更新</b><br><sub>暂时没有 Intel Mac、Windows、iPhone 安装包</sub></p>
 
-**[直接下载 Mac 测试版（.dmg）](https://github.com/sany2ng0226-boop/subline/releases/download/v0.2.0-beta.8/Subline-0.2.0-beta.8-arm64-notarized.dmg)** · **[零基础安装与使用教程](docs/quick-start.zh-CN.md)**。免费，不用注册，不用 API Key；普通用户无需克隆代码或使用终端。
+<p align="center"><a href="https://sany2ng0226-boop.github.io/subline/start/"><b>第一次用？看一分钟图文教程</b></a> · <a href="README.md">English</a></p>
 
-第一次使用？打开 **[中文下载页与一分钟视频教程](https://sany2ng0226-boop.github.io/subline/start/)**，按步骤安装和设置即可。
+## 三步开始
+
+1. **下载**：点上面的蓝色按钮。下载完双击 `.dmg`，把 **Subline** 拖进「应用程序」再打开。
+2. **选语言**：在设置里把识别语言选成你要听的语言，比如日语。想看中文译文，再打开翻译。
+3. **开始录音**：听身边的人选「麦克风」，听电脑里的网课选「系统音频」。结束后点顶栏「归档」保存。
+
+> 停止录音不会自动保存，想留住内容一定要点「归档」。
+
+不用点绿色的 **Code** 按钮，也不用下载 Source code。
+
+![Subline 实际界面：英语原文下方显示中文译文](docs/assets/subline-live-beta7.png)
+
+<sub>beta.7 实际界面，用合成英语语音演示；当前下载为 beta.8，界面略有不同。识别和翻译都可能出错，重要内容请对照原文和原音。</sub>
+
+## 遇到问题
+
+<details>
+<summary>我的 Mac 能用吗？要留多少空间？</summary>
+
+点屏幕左上角  →「关于本机」查看芯片和系统版本。
 
 | 需要 | 说明 |
 |---|---|
-| Mac | Apple 芯片（M1 及以后），macOS 14.2 或更新；暂不支持 Intel Mac、Windows、iPhone |
-| 空间 | 只转写约 0.25 GB；加本地翻译 Hy-MT2 约 4.6 GB，或较轻的 M2M100 约 0.7 GB |
-| 内存 | 本地翻译只在 48 GB 内存的 Mac 上测过；8／16 GB 机型请先试较轻的翻译模型 |
+| 电脑 | 芯片为 Apple M1、M2、M3 或更新；系统 macOS 14.2 或更新 |
+| 空间 | 只出字幕约 0.25 GB；加翻译：轻量 M2M-100 约 0.7 GB，Hy-MT2 约 4.6 GB |
+| 内存 | 8／16 GB 的 Mac 请先只出字幕，要翻译时先选轻量的 M2M-100。Hy-MT2 只在 48 GB 内存的 Mac 上测过 |
 
-1. 打开 DMG，把 **Subline.app** 拖进“应用程序”，正常双击打开（已签名并通过 Apple 公证）。
-2. 设置里选识别语言（如日语）。macOS 26 及以上可选 Apple 语音识别，不用下载识别模型。需要中文翻译时再打开翻译并下载模型。
-3. 按提示允许麦克风；网课、会议请改用系统音频。下课后点顶栏归档保存，**停止录音不会自动保存**。
-
-识别和翻译都可能出错，重要内容请对照原文和原音。
-
-![Subline macOS 实时英语字幕与中文译文](docs/assets/subline-live-beta7.png)
-
-*本机安装的 beta.7+3b1ff86 发布构建：实际采集六段英语合成测试语音的系统音频，并生成对应中文译文。输出未经改写，仍包含识别错误；这是限定样本功能检查，不是准确度基准。公开 beta.7 下载包含同一份应用。*
+</details>
 
 <details>
-<summary>设置：模型选择、下载管理与独立目标语言</summary>
+<summary>下载很慢，或点了没反应</summary>
+
+换用电脑上的 Safari 或 Chrome 再点一次。也可以打开[版本下载页](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.8)，在 Assets 里选以 `.dmg` 结尾的文件。安装包目前只放在 GitHub，暂时没有国内备用下载。
+
+</details>
+
+<details>
+<summary>有原文，没有中文译文</summary>
+
+新安装默认只出字幕。到设置里选一个翻译模型，等它下载完并选中，再把翻译目标设成中文。
+
+</details>
+
+<details>
+<summary>开始录音了，但没有字幕</summary>
+
+先看声音来源选对了没有。再到「系统设置 → 隐私与安全性」，确认 Subline 有麦克风或系统音频的权限，然后重新打开应用。
+
+</details>
+
+<details>
+<summary>提示损坏，或者打不开</summary>
+
+确认 Mac 符合上面的要求，重新下载一次。安装包已签名并通过 Apple 公证，不需要关闭系统的安全保护。
+
+</details>
+
+还没解决？看[完整教程](https://sany2ng0226-boop.github.io/subline/start/)，或到 [Issues](https://github.com/sany2ng0226-boop/subline/issues) 留言，附上芯片型号、系统版本和报错截图。
+
+## 隐私
+
+声音在本机识别，默认不上传。只有你自己选择 API 翻译时，文字才会发给你填写的服务。详见[隐私说明](PRIVACY.md)。
+
+---
+
+## 开发者与发布信息
+
+下面是版本细节、验证范围和源码构建说明，普通使用不需要看。[更新日志](CHANGELOG.md) · [产品规则](docs/product/experience.md) · [代码地图](docs/project-map.md)
+
+基于 [baijunjie/realtime-translator](https://github.com/baijunjie/realtime-translator)，由 [Jack](https://github.com/sany2ng0226-boop) 维护，保留上游作者署名、元数据及 Git 历史。当前定制集中在日中双语阅读、本地翻译与记录整理。
+
+<details>
+<summary><b>更多截图：设置与模型选择</b></summary>
 
 ![Subline beta.7 识别模型内直接选择、下载与删除](docs/assets/subline-settings-beta7.png)
 
@@ -41,7 +94,8 @@
 
 </details>
 
-## 当前源码节点
+<details>
+<summary><b>当前源码节点</b></summary>
 
 - SenseVoice 本地识别 + 应用内 Hy-MT2 7B Q4_K_M Metal 翻译。模型下载后无需 LM Studio、API Key 或另启模型服务。
 - macOS 26+ 可选 Apple 语音识别（系统管理语音资源，不占应用模型目录）；录音中可开关翻译。
@@ -52,7 +106,10 @@
 - Internal 支持单层文件夹、内容提取标题、改名和移动，保存后重启保留。停止录音不会自动归档。
 - Subline 与 Subline Internal 的设置、模型和归档分离，改名后沿用各自数据目录。
 
-## 验证与发布边界
+</details>
+
+<details>
+<summary><b>验证与发布边界</b></summary>
 
 **[下载 Subline 0.2.0-beta.8](https://github.com/sany2ng0226-boop/subline/releases/tag/v0.2.0-beta.8)**，适用于 Apple 芯片 Mac、macOS 14.2 或更新版本。已作为预发布版（prerelease）公开。**Subline.app 与 DMG 均已 Developer ID 签名、分别通过 Apple 公证并附上票据**；两者均通过票据和 Gatekeeper 检查。本机安装的应用与公开包一致，下载完整性可用随附 SHA256SUMS 核对。
 
@@ -69,7 +126,10 @@
 
 旧 `v0.2.0-beta.1` 是 Classroom Translator 历史测试包，`v0.2.0-beta.2` 是历史 Subline Internal 测试包；下方上游下载不属于 Subline。Internal 与公开渠道使用各自的设置、归档和模型目录；替换 Subline.app 会沿用公开渠道的现有数据。
 
-## Windows 候选版
+</details>
+
+<details>
+<summary><b>Windows 候选版（未公开发布）</b></summary>
 
 Windows 版目标为 **Windows 10/11 x64**：录音前选择麦克风或默认播放设备的系统声音，使用本地 SenseVoice 识别、Hy-MT2 7B 翻译，并手动保存文字归档。候选版本为 **0.2.0-beta.3-windows.1**，目前尚未公开发布或完成真实设备验收；Mac 发布版见上文，其验收不代表 Windows 候选已通过。
 
@@ -79,7 +139,10 @@ Windows 版目标为 **Windows 10/11 x64**：录音前选择麦克风或默认�
 
 Windows x64 构建命令为 `pnpm --filter @rt/macos dist:win`，`apps/macos` 与包名沿用共享桌面宿主的历史名称；命令准备 NSIS 安装器和 ZIP，不发布。[Windows 工作流](https://github.com/sany2ng0226-boop/subline/actions/runs/39389617116) 已在 Windows Server 2022 上通过源码检查、未压缩应用构建、随包 CPU/原生绑定检查，以及合成界面、设置和归档页面重载与磁盘读回。NSIS 安装器、ZIP、SHA-256 清单及工作流产物已成功生成并上传；安装流程本身仍未验收。真实收音、系统回环、实际模型推理（含 CUDA）、完整应用重启、Windows 10 及朋友硬件仍未验收。详见 [Windows 范围与朋友验收清单](docs/product/windows-candidate.md)。
 
-## 从源码运行
+</details>
+
+<details>
+<summary><b>从源码运行</b></summary>
 
 使用 Node.js 22 和 `package.json` 固定的 pnpm **10.33.0**：
 
@@ -94,15 +157,19 @@ npx pnpm@10.33.0 --filter @rt/macos dist:preview
 
 默认产物：`apps/macos/release-preview/mac-arm64/Subline Internal.app`。构建不安装、不发布；有可用签名身份和完整公证凭据时，electron-builder 会在签名后自动提交公证，无公证凭据则跳过提交。模型下载与麦克风／系统音频权限需在应用中确认。
 
-## 数据与署名
+</details>
 
-识别在本机运行；本地翻译不向服务商发送会话文字。手动选择 API 翻译时，定稿文字及 macOS 有限原文上下文会发往指定端点，音频不上传。归档保存文字和已完成译文，不保存原始录音，也不会在保存后自动补入晚到译文；没有跨设备同步。
+<details>
+<summary><b>数据与署名</b></summary>
+
+识别在本机运行；本地翻译不向服务商发送会话文字。手动选择 API 翻译时，定稿文字及 macOS 有限原文上下文会发往指定端点，音频不上传。归档保存文字和已完成译文；0.2.0-beta.8 起同时在本机保存这次录音（16 kHz 单声道 WAV，约 115 MB／小时），未归档的录音在退出时清理。保存后不会自动补入晚到译文；没有跨设备同步。
 
 仓库不含私有课堂录音与转写、个人配置、凭据、下载的模型或本机构建产物。上游包清单声明 `ISC`，所核对源码中没有独立许可正文；本仓库保留原有声明，不替上游代码另行授权。进一步分发前请核对上游许可。模型与依赖各自遵循其条款。
 
----
+</details>
 
-## 上游文档
+<details>
+<summary><b>上游文档（Realtime Translator，下载链接不属于 Subline）</b></summary>
 
 以下保留上游的平台与开发说明。**本页上方和 English README 描述 Subline 当前状态；下方的上游下载与演示链接不代表本次 Subline 产物。**
 
@@ -246,3 +313,5 @@ npm run test-pipeline -- test.wav   # 转写，需 16kHz 单声道
 # 转换: afconvert -f WAVE -d LEI16@16000 -c 1 in.wav out.wav
 npm run test-translate              # 多向翻译（首次会下载模型）
 ```
+
+</details>
