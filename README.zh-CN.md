@@ -12,6 +12,8 @@
 
 **[直接下载 Mac 测试版（.dmg）](https://github.com/sany2ng0226-boop/subline/releases/download/v0.2.0-beta.8/Subline-0.2.0-beta.8-arm64-notarized.dmg)** · **[零基础安装与使用教程](docs/quick-start.zh-CN.md)**。免费，不用注册，不用 API Key；普通用户无需克隆代码或使用终端。
 
+第一次使用？打开 **[中文下载页与一分钟视频教程](https://sany2ng0226-boop.github.io/subline/start/)**，按步骤安装和设置即可。
+
 | 需要 | 说明 |
 |---|---|
 | Mac | Apple 芯片（M1 及以后），macOS 14.2 或更新；暂不支持 Intel Mac、Windows、iPhone |
