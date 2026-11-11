@@ -1,3 +1,5 @@
+> **Subline을 찾으시나요?** 이 저장소는 Subline(업스트림 Realtime Translator의 파생 버전)입니다. Mac용 다운로드와 사용 방법은 [메인 페이지](README.md)를 참고하세요. 아래는 업스트림 문서이며, **다운로드 링크와 웹 버전은 업스트림의 것으로 Subline이 아닙니다.**
+
 <p align="center">
   <img src="assets/icon.png" alt="Realtime Translator" width="128" height="128" />
 </p>

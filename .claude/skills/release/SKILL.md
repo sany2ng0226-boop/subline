@@ -14,7 +14,7 @@ description: 发布/重发 Subline（原 Realtime Translator）的 release（mac
 
 ```bash
 git status --porcelain          # 工作树必须干净
-pnpm check                      # core 测试 + 三端 type-check（与 CI 的 check job 完全一致）
+pnpm check                      # 测试 + 模型校验 + 三端 type-check + iOS 生成物（与 CI 的 check job 同一组步骤）
 ```
 
 本地过了，push 后 CI 必绿、web 部署才会放行。
@@ -29,7 +29,14 @@ pnpm check                      # core 测试 + 三端 type-check（与 CI 的 c
   node scripts/sync-version.mjs --check
   ```
 
-  用 `chore: bump version to <ver>` 提交。同时在 `CHANGELOG.md` 加该版本一节（发布前标「准备中」，发布后改日期），并把中英 README 的下载链接改到新 tag。
+  用 `chore: bump version to <ver>` 提交。同时在 `CHANGELOG.md` 加该版本一节（发布前标「准备中」，发布后改日期），并把所有写死版本的下载入口改到新 tag：
+
+  - `README.md`、`README.zh-CN.md`（首屏按钮直链、版本与安装包大小一行、折叠块里的版本页链接）
+  - `docs/quick-start.zh-CN.md`
+  - `apps/web/public/start/index.html`（改后需随 web 部署上线）
+  - `scripts/make-quick-start-video.mjs`（文案变了才需要重新生成视频）
+
+  改完用 `git grep -n '<旧版本号>' -- README.md README.zh-CN.md docs/quick-start.zh-CN.md apps/web/public/start scripts/make-quick-start-video.mjs` 确认没有遗漏；只有说明截图来源的旧版本号可以保留。
 - **beta 同版本重发**：版本号不动。构建之间靠「根版本+commit 短哈希」区分（构建期注入 `__APP_VERSION__`，设置页底部可见）。
 
 ## 3. 打包 macOS

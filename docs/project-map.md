@@ -76,7 +76,7 @@ Subline 的源码仓库（仓库名与 npm 包名仍沿用 realtime-translator /
 
 ## 测试与构建位置
 
-- 根 `package.json` 的 `pnpm check` 运行 `@rt/core` 单元测试、macOS 评测语料导入器的纯逻辑测试，以及 macOS、Web、iOS 三端类型检查；它不下载语料或模型，也不执行耗时的识别精度门禁。
+- 根 `package.json` 的 `pnpm check` 与 CI 的 check job 运行同一组步骤：`@rt/core` 单元测试、共享界面与生产渲染回归、字幕／翻译队列／延迟统计回归、模型文件校验回归、macOS 评测语料导入器的纯逻辑测试、macOS、Web、iOS 三端类型检查，以及 iOS 生成模型清单的一致性检查；它不下载语料或模型，也不执行耗时的识别精度门禁。
 - `packages/core/src/**/*.test.ts` 覆盖设置、归档、模型源、转写管线、定稿漂移统计和翻译决策等共享逻辑。
 - `packages/ui/src/components/timeline.test.ts` 检查实时与归档时间列渲染、译文层级及旧归档缺少时间时的兼容；`useTranscription.test.ts` 检查相对秒数到本地墙钟、跨午夜及归档时间保留，`tokens.test.ts` 检查两套主题的文字对比度。
 - `apps/macos/test` 包含无 GUI 管线、CER 评测和翻译脚本；入口命令由 `apps/macos/package.json` 的 `test-pipeline`、`eval-cer` 和 `test-translate` 定义。`eval-cer` 同时报告产品管线 CER、整段离线 CER 和“实时最长结果到定稿”的 Final 漂移，并可用 `--max-cer`、`--max-drift` 将任一模型的加权结果设为失败门槛。日语快捷命令 `eval-cer-ja` 评测固定语言的完整语料，`eval-cer-ja:gate` 则以 SenseVoice 的产品管线 CER 不超过 20%、Final 漂移不超过 5% 为回归门禁。
