@@ -8,7 +8,9 @@
 
 ## Quick start
 
-**[Download the latest Mac beta](https://github.com/sany2ng0226-boop/subline/releases)**. Free, no account, no API key.
+**[Download the Mac beta (.dmg)](https://github.com/sany2ng0226-boop/subline/releases/download/v0.2.0-beta.8/Subline-0.2.0-beta.8-arm64-notarized.dmg)** · **[中文新手教程](docs/quick-start.zh-CN.md)**. Free, no account, no API key. No Git, source checkout or terminal required to install.
+
+**[中文下载页与一分钟视频教程](https://sany2ng0226-boop.github.io/subline/start/)** — a standalone Chinese download and first-use guide.
 
 | Need | Details |
 |---|---|

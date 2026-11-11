@@ -29,6 +29,8 @@ apps/macos/build/icon.icns
 *.mp3
 *.m4a
 *.mp4
+# Public tutorial only; private recordings remain ignored.
+!apps/web/public/start/quick-start.mp4
 *.mov
 
 # Private diagnostic traces and transcripts
