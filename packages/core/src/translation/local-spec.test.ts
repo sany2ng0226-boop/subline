@@ -6,6 +6,7 @@ import {
   LOCAL_TRANSLATION_MODELS,
   M2M100_SPEC,
   availableTranslationModels,
+  belowRecommendedMemory,
   getTranslationModel,
   localTranslationSupported,
   normalizeZh,
@@ -216,5 +217,20 @@ describe('planTranslation 判定矩阵（M2M100）', () => {
     if (p.kind === 'translate') {
       expect(p.targetCode).toBe(M2M100_SPEC.fallbackLang);
     }
+  });
+});
+
+describe('belowRecommendedMemory', () => {
+  const GIB = 1024 ** 3;
+  it('8 GB 机型下载 Hy-MT2 时提醒，16 GB 及以上不提醒', () => {
+    expect(belowRecommendedMemory('hy-mt2-7b', 8 * GIB)).toBe(true);
+    expect(belowRecommendedMemory('hy-mt2-7b', 16 * GIB)).toBe(false);
+    expect(belowRecommendedMemory('hy-mt2-7b', 48 * GIB)).toBe(false);
+  });
+  it('未登记提醒线的模型、未知模型、宿主未报告内存时都不提醒', () => {
+    expect(belowRecommendedMemory('m2m100', 8 * GIB)).toBe(false);
+    expect(belowRecommendedMemory('nope', 8 * GIB)).toBe(false);
+    expect(belowRecommendedMemory('hy-mt2-7b', undefined)).toBe(false);
+    expect(belowRecommendedMemory('hy-mt2-7b', 0)).toBe(false);
   });
 });

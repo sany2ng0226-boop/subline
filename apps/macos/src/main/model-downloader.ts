@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 import { pipeline as streamPipeline } from 'node:stream/promises';
 import { SILERO_VAD, getAsrModel, type AsrModelFile, type LocalModelFile } from '@rt/core';
 import type { SetupProgress } from '../shared/types';
+import { assertDiskSpace } from './disk-space';
 
 /** 指定模型（含公共依赖 VAD）是否齐全（清单来自 @rt/core 的共享登记表）。 */
 export function asrModelsReady(modelsDir: string, modelId: string): boolean {
@@ -177,6 +178,7 @@ export async function downloadAsrModels(
     .sort((a, b) => a.approxBytes - b.approxBytes);
 
   const total = toDownload.reduce((sum, f) => sum + f.approxBytes, 0);
+  await assertDiskSpace(modelsDir, total);
   for (const f of toDownload) {
     fs.mkdirSync(path.dirname(localPath(f)), { recursive: true });
   }

@@ -8,6 +8,7 @@ import { getTranslationModel, type LocalModelFile } from '@rt/core';
 import { downloadFile, verifyDownloadedFile } from '../model-downloader';
 import { localModelCached } from './model-cache';
 import type { SetupProgress } from '../../shared/types';
+import { assertDiskSpace } from '../disk-space';
 
 /** 核对已落地的模型文件；不符即删除，避免被误判为就绪。 */
 export async function verifyModelFile(file: string, spec: LocalModelFile, signal?: AbortSignal): Promise<void> {
@@ -43,6 +44,11 @@ export async function downloadTranslationModel(
     }
   });
   const total = spec.approxDownloadBytes;
+  // 只补缺文件时按登记字节估算；未登记字节的文件按整包大小保守估计。
+  const pending = toDownload.every((f) => f.expectedBytes !== undefined)
+    ? toDownload.reduce((sum, f) => sum + (f.expectedBytes ?? 0), 0)
+    : total;
+  await assertDiskSpace(cacheDir, toDownload.length ? pending : 0);
   for (const f of toDownload) {
     fs.mkdirSync(path.dirname(localPath(f)), { recursive: true });
   }

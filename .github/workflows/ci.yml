@@ -52,6 +52,10 @@ jobs:
       - name: Caption, queue and latency accounting regressions
         run: pnpm exec vitest run packages/ui/src/composables/useTranscription.test.ts apps/macos/src/main/translation/request-queue.test.ts apps/macos/test/stage-metrics.test.ts apps/macos/src/main/translation/hy-translator.test.ts
 
+      # 主进程的全部单元测试（录音、归档、下载前磁盘检查、窗口导航拦截等）。
+      - name: Desktop main-process unit tests
+        run: pnpm exec vitest run apps/macos/src
+
       - name: Model file integrity regressions
         run: pnpm --filter @rt/macos test-model-integrity
 

@@ -14,6 +14,8 @@ const api: ElectronApi = {
   platform: process.platform === 'win32' ? 'windows' : 'macos',
   // 系统音频采集要求 macOS 14.2+；不满足时仅暴露麦克风（与主进程的音源收敛判定共用逻辑）。
   audioSources: availableAudioSources(process.getSystemVersion(), process.platform),
+  // getSystemMemoryInfo 以 KB 计。
+  totalMemoryBytes: process.getSystemMemoryInfo().total * 1024,
   startPipeline: () => ipcRenderer.invoke('pipeline:start'),
   prewarmPipeline: () => ipcRenderer.send('pipeline:prewarm'),
   stopPipeline: options => ipcRenderer.invoke('pipeline:stop', options),
